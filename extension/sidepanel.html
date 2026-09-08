@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>College Navigator</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #F7F6F3; color: #14171F; font-size: 13px; }
+      header { padding: 12px 14px; border-bottom: 1px solid #E4E1D9; background: white; }
+      header h1 { font-size: 14px; margin: 0 0 2px; }
+      header p { margin: 0; color: #6b6f7a; font-size: 11px; }
+      nav { display: flex; border-bottom: 1px solid #E4E1D9; background: white; }
+      nav button { flex: 1; padding: 8px; border: none; background: none; font-size: 12px; font-weight: 600; color: #8a8d96; cursor: pointer; border-bottom: 2px solid transparent; }
+      nav button.active { color: #8C1D40; border-bottom-color: #8C1D40; }
+      main { padding: 12px 14px; }
+      .action-item { border: 1px solid #E4E1D9; background: white; border-radius: 8px; padding: 10px; margin-bottom: 8px; cursor: pointer; }
+      .action-item:hover { border-color: #8C1D40; }
+      .pill { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 10px; font-weight: 600; margin-right: 4px; }
+      .pill-urgent { background: rgba(179,38,30,0.1); color: #B3261E; }
+      .pill-high { background: rgba(138,90,0,0.1); color: #8A5A00; }
+      .pill-normal, .pill-low { background: rgba(20,23,31,0.06); color: rgba(20,23,31,0.6); }
+      .muted { color: #8a8d96; }
+      .field { margin-bottom: 10px; }
+      .field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: #8a8d96; margin-bottom: 2px; }
+      textarea { width: 100%; min-height: 70px; border: 1px solid #E4E1D9; border-radius: 6px; padding: 8px; font-family: inherit; font-size: 12px; }
+      button.primary { background: #8C1D40; color: white; border: none; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+      .empty { text-align: center; color: #8a8d96; padding: 24px 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 id="inst-name">College Navigator</h1>
+      <p id="inst-status">Navigate to a page on a tracked school's site to begin.</p>
+    </header>
+    <nav>
+      <button data-tab="track" class="active">TRACK</button>
+      <button data-tab="guide">GUIDE</button>
+      <button data-tab="ask">ASK</button>
+    </nav>
+    <main id="panel-track"></main>
+    <main id="panel-guide" style="display:none"></main>
+    <main id="panel-ask" style="display:none">
+      <div class="field">
+        <div class="field-label">Ask about this school</div>
+        <textarea id="ask-input" placeholder="e.g. When is the housing deadline?"></textarea>
+      </div>
+      <button class="primary" id="ask-submit">Ask</button>
+      <p class="muted" id="ask-note" style="margin-top:10px;">
+        This skeleton wires TRACK and GUIDE end-to-end against your real Action Ledger. ASK mode — a
+        conversational assistant grounded in the same verified rules — connects an LLM in the full
+        product; it's a stub here.
+      </p>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

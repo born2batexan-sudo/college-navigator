@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "College Navigator Companion",
+  "version": "0.1.0",
+  "description": "ASK / GUIDE / TRACK side panel for the College Navigator household action plan. Observes public page state on university sites you're already logged into — never stores your university password or session.",
+  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
+  "host_permissions": [
+    "*://*.ua.edu/*",
+    "*://*.uapanhellenic.com/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open College Navigator"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.ua.edu/*", "*://*.uapanhellenic.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
