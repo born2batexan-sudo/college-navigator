@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentAuth } from "../_auth";
 import { getInstitutionBySlug, createSource, findSourceByUrl, listSourcesForInstitution, updateSourceFingerprint } from "@/lib/db/repo";
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /** GET ?institutionSlug=alabama — list known sources, so an agent doesn't refetch/re-create duplicates. */
 export async function GET(req: NextRequest) {
   const unauthorized = requireAgentAuth(req);
@@ -9,10 +13,10 @@ export async function GET(req: NextRequest) {
 
   const slug = req.nextUrl.searchParams.get("institutionSlug");
   if (!slug) return NextResponse.json({ error: "institutionSlug is required" }, { status: 400 });
-  const institution = getInstitutionBySlug(slug);
+  const institution = await getInstitutionBySlug(slug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${slug}` }, { status: 404 });
 
-  return NextResponse.json({ sources: listSourcesForInstitution(institution.id) });
+  return NextResponse.json({ sources: await listSourcesForInstitution(institution.id) });
 }
 
 /**
@@ -30,13 +34,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "institutionSlug, url, and label are required" }, { status: 400 });
   }
 
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
-  const existing = findSourceByUrl(institution.id, url);
+  const existing = await findSourceByUrl(institution.id, url);
   if (existing) return NextResponse.json({ source: existing, created: false });
 
-  const source = createSource({ institutionId: institution.id, url, label, owner, lastVerified });
+  const source = await createSource({ institutionId: institution.id, url, label, owner, lastVerified });
   return NextResponse.json({ source, created: true }, { status: 201 });
 }
 
@@ -55,11 +59,11 @@ export async function PATCH(req: NextRequest) {
   if (!institutionSlug || !url || !fingerprint) {
     return NextResponse.json({ error: "institutionSlug, url, and fingerprint are required" }, { status: 400 });
   }
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
-  const source = findSourceByUrl(institution.id, url);
+  const source = await findSourceByUrl(institution.id, url);
   if (!source) return NextResponse.json({ error: `No known source for ${url} under ${institutionSlug}` }, { status: 404 });
 
-  updateSourceFingerprint(source.id, fingerprint, new Date().toISOString(), content);
+  await updateSourceFingerprint(source.id, fingerprint, new Date().toISOString(), content);
   return NextResponse.json({ ok: true });
 }

@@ -5,6 +5,10 @@ import { recomputeCoverage } from "@/lib/coverage";
 import { materializeActionsForRelationship } from "@/lib/materialize";
 import { ALL_CHECKPOINTS } from "@/lib/checkpoints";
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /** GET ?institutionSlug=alabama — current state of every rule for an institution. */
 export async function GET(req: NextRequest) {
   const unauthorized = requireAgentAuth(req);
@@ -12,10 +16,11 @@ export async function GET(req: NextRequest) {
 
   const slug = req.nextUrl.searchParams.get("institutionSlug");
   if (!slug) return NextResponse.json({ error: "institutionSlug is required" }, { status: 400 });
-  const institution = getInstitutionBySlug(slug);
+  const institution = await getInstitutionBySlug(slug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${slug}` }, { status: 404 });
 
-  const rules = listRulesForInstitution(institution.id).map((r) => ({ ...r, hasGuidance: !!getGuidanceForRule(r.id) }));
+  const rawRules = await listRulesForInstitution(institution.id);
+  const rules = await Promise.all(rawRules.map(async (r) => ({ ...r, hasGuidance: !!(await getGuidanceForRule(r.id)) })));
   return NextResponse.json({ rules });
 }
 
@@ -46,13 +51,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
   const canonical = ALL_CHECKPOINTS.find((c) => c.code === checkpointCode);
   if (!canonical) return NextResponse.json({ error: `Unknown checkpoint code: ${checkpointCode}` }, { status: 400 });
 
-  const rule = upsertRule({
+  const rule = await upsertRule({
     institutionId: institution.id,
     checkpointCode: canonical.code,
     domain: canonical.domain,
@@ -72,11 +77,11 @@ export async function POST(req: NextRequest) {
     sourceId: body.sourceId ?? null,
   });
 
-  const coverage = recomputeCoverage(institution.id);
+  const coverage = await recomputeCoverage(institution.id);
 
-  const relationships = listRelationshipsForInstitution(institution.id);
+  const relationships = await listRelationshipsForInstitution(institution.id);
   for (const rel of relationships) {
-    materializeActionsForRelationship(rel.id);
+    await materializeActionsForRelationship(rel.id);
   }
 
   return NextResponse.json({ rule, coverage, relationshipsUpdated: relationships.length });

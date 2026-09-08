@@ -3,6 +3,10 @@ import { requireAgentAuth } from "../_auth";
 import { getInstitutionBySlug, listRelationshipsForInstitution } from "@/lib/db/repo";
 import { materializeActionsForRelationship } from "@/lib/materialize";
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * POST — force a re-materialization pass (Rules -> ActionInstances) for
  * every household tracking an institution. Normally this happens
@@ -18,11 +22,13 @@ export async function POST(req: NextRequest) {
   const { institutionSlug } = (await req.json()) ?? {};
   if (!institutionSlug) return NextResponse.json({ error: "institutionSlug is required" }, { status: 400 });
 
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
-  const relationships = listRelationshipsForInstitution(institution.id);
-  const results = relationships.map((rel) => ({ relationshipId: rel.id, evaluations: materializeActionsForRelationship(rel.id) }));
+  const relationships = await listRelationshipsForInstitution(institution.id);
+  const results = await Promise.all(
+    relationships.map(async (rel) => ({ relationshipId: rel.id, evaluations: await materializeActionsForRelationship(rel.id) }))
+  );
 
   return NextResponse.json({ relationshipsUpdated: results.length, results });
 }

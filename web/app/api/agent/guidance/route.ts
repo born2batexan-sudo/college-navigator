@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentAuth } from "../_auth";
 import { getInstitutionBySlug, getRuleByCode, upsertGuidance } from "@/lib/db/repo";
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * POST — the Guidance Generation Agent's write path. Turns a verified Rule
  * into household-facing WHAT/WHEN/WHY/HOW/CONSEQUENCE copy.
@@ -25,15 +29,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
-  const rule = getRuleByCode(institution.id, checkpointCode);
+  const rule = await getRuleByCode(institution.id, checkpointCode);
   if (!rule) return NextResponse.json({ error: `No rule ${checkpointCode} for ${institutionSlug} yet — file the rule first via /api/agent/rules` }, { status: 404 });
   if (rule.status !== "verified") {
     return NextResponse.json({ error: `Rule ${checkpointCode} is not verified yet; guidance should only be generated from verified rules` }, { status: 409 });
   }
 
-  const guidance = upsertGuidance({ ruleId: rule.id, what, when, why, how, consequence, deepLink: body.deepLink, generatedBy: "guidance_agent" });
+  const guidance = await upsertGuidance({ ruleId: rule.id, what, when, why, how, consequence, deepLink: body.deepLink, generatedBy: "guidance_agent" });
   return NextResponse.json({ guidance });
 }

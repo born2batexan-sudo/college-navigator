@@ -7,6 +7,10 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * GET ?url=<current tab URL> — called by the browser companion's side
  * panel / background worker (not the Institutional Research Agent — this
@@ -16,7 +20,7 @@ const CORS_HEADERS = {
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return NextResponse.json({ error: "url is required" }, { status: 400, headers: CORS_HEADERS });
-  return NextResponse.json(getContextForUrl(url), { headers: CORS_HEADERS });
+  return NextResponse.json(await getContextForUrl(url), { headers: CORS_HEADERS });
 }
 
 export async function OPTIONS() {

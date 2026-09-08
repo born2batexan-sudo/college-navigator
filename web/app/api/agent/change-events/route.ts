@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentAuth } from "../_auth";
 import { findSourceByUrl, getInstitutionBySlug, createChangeEvent, listPendingChangeEvents, updateSourceFingerprint, getSource } from "@/lib/db/repo";
 
+// Talks to the database on every request — never let Next.js try to
+// statically render or pre-execute this at build time.
+export const dynamic = "force-dynamic";
+
 /** GET — the pending review queue: changes the Monitoring Agent has flagged that a human (or the Research Agent) hasn't triaged yet. */
 export async function GET(req: NextRequest) {
   const unauthorized = requireAgentAuth(req);
   if (unauthorized) return unauthorized;
-  return NextResponse.json({ changeEvents: listPendingChangeEvents() });
+  return NextResponse.json({ changeEvents: await listPendingChangeEvents() });
 }
 
 /**
@@ -27,14 +31,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "institutionSlug, sourceUrl, materiality, and newFingerprint are required" }, { status: 400 });
   }
 
-  const institution = getInstitutionBySlug(institutionSlug);
+  const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
-  const source = findSourceByUrl(institution.id, sourceUrl);
+  const source = await findSourceByUrl(institution.id, sourceUrl);
   if (!source) return NextResponse.json({ error: `No known source for ${sourceUrl} under ${institutionSlug}` }, { status: 404 });
 
-  const event = createChangeEvent({ sourceId: source.id, materiality, oldFingerprint: oldFingerprint ?? source.fingerprint, newFingerprint, summary });
-  updateSourceFingerprint(source.id, newFingerprint, new Date().toISOString(), newContent);
+  const event = await createChangeEvent({ sourceId: source.id, materiality, oldFingerprint: oldFingerprint ?? source.fingerprint, newFingerprint, summary });
+  await updateSourceFingerprint(source.id, newFingerprint, new Date().toISOString(), newContent);
 
-  return NextResponse.json({ changeEvent: event, source: getSource(source.id) }, { status: 201 });
+  return NextResponse.json({ changeEvent: event, source: await getSource(source.id) }, { status: 201 });
 }
