@@ -325,10 +325,10 @@ const OTHER_SCHOOLS = [
   { name: "University of Arizona", slug: "arizona", domains: ["orientation.arizona.edu", "housing.arizona.edu", "bursar.arizona.edu", "greek.arizona.edu", "career.arizona.edu"] },
 ];
 
-function main() {
+async function main() {
   console.log("Seeding College Navigator...");
 
-  const alabama = upsertInstitution({
+  const alabama = await upsertInstitution({
     name: "University of Alabama",
     slug: "alabama",
     domains: ["admissions.ua.edu", "afford.ua.edu", "housing.sl.ua.edu", "cchs.ua.edu", "uapanhellenic.com", "studentaccounts.ua.edu", "catalog.ua.edu", "actcard.ua.edu", "mybama.ua.edu"],
@@ -338,7 +338,7 @@ function main() {
 
   const sourceIds: Record<SourceKey, string> = {} as Record<SourceKey, string>;
   for (const [key, s] of Object.entries(SOURCES)) {
-    const created = createSource({ institutionId: alabama.id, url: s.url, label: s.label, owner: s.owner, lastVerified: RESEARCH_DATE });
+    const created = await createSource({ institutionId: alabama.id, url: s.url, label: s.label, owner: s.owner, lastVerified: RESEARCH_DATE });
     sourceIds[key as SourceKey] = created.id;
   }
 
@@ -347,7 +347,7 @@ function main() {
     const override = OVERRIDES[cp.code];
     if (override) verifiedCount++;
 
-    upsertRule({
+    await upsertRule({
       institutionId: alabama.id,
       checkpointCode: cp.code,
       domain: cp.domain,
@@ -368,7 +368,7 @@ function main() {
     });
   }
 
-  const { pct: coveragePct, status: coverageStatus } = recomputeCoverage(alabama.id);
+  const { pct: coveragePct, status: coverageStatus } = await recomputeCoverage(alabama.id);
   console.log(`Alabama: ${verifiedCount}/${ALL_CHECKPOINTS.length} checkpoints verified (${coveragePct}%, ${coverageStatus}).`);
 
   // Hand-authored GuidanceAssets showing the shape the Guidance Generation
@@ -404,12 +404,12 @@ function main() {
   ];
 
   for (const g of guidanceSeeds) {
-    const rule = getRuleByCode(alabama.id, g.code);
+    const rule = await getRuleByCode(alabama.id, g.code);
     if (!rule) continue;
-    upsertGuidance({ ruleId: rule.id, what: g.what, when: g.when, why: g.why, how: g.how, consequence: g.consequence, deepLink: g.deepLink, generatedBy: "human" });
+    await upsertGuidance({ ruleId: rule.id, what: g.what, when: g.when, why: g.why, how: g.how, consequence: g.consequence, deepLink: g.deepLink, generatedBy: "human" });
   }
 
-  createObservationPattern({
+  await createObservationPattern({
     institutionId: alabama.id,
     workflow: "housing_application",
     urlPattern: "housing.sl.ua.edu/*",
@@ -417,7 +417,7 @@ function main() {
     impliesState: "submitted",
     relatedCheckpointCode: "HOU-04",
   });
-  createObservationPattern({
+  await createObservationPattern({
     institutionId: alabama.id,
     workflow: "enrollment_deposit",
     urlPattern: "mybama.ua.edu/*deposit*",
@@ -425,7 +425,7 @@ function main() {
     impliesState: "received",
     relatedCheckpointCode: "ENR-02",
   });
-  createObservationPattern({
+  await createObservationPattern({
     institutionId: alabama.id,
     workflow: "immunization_upload",
     urlPattern: "mybama.ua.edu/*immunization*",
@@ -435,15 +435,15 @@ function main() {
   });
 
   for (const s of OTHER_SCHOOLS) {
-    upsertInstitution({ name: s.name, slug: s.slug, domains: s.domains, pathway: "both", coverageStatus: "unsupported", coveragePct: 0 });
+    await upsertInstitution({ name: s.name, slug: s.slug, domains: s.domains, pathway: "both", coverageStatus: "unsupported", coveragePct: 0 });
   }
 
   // --- Demo household ---
-  const household = upsertHousehold({ id: "demo-household", name: "Taylor Household" });
-  createPerson({ householdId: household.id, name: "Jordan Taylor", role: "student", email: "jordan.taylor.demo@example.com", consentState: "granted" });
-  createPerson({ householdId: household.id, name: "Dana Taylor", role: "parent", email: "dana.taylor.demo@example.com", consentState: "granted" });
+  const household = await upsertHousehold({ id: "demo-household", name: "Taylor Household" });
+  await createPerson({ householdId: household.id, name: "Jordan Taylor", role: "student", email: "jordan.taylor.demo@example.com", consentState: "granted" });
+  await createPerson({ householdId: household.id, name: "Dana Taylor", role: "parent", email: "dana.taylor.demo@example.com", consentState: "granted" });
 
-  const student = upsertStudent({
+  const student = await upsertStudent({
     id: "demo-student",
     householdId: household.id,
     name: "Jordan Taylor",
@@ -453,19 +453,22 @@ function main() {
     attributes: { gpaBand: "3.5-3.79", housingPlan: "on_campus", greekInterest: true, disabilityAccommodation: false },
   });
 
-  const alabamaRel = upsertRelationship({ studentId: student.id, institutionId: alabama.id, lifecycleState: "admitted", decisionDate: "2026-12-15T00:00:00.000Z" });
+  const alabamaRel = await upsertRelationship({ studentId: student.id, institutionId: alabama.id, lifecycleState: "admitted", decisionDate: "2026-12-15T00:00:00.000Z" });
 
   for (const s of OTHER_SCHOOLS) {
-    const inst = upsertInstitution({ name: s.name, slug: s.slug, domains: s.domains });
-    upsertRelationship({ studentId: student.id, institutionId: inst.id, lifecycleState: "considering" });
+    const inst = await upsertInstitution({ name: s.name, slug: s.slug, domains: s.domains });
+    await upsertRelationship({ studentId: student.id, institutionId: inst.id, lifecycleState: "considering" });
   }
 
   console.log("Materializing Action Ledger for the Alabama relationship...");
-  const materialized = materializeActionsForRelationship(alabamaRel.id);
+  const materialized = await materializeActionsForRelationship(alabamaRel.id);
   const applicableCount = materialized.filter((m) => m.applicable).length;
   console.log(`Evaluated ${materialized.length} rules, ${applicableCount} applicable ActionInstances created for the demo household.`);
 
   console.log("Seed complete.");
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

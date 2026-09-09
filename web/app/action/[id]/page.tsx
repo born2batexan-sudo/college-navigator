@@ -19,11 +19,11 @@ const NEXT_STATES: Record<string, string[]> = {
   not_applicable: [],
 };
 
-export default function ActionDetailPage({ params }: { params: { id: string } }) {
-  const action = getActionInstanceFull(params.id);
+export default async function ActionDetailPage({ params }: { params: { id: string } }) {
+  const action = await getActionInstanceFull(params.id);
   if (!action) notFound();
 
-  const events = listEventsForAction(action.id);
+  const events = await listEventsForAction(action.id);
   const g = action.guidance;
 
   async function setState(formData: FormData) {

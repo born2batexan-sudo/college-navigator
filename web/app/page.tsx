@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 const OPEN_STATES = new Set(["not_started", "started", "submitted", "received", "blocked"]);
 
-export default function DashboardPage() {
-  const households = listHouseholds();
+export default async function DashboardPage() {
+  const households = await listHouseholds();
   const household = households[0];
 
   if (!household) {
@@ -25,15 +25,17 @@ export default function DashboardPage() {
     );
   }
 
-  const students = listStudentsForHousehold(household.id);
+  const students = await listStudentsForHousehold(household.id);
   const student = students[0];
-  const relationships = listRelationshipsForStudent(student.id);
+  const relationships = await listRelationshipsForStudent(student.id);
 
-  const perSchool = relationships.map((rel) => {
-    const institution = getInstitution(rel.institutionId)!;
-    const actions = listActionInstancesForRelationship(rel.id);
-    return { rel, institution, actions };
-  });
+  const perSchool = await Promise.all(
+    relationships.map(async (rel) => {
+      const institution = (await getInstitution(rel.institutionId))!;
+      const actions = await listActionInstancesForRelationship(rel.id);
+      return { rel, institution, actions };
+    })
+  );
 
   const allActions = perSchool.flatMap(({ institution, actions }) =>
     actions

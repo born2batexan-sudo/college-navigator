@@ -7,8 +7,8 @@ import { listRulesForInstitution, updateInstitutionCoverage } from "./db/repo";
  * gates (Section 8): Certified >=90% with no critical gaps, Beta 75-89% or
  * one critical gap, Research 50-74%, Unsupported below 50%.
  */
-export function recomputeCoverage(institutionId: string) {
-  const rules = listRulesForInstitution(institutionId);
+export async function recomputeCoverage(institutionId: string) {
+  const rules = await listRulesForInstitution(institutionId);
   const verified = rules.filter((r) => r.status === "verified");
   const criticalGaps = rules.filter((r) => r.critical && r.status !== "verified").length;
 
@@ -20,6 +20,6 @@ export function recomputeCoverage(institutionId: string) {
   else if (pct >= 50) status = "research";
   else status = "unsupported";
 
-  updateInstitutionCoverage(institutionId, pct, status);
+  await updateInstitutionCoverage(institutionId, pct, status);
   return { pct, status, criticalGaps };
 }

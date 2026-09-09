@@ -25,10 +25,10 @@ import type { Institution, ObservationPattern } from "./db/types";
 
 const ACTION_STATE_ORDER = ["not_started", "started", "submitted", "received", "complete"];
 
-export function findInstitutionForUrl(url: string): Institution | null {
+export async function findInstitutionForUrl(url: string): Promise<Institution | null> {
   const hostname = hostnameOf(url);
   if (!hostname) return null;
-  for (const inst of listInstitutions()) {
+  for (const inst of await listInstitutions()) {
     const domains: string[] = JSON.parse(inst.domains || "[]");
     if (domainMatches(domains, hostname)) return inst;
   }
@@ -41,21 +41,22 @@ function matchingPatterns(patterns: ObservationPattern[], url: string): Observat
   return patterns.filter((p) => globMatch(p.urlPattern, withoutScheme) || globMatch(p.urlPattern, hostname));
 }
 
-function getDemoRelationshipFor(institutionId: string) {
-  const household = listHouseholds()[0];
+async function getDemoRelationshipFor(institutionId: string) {
+  const household = (await listHouseholds())[0];
   if (!household) return null;
-  const student = listStudentsForHousehold(household.id)[0];
+  const student = (await listStudentsForHousehold(household.id))[0];
   if (!student) return null;
-  return listRelationshipsForStudent(student.id).find((r) => r.institutionId === institutionId) ?? null;
+  const relationships = await listRelationshipsForStudent(student.id);
+  return relationships.find((r) => r.institutionId === institutionId) ?? null;
 }
 
-export function getContextForUrl(url: string) {
-  const institution = findInstitutionForUrl(url);
+export async function getContextForUrl(url: string) {
+  const institution = await findInstitutionForUrl(url);
   if (!institution) return { matched: false as const };
 
-  const patterns = matchingPatterns(listObservationPatternsForInstitution(institution.id), url);
-  const relationship = getDemoRelationshipFor(institution.id);
-  const actions = relationship ? listActionInstancesForRelationship(relationship.id) : [];
+  const patterns = matchingPatterns(await listObservationPatternsForInstitution(institution.id), url);
+  const relationship = await getDemoRelationshipFor(institution.id);
+  const actions = relationship ? await listActionInstancesForRelationship(relationship.id) : [];
   const openActions = actions.filter((a) => !["complete", "waived", "not_applicable"].includes(a.state));
 
   return {
@@ -82,12 +83,12 @@ export function getContextForUrl(url: string) {
  * `state_change` event with actorType "observation_engine" so the Action
  * Ledger always shows why the transition happened.
  */
-export function recordObservation(url: string, pageText: string) {
-  const institution = findInstitutionForUrl(url);
+export async function recordObservation(url: string, pageText: string) {
+  const institution = await findInstitutionForUrl(url);
   if (!institution) return { matched: false as const, updates: [] };
 
-  const patterns = matchingPatterns(listObservationPatternsForInstitution(institution.id), url);
-  const relationship = getDemoRelationshipFor(institution.id);
+  const patterns = matchingPatterns(await listObservationPatternsForInstitution(institution.id), url);
+  const relationship = await getDemoRelationshipFor(institution.id);
   const haystack = pageText.toLowerCase();
   const updates: { checkpointCode: string; fromState: string; toState: string }[] = [];
 
@@ -97,17 +98,17 @@ export function recordObservation(url: string, pageText: string) {
     if (!pattern.relatedCheckpointCode) continue;
     if (!haystack.includes(pattern.signal.toLowerCase())) continue;
 
-    const rule = getRuleByCode(institution.id, pattern.relatedCheckpointCode);
+    const rule = await getRuleByCode(institution.id, pattern.relatedCheckpointCode);
     if (!rule) continue;
-    const action = findActionInstance(relationship.id, rule.id);
+    const action = await findActionInstance(relationship.id, rule.id);
     if (!action) continue;
 
     const currentIdx = ACTION_STATE_ORDER.indexOf(action.state);
     const impliedIdx = ACTION_STATE_ORDER.indexOf(pattern.impliesState);
     if (impliedIdx === -1 || impliedIdx <= currentIdx) continue; // never regress, never no-op
 
-    updateActionInstance(action.id, { state: pattern.impliesState });
-    createActionEvent({ actionId: action.id, eventType: "observed_signal", fromState: action.state, toState: pattern.impliesState, actorType: "observation_engine", evidenceRef: url });
+    await updateActionInstance(action.id, { state: pattern.impliesState });
+    await createActionEvent({ actionId: action.id, eventType: "observed_signal", fromState: action.state, toState: pattern.impliesState, actorType: "observation_engine", evidenceRef: url });
     updates.push({ checkpointCode: rule.checkpointCode, fromState: action.state, toState: pattern.impliesState });
   }
 

@@ -13,18 +13,21 @@ import { StatePill } from "@/components/StatusPill";
 
 export const dynamic = "force-dynamic";
 
-export default function SchoolTrackerPage({ params }: { params: { slug: string } }) {
-  const institution = getInstitutionBySlug(params.slug);
+export default async function SchoolTrackerPage({ params }: { params: { slug: string } }) {
+  const institution = await getInstitutionBySlug(params.slug);
   if (!institution) notFound();
 
-  const rules = listRulesForInstitution(institution.id);
+  const rules = await listRulesForInstitution(institution.id);
 
-  const household = listHouseholds()[0];
-  const student = household ? listStudentsForHousehold(household.id)[0] : null;
-  const relationship = student ? listRelationshipsForStudent(student.id).find((r) => r.institutionId === institution.id) : null;
-  const actionsByRuleId = new Map<string, ReturnType<typeof listActionInstancesForRelationship>[number]>();
+  const households = await listHouseholds();
+  const household = households[0];
+  const students = household ? await listStudentsForHousehold(household.id) : [];
+  const student = students[0] ?? null;
+  const relationships = student ? await listRelationshipsForStudent(student.id) : [];
+  const relationship = relationships.find((r) => r.institutionId === institution.id) ?? null;
+  const actionsByRuleId = new Map<string, Awaited<ReturnType<typeof listActionInstancesForRelationship>>[number]>();
   if (relationship) {
-    for (const a of listActionInstancesForRelationship(relationship.id)) {
+    for (const a of await listActionInstancesForRelationship(relationship.id)) {
       actionsByRuleId.set(a.ruleId, a);
     }
   }
