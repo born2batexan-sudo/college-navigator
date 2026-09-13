@@ -49,6 +49,8 @@ export type InstitutionRelationship = {
   lifecycleState: string;
   decisionDate: string | null;
   commitDate: string | null;
+  attributes: string; // JSON string — see rules-engine.ts parseRelationshipAttributes()
+  active: boolean; // false = soft-removed: hidden from the dashboard, tracker/history preserved
   createdAt: string;
 };
 
