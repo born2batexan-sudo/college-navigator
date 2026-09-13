@@ -58,11 +58,21 @@ export default async function DashboardPage() {
   return (
     <main className="flex flex-col gap-8">
       <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">{household.name}</h1>
-        <p className="mt-1 text-ink/60">
-          {student.name} · Class of {student.gradYear} · tracking {relationships.length} schools
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
+            <h1 className="mt-1 text-2xl font-semibold text-ink">{household.name}</h1>
+            <p className="mt-1 text-ink/60">
+              {student.name} · Class of {student.gradYear} · tracking {relationships.length} schools
+            </p>
+          </div>
+          <Link
+            href="/welcome"
+            className="shrink-0 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
+          >
+            Manage schools
+          </Link>
+        </div>
       </header>
 
       <section>
