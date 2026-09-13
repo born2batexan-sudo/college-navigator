@@ -56,6 +56,19 @@ CREATE TABLE IF NOT EXISTS institution_relationships (
   lifecycle_state TEXT NOT NULL DEFAULT 'considering',
   decision_date TEXT,
   commit_date TEXT,
+  -- Per-school questionnaire answers (housing plan, Greek interest, bringing
+  -- a car, disability accommodation) — same shape/convention as
+  -- students.attributes, but scoped to this one school, since a family's
+  -- answers legitimately differ school to school. See rules-engine.ts,
+  -- which merges this over the student-level attributes as a fallback.
+  attributes TEXT NOT NULL DEFAULT '{}',
+  -- Soft-remove flag: when a household stops tracking a school it flips to
+  -- 0 rather than deleting the row, so the underlying 144-point tracker and
+  -- action history are preserved untouched and re-tracking resumes exactly
+  -- where it left off. 1/0 (not a native boolean) to match this schema's
+  -- existing convention (see rules.critical) so the same DDL runs
+  -- unmodified on both SQLite (local dev) and Postgres (production).
+  active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   UNIQUE(student_id, institution_id)
 );
