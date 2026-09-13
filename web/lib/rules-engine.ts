@@ -34,6 +34,7 @@ export type StudentAttributes = {
   greekInterest?: boolean;
   disabilityAccommodation?: boolean;
   outOfStatePayer529?: boolean;
+  bringingCar?: boolean;
   [key: string]: unknown;
 };
 
@@ -43,6 +44,23 @@ export function parseAttributes(student: Student): StudentAttributes {
   } catch {
     return {};
   }
+}
+
+/** Same shape as parseAttributes(), scoped to one school's relationship —
+ * a family's answers (Greek interest, bringing a car, housing plan,
+ * disability accommodation) legitimately differ school to school. */
+export function parseRelationshipAttributes(relationship: InstitutionRelationship): StudentAttributes {
+  try {
+    return JSON.parse(relationship.attributes || "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** Per-school answers win; anything a school's questionnaire hasn't
+ * answered yet falls back to the student-level default. */
+export function resolveAttributes(relationship: InstitutionRelationship, student: Student): StudentAttributes {
+  return { ...parseAttributes(student), ...parseRelationshipAttributes(relationship) };
 }
 
 function lifecycleAtLeast(state: string, floor: string): boolean {
@@ -65,6 +83,8 @@ export function evaluatePopulation(rule: Rule, attrs: StudentAttributes, student
       return attrs.greekInterest === true;
     case "disability_accommodation":
       return attrs.disabilityAccommodation === true;
+    case "bringing_car":
+      return attrs.bringingCar === true;
     default:
       // Unknown population segment: fail closed, don't silently surface a
       // rule we can't confirm applies.
@@ -126,7 +146,7 @@ export function evaluateRule(
   relationship: InstitutionRelationship,
   student: Student
 ): ApplicabilityResult {
-  const attrs = parseAttributes(student);
+  const attrs = resolveAttributes(relationship, student);
 
   if (!evaluateTrigger(rule, relationship)) {
     return {
