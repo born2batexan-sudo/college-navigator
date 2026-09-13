@@ -73,6 +73,8 @@ function toRelationship(r: any): InstitutionRelationship {
     lifecycleState: r.lifecycle_state,
     decisionDate: r.decision_date,
     commitDate: r.commit_date,
+    attributes: r.attributes ?? "{}",
+    active: r.active === undefined || r.active === null ? true : !!r.active,
     createdAt: r.created_at,
   };
 }
@@ -538,14 +540,22 @@ export async function upsertRelationship(input: {
   const id = newId("rel");
   const now = nowIso();
   await exec(
-    "INSERT INTO institution_relationships (id, student_id, institution_id, lifecycle_state, decision_date, commit_date, created_at) VALUES ($1, $2, $3, $4, $5, NULL, $6)",
+    "INSERT INTO institution_relationships (id, student_id, institution_id, lifecycle_state, decision_date, commit_date, attributes, active, created_at) VALUES ($1, $2, $3, $4, $5, NULL, '{}', 1, $6)",
     [id, input.studentId, input.institutionId, input.lifecycleState ?? "considering", input.decisionDate ?? null, now]
   );
-  return toRelationship({ id, student_id: input.studentId, institution_id: input.institutionId, lifecycle_state: input.lifecycleState ?? "considering", decision_date: input.decisionDate ?? null, commit_date: null, created_at: now });
+  return toRelationship({ id, student_id: input.studentId, institution_id: input.institutionId, lifecycle_state: input.lifecycleState ?? "considering", decision_date: input.decisionDate ?? null, commit_date: null, attributes: "{}", active: 1, created_at: now });
 }
 
-export async function listRelationshipsForStudent(studentId: string): Promise<InstitutionRelationship[]> {
-  return (await queryRows<any>("SELECT * FROM institution_relationships WHERE student_id = $1", [studentId])).map(toRelationship);
+export async function findRelationship(studentId: string, institutionId: string): Promise<InstitutionRelationship | null> {
+  const r = await queryOne<any>("SELECT * FROM institution_relationships WHERE student_id = $1 AND institution_id = $2", [studentId, institutionId]);
+  return r ? toRelationship(r) : null;
+}
+
+export async function listRelationshipsForStudent(studentId: string, opts?: { includeInactive?: boolean }): Promise<InstitutionRelationship[]> {
+  if (opts?.includeInactive) {
+    return (await queryRows<any>("SELECT * FROM institution_relationships WHERE student_id = $1", [studentId])).map(toRelationship);
+  }
+  return (await queryRows<any>("SELECT * FROM institution_relationships WHERE student_id = $1 AND active = 1", [studentId])).map(toRelationship);
 }
 
 export async function listRelationshipsForInstitution(institutionId: string): Promise<InstitutionRelationship[]> {
@@ -565,6 +575,20 @@ export async function setRelationshipState(id: string, lifecycleState: string, d
     "UPDATE institution_relationships SET lifecycle_state = $1, decision_date = COALESCE($2, decision_date), commit_date = COALESCE($3, commit_date) WHERE id = $4",
     [lifecycleState, decisionDate ?? null, commitDate ?? null, id]
   );
+}
+
+/** Soft add/remove: flips visibility only. The 144-point tracker and every
+ * ActionInstance/ActionEvent underneath stay exactly as they were, so
+ * re-activating resumes right where tracking left off. */
+export async function setRelationshipActive(id: string, active: boolean): Promise<void> {
+  await exec("UPDATE institution_relationships SET active = $1 WHERE id = $2", [active ? 1 : 0, id]);
+}
+
+/** Per-school questionnaire answers (housing plan, Greek interest, bringing
+ * a car, disability accommodation) — see rules-engine.ts for how these are
+ * merged over the student-level attributes and evaluated. */
+export async function updateRelationshipAttributes(id: string, attributes: Record<string, unknown>): Promise<void> {
+  await exec("UPDATE institution_relationships SET attributes = $1 WHERE id = $2", [JSON.stringify(attributes), id]);
 }
 
 // ---------- Action ledger ----------
