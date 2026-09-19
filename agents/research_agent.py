@@ -32,6 +32,19 @@ v2 changes (2026-09-18), all aimed at making a first paid run safe and measurabl
   * Handles pause_turn (long web-search turns), retries unparseable output once, retries
     rate limits with backoff, and ignores any checkpoint code the model wasn't asked about
     (so it can never overwrite a verified rule).
+
+v3 changes (2026-09-18), from the UT Dallas full-run review:
+  * Target entering term (--term, default "Fall 2027"). Answers that only cover an earlier
+    cycle are saved as "unverified" with a "Prior cycle only" label and NO absolute deadline,
+    so last year's dates can never surface as this year's. Past-dated absolute deadlines are dropped.
+  * Applicability: "not_applicable" (the school genuinely doesn't have the thing, shown by an
+    official page + a quoted sentence) is saved as verified "Not applicable: ..."; "not_yet_published"
+    (school does it, hasn't published this cycle's details) stays unverified with a clear label.
+  * Confidence calibration: "high" is capped at "medium" when the source page is aimed at another
+    audience (international, transfer, etc.) or when no supporting quote is given.
+  * --codes CODE1,CODE2: re-research specific checkpoints (verified rules are never replaced by an
+    unverified answer unless --allow-downgrade). Use it for targeted re-checks.
+  * Every answer (with its evidence quote) is kept in the run report for auditing.
 """
 
 import argparse
@@ -50,6 +63,10 @@ VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_POPULATION = {"all", "out_of_state", "campus_housing", "greek_pnm", "disability_accommodation", "bringing_car"}
 VALID_TRIGGER = {"applying", "applied", "admitted", "enrolled", "attending"}
 VALID_REFUNDABLE = {"yes", "no", "partial", "unknown"}
+VALID_APPLICABILITY = {"applies", "not_applicable", "not_yet_published"}
+VALID_CYCLE = {"current", "prior", "undated"}
+VALID_AUDIENCE = {"freshman", "general", "other"}
+DEFAULT_TERM = "Fall 2027"
 
 SYSTEM_PROMPT = f"""You are the Institutional Research Agent for the College Lifecycle Intelligence \
 Platform. Your job is to research specific, atomic checkpoints about a named university's \
@@ -66,10 +83,29 @@ official source, report status "unverified" rather than inventing a plausible-so
 Never fabricate a dollar amount, a date, or a policy detail.
 4. For each checkpoint, give a single best official source URL if one exists. A "verified" \
 answer MUST have a source_url that you actually retrieved through search.
-5. Only mark confidence "high" if you found the fact stated explicitly on an official page. \
-Use "medium" when it's implied or you're combining two related official statements, and \
-"low" when you're inferring from indirect evidence.
-6. Return ONLY a JSON array as your final output, wrapped in a ```json code fence, matching \
+5. Only mark confidence "high" if (a) you found the fact stated explicitly on an official page AND \
+(b) that page is written for the family's audience: domestic first-year (freshman) students. If \
+your only source is aimed at another audience (international students, transfers, graduate \
+students, athletes, one specific program), set source_audience "other" and use confidence \
+"medium" at most. Use "medium" also when the fact is implied or you combined two related \
+official statements, and "low" when you're inferring from indirect evidence.
+6. Entering term. The request names the entering term the family is planning for. Set "cycle" to \
+"current" if the page states or clearly covers that term (or is an evergreen policy with no \
+year), "prior" ONLY if the information you found explicitly names an earlier year or cycle, and \
+"undated" if you cannot tell. Never present an earlier year's dates as if they were current: for \
+"prior", put the earlier date in the requirement text labeled with its year and leave \
+deadline_expr null.
+7. Applicability. Use "applies" normally. Use "not_applicable" ONLY when the school genuinely does \
+not have the thing at all (for example no freshman enrollment deposit, no football program, no \
+Greek system) AND an official page states or clearly shows that; then status is "verified", \
+source_url is that page, evidence_quote is the sentence that shows it, and requirement starts \
+with "Not applicable: ". Use "not_yet_published" when the school does have the thing but has not \
+yet published details for the entering term; then status is "unverified" and requirement starts \
+with "Not yet published: ". If you simply cannot find anything, that is status "unverified" with \
+applicability "applies". Never treat a lack of search results as proof that something does not exist.
+8. For every "verified" answer, copy a short verbatim quote (under 200 characters) from the \
+page that supports it into evidence_quote.
+9. Return ONLY a JSON array as your final output, wrapped in a ```json code fence, matching \
 this schema exactly, one object per checkpoint you were asked about:
 
 ```json
@@ -87,14 +123,15 @@ this schema exactly, one object per checkpoint you were asked about:
     "confidence": "high" | "medium" | "low",
     "source_url": null or the URL you used,
     "source_label": null or a short human label for that page,
-    "source_owner": null or the office/department that owns it
+    "source_owner": null or the office/department that owns it,
+    "source_audience": "freshman" | "general" | "other",
+    "cycle": "current" | "prior" | "undated",
+    "applicability": "applies" | "not_applicable" | "not_yet_published",
+    "evidence_quote": null or a short verbatim quote from the source page
   }}
 ]
 ```
-
-If a checkpoint doesn't apply to this school at all (e.g. no Greek system), still return an \
-entry with status "unverified" and requirement explaining that, confidence "high" if you're \
-sure it doesn't apply."""
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +221,12 @@ def host_allowed(url, domains):
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
-def build_user_prompt(institution_name: str, checkpoints: list, domains: list) -> str:
-    lines = [f"Research these checkpoints for {institution_name}:\n"]
+def build_user_prompt(institution_name: str, checkpoints: list, domains: list, term: str = DEFAULT_TERM) -> str:
+    lines = [
+        f"Research these checkpoints for {institution_name}.",
+        f"The family is planning for {term} entry (domestic first-year student). Report requirements and "
+        f"dates for that entering cycle.\n",
+    ]
     for cp in checkpoints:
         crit = " [CRITICAL]" if cp["critical"] else ""
         lines.append(f"- {cp['code']}{crit}: {cp['title']}")
@@ -242,11 +283,11 @@ def call_model(client, usage, user_prompt, tools, max_continuations=4, prior_mes
     return "\n".join(texts), stop_reason
 
 
-def research_batch(client, usage, institution_name, checkpoints, domains, max_uses):
+def research_batch(client, usage, institution_name, checkpoints, domains, max_uses, term=DEFAULT_TERM):
     tool = {"type": "web_search_20250305", "name": "web_search", "max_uses": max_uses}
     if domains:
         tool["allowed_domains"] = domains
-    prompt = build_user_prompt(institution_name, checkpoints, domains)
+    prompt = build_user_prompt(institution_name, checkpoints, domains, term)
 
     text, stop = call_model(client, usage, prompt, [tool])
     results = extract_json_array(text)
@@ -292,11 +333,25 @@ def load_reference_profile(institutions, exclude_slug, max_refs=5):
     return profile, used
 
 
-def normalize_result(r, code, requested_cp, domains, reference_pop):
-    """Turn one model answer into a safe rules-POST payload (plus notes for the report)."""
+def _label(prefix, text):
+    """Prefix a requirement once (case-insensitive) so labels never stack."""
+    t = (text or "").strip() or "Not yet researched."
+    return t if t.lower().startswith(prefix.lower().rstrip(": ")) else f"{prefix}{t}"
+
+
+def normalize_result(r, code, requested_cp, domains, reference_pop, term=DEFAULT_TERM, today=None):
+    """Turn one model answer into a safe rules-POST payload (plus notes and audit info for the report)."""
+    import datetime as _dt
+    today = today or _dt.date.today()
     notes = []
     status = r.get("status") if r.get("status") in VALID_STATUS else "unverified"
     confidence = r.get("confidence") if r.get("confidence") in VALID_CONFIDENCE else "low"
+    applicability = r.get("applicability") if r.get("applicability") in VALID_APPLICABILITY else "applies"
+    cycle = r.get("cycle") if r.get("cycle") in VALID_CYCLE else "undated"
+    audience = r.get("source_audience") if r.get("source_audience") in VALID_AUDIENCE else "general"
+    quote = str(r.get("evidence_quote") or "").strip()[:300]
+    requirement = (r.get("requirement") or "").strip() or "Not yet researched."
+    deadline_expr = r.get("deadline_expr")
 
     source_url = r.get("source_url")
     if source_url and not host_allowed(source_url, domains):
@@ -306,6 +361,46 @@ def normalize_result(r, code, requested_cp, domains, reference_pop):
         notes.append("verified_without_valid_source_downgraded")
         status = "unverified"
         confidence = "low"
+
+    # --- Applicability ---------------------------------------------------------------------------
+    if applicability == "not_applicable":
+        if source_url and quote:
+            status = "verified"
+            requirement = _label("Not applicable: ", requirement)
+            notes.append("not_applicable")
+        else:
+            notes.append("na_without_evidence_kept_unverified")
+            status = "unverified"
+            confidence = "low"
+    elif applicability == "not_yet_published":
+        status = "unverified"
+        requirement = _label("Not yet published: ", requirement)
+        notes.append("not_yet_published")
+
+    # --- Entering-term cycle ---------------------------------------------------------------------
+    if status == "verified" and applicability == "applies" and cycle == "prior":
+        status = "unverified"
+        requirement = _label(f"Prior cycle only, not yet confirmed for {term}: ", requirement)
+        notes.append("prior_cycle_only")
+    if isinstance(deadline_expr, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", deadline_expr.strip()):
+        try:
+            d = _dt.date.fromisoformat(deadline_expr.strip())
+        except ValueError:
+            d = None
+        if d is None or cycle == "prior" or d < today:
+            notes.append("dropped_stale_or_invalid_deadline")
+            deadline_expr = None
+    elif deadline_expr is not None and not isinstance(deadline_expr, str):
+        deadline_expr = None
+
+    # --- Confidence calibration ------------------------------------------------------------------
+    if status == "verified" and confidence == "high":
+        if audience == "other":
+            confidence = "medium"
+            notes.append("capped_medium_other_audience")
+        elif not quote and applicability != "not_applicable":
+            confidence = "medium"
+            notes.append("capped_medium_no_quote")
 
     # Population: platform-known value wins; otherwise a validated model value; otherwise safe fallbacks.
     if code in reference_pop:
@@ -324,7 +419,6 @@ def normalize_result(r, code, requested_cp, domains, reference_pop):
         cost = int(cost)
 
     refundable = r.get("refundable") if r.get("refundable") in VALID_REFUNDABLE else "unknown"
-    requirement = (r.get("requirement") or "").strip() or "Not yet researched."
 
     payload = {
         "checkpointCode": code,
@@ -333,7 +427,7 @@ def normalize_result(r, code, requested_cp, domains, reference_pop):
         "confidence": confidence,
         "population": population,
         "trigger": trigger,
-        "deadlineExpr": r.get("deadline_expr"),
+        "deadlineExpr": deadline_expr,
         "costCents": cost,
         "refundable": refundable,
         "consequence": r.get("consequence"),
@@ -346,7 +440,8 @@ def normalize_result(r, code, requested_cp, domains, reference_pop):
             "owner": r.get("source_owner"),
             "lastVerified": None,
         }
-    return payload, source, notes
+    audit = {"applicability": applicability, "cycle": cycle, "source_audience": audience, "evidence_quote": quote}
+    return payload, source, notes, audit
 
 
 def write_report(report, path):
@@ -367,7 +462,9 @@ def render_markdown(report):
         f"- Verified: **{report['status_counts'].get('verified', 0)}** | unverified: **{report['status_counts'].get('unverified', 0)}**",
         f"- Confidence (all answers): high {report['confidence_counts'].get('high', 0)}, "
         f"medium {report['confidence_counts'].get('medium', 0)}, low {report['confidence_counts'].get('low', 0)}",
-        f"- Downgraded by safety checks: {report['downgraded']}",
+        f"- Answers touched by safety/quality checks: {report['downgraded']} | entering term: {report.get('term')}",
+        f"- Flags: {report.get('flag_counts') or 'none'}",
+        f"- Existing verified rules kept (re-check gave no better answer): {report.get('kept_existing_verified', 0)}",
         f"- Distinct source hosts: **{report['distinct_source_hosts']}** (fragmentation proxy)",
         f"- API calls: {u['api_calls']} | web searches: **{u['web_searches']}** | input tokens: {u['input_tokens']:,} | output tokens: **{u['output_tokens']:,}**"
         f" | cache read: {u['cache_read_tokens']:,}",
@@ -404,6 +501,9 @@ def main():
     parser.add_argument("--budget-searches", type=int, default=400, help="Hard stop once this many web searches have been used (default 400)")
     parser.add_argument("--pause", type=float, default=3.0, help="Seconds to wait between model calls (default 3)")
     parser.add_argument("--report-file", default="run-report.json", help="Where to write the JSON run report")
+    parser.add_argument("--term", default=DEFAULT_TERM, help=f'Entering term the family is planning for (default "{DEFAULT_TERM}")')
+    parser.add_argument("--codes", default="", help="Comma-separated checkpoint codes to (re-)research even if already answered, e.g. ACA-02,HOU-04")
+    parser.add_argument("--allow-downgrade", action="store_true", help="With --codes: let ANY unverified answer replace an already-verified rule. Default: a verified rule is only replaced by a verified answer, or by a labeled 'prior cycle only' / 'not yet published' reclassification")
     args = parser.parse_args()
 
     started = time.time()
@@ -415,7 +515,24 @@ def main():
         print(f"Unknown institution slug '{args.institution}'. Known: {[i['slug'] for i in institutions]}", file=sys.stderr)
         sys.exit(1)
 
-    outstanding = institution["outstandingCriticalCheckpoints"] if args.only_critical else institution["outstandingCheckpoints"]
+    existing_rules = {}
+    if args.codes.strip():
+        wanted = []
+        for c in args.codes.split(","):
+            c = c.strip().upper()
+            if c and c not in wanted:
+                wanted.append(c)
+        rules_now = api_get("/api/agent/rules", params={"institutionSlug": args.institution})["rules"]
+        existing_rules = {r["checkpointCode"]: r for r in rules_now if r.get("checkpointCode")}
+        outstanding = []
+        for code in wanted:
+            r = existing_rules.get(code)
+            if not r:
+                print(f"  (no rule/checkpoint {code} found for {args.institution}; skipping)", file=sys.stderr)
+                continue
+            outstanding.append({"code": code, "domain": r.get("domain") or "General", "title": r.get("title") or code, "critical": bool(r.get("critical"))})
+    else:
+        outstanding = institution["outstandingCriticalCheckpoints"] if args.only_critical else institution["outstandingCheckpoints"]
     if args.domain:
         outstanding = [c for c in outstanding if c["domain"] == args.domain]
     if args.limit:
@@ -450,6 +567,9 @@ def main():
     written = 0
     write_errors = 0
     downgraded = 0
+    kept_verified = 0
+    flag_counts = Counter()
+    answers = []
     attempted = 0
     status_counts = Counter()
     confidence_counts = Counter()
@@ -465,7 +585,7 @@ def main():
 
         print(f"\n--- [{n}/{len(batches)}] {domain}: {', '.join(c['code'] for c in checkpoints)} ---")
         try:
-            results = research_batch(client, usage, institution["name"], checkpoints, domains, args.max_uses)
+            results = research_batch(client, usage, institution["name"], checkpoints, domains, args.max_uses, args.term)
         except Exception as e:  # noqa: BLE001
             print(f"    Batch failed: {type(e).__name__}: {e}", file=sys.stderr)
             results = []
@@ -484,9 +604,16 @@ def main():
             seen.add(code)
             attempted += 1
 
-            payload, source, notes = normalize_result(r, code, requested[code], domains, reference_pop)
+            payload, source, notes, audit = normalize_result(r, code, requested[code], domains, reference_pop, args.term)
             if notes:
                 downgraded += 1
+            for nt in notes:
+                flag_counts[nt] += 1
+            answers.append({
+                "code": code, "status": payload["status"], "confidence": payload["confidence"],
+                "requirement": payload["requirement"], "source_url": source["url"] if source else None,
+                "notes": notes, **audit,
+            })
             status_counts[payload["status"]] += 1
             confidence_counts[payload["confidence"]] += 1
             if source:
@@ -495,6 +622,13 @@ def main():
             print(f"    {code}: {payload['status']} ({payload['confidence']}) — {payload['requirement'][:90]}{flag}")
 
             if args.dry_run:
+                continue
+
+            prior = existing_rules.get(code)
+            informative = {"prior_cycle_only", "not_yet_published"} & set(notes)  # a real reclassification, not a failed search
+            if prior and prior.get("status") == "verified" and payload["status"] != "verified" and not informative and not args.allow_downgrade:
+                kept_verified += 1
+                print(f"    {code}: keeping the existing verified rule (new answer was unverified)")
                 continue
 
             try:
@@ -538,6 +672,10 @@ def main():
         "written": written,
         "write_errors": write_errors,
         "downgraded": downgraded,
+        "kept_existing_verified": kept_verified,
+        "flag_counts": dict(flag_counts),
+        "term": args.term,
+        "answers": answers,
         "status_counts": dict(status_counts),
         "confidence_counts": dict(confidence_counts),
         "distinct_source_hosts": len(host_counts),
