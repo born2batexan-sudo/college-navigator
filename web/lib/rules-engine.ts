@@ -13,6 +13,7 @@
  */
 
 import type { Rule, InstitutionRelationship, Student } from "./db/types";
+import { parseDateStatus } from "./date-status";
 
 // Order matters: used to test "has the relationship reached at least X".
 const LIFECYCLE_ORDER = [
@@ -148,6 +149,13 @@ export function evaluateRule(
 ): ApplicabilityResult {
   const attrs = resolveAttributes(relationship, student);
 
+  // The research agent marks checkpoints the school genuinely doesn't have as
+  // "Not applicable: ..." (with a cited, quoted source). Those are not to-dos.
+  const dateStatus = parseDateStatus(rule);
+  if (dateStatus.kind === "not_applicable") {
+    return { applicable: false, reason: `Not applicable at this school: ${dateStatus.detail}` };
+  }
+
   if (!evaluateTrigger(rule, relationship)) {
     return {
       applicable: false,
@@ -162,7 +170,9 @@ export function evaluateRule(
     };
   }
 
-  const dueAt = resolveDeadline(rule, relationship);
+  // While the school hasn't published this cycle's dates, never compute a due
+  // date from older information.
+  const dueAt = dateStatus.kind === "awaiting" ? null : resolveDeadline(rule, relationship);
   const priority = computePriority(rule, dueAt);
   const reasonParts = [`Applies to population "${rule.population}"`];
   if (rule.trigger) reasonParts.push(`triggered by reaching "${rule.trigger}"`);
