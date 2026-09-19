@@ -14,6 +14,15 @@ export const supabaseConfigured = !!SUPABASE_URL && !!SUPABASE_KEY;
 export const devLoginEnabled = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_LOGIN === "1";
 export const DEV_COOKIE = "cn_dev_user";
 
+/**
+ * How the email sign-in works. Supabase's built-in mail cannot change the
+ * email text, so its message holds only a link (opens on the same browser
+ * that asked for it). Once custom mail is set up and the emails are edited
+ * to show a 6-digit code, set AUTH_EMAIL_CODE=1 to show the code box too,
+ * which also works when the email is opened on a different device.
+ */
+export const emailCodeEnabled = process.env.AUTH_EMAIL_CODE === "1";
+
 export const PROVIDER_LABELS: Record<string, string> = {
   google: "Google",
   azure: "Microsoft",
