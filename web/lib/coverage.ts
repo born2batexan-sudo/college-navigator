@@ -1,16 +1,27 @@
 import { ALL_CHECKPOINTS } from "./checkpoints";
 import { listRulesForInstitution, updateInstitutionCoverage } from "./db/repo";
+import { parseDateStatus } from "./date-status";
 
 /**
  * Recomputes an institution's 144-point coverage percentage and gate
  * status after a rule is added or verified, per the brief's certification
  * gates (Section 8): Certified >=90% with no critical gaps, Beta 75-89% or
  * one critical gap, Research 50-74%, Unsupported below 50%.
+ *
+ * A "critical gap" is a critical checkpoint that is neither verified nor
+ * legitimately waiting on the school. If the research agent has confirmed
+ * that the school has not yet published this cycle's details (the rule is
+ * labeled "Not yet published" or "Prior cycle only"), that is not a gap in
+ * our research, so it does not block certification. It is still NOT counted
+ * as verified in the percentage, and it stays visible to families as
+ * "Date not posted yet" until the school posts and the agent verifies it.
  */
 export async function recomputeCoverage(institutionId: string) {
   const rules = await listRulesForInstitution(institutionId);
   const verified = rules.filter((r) => r.status === "verified");
-  const criticalGaps = rules.filter((r) => r.critical && r.status !== "verified").length;
+  const criticalGaps = rules.filter(
+    (r) => r.critical && r.status !== "verified" && parseDateStatus(r).kind !== "awaiting"
+  ).length;
 
   const pct = Math.round((verified.length / ALL_CHECKPOINTS.length) * 1000) / 10;
 
