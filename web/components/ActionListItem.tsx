@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatePill } from "./StatusPill";
 import { PRIORITY_STYLES, STATE_LABELS, STATE_STYLES, formatDate, daysUntil } from "@/lib/format";
+import { parseDateStatus, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
 import type { ActionInstance, Rule, GuidanceAsset } from "@/lib/db/types";
 
 type Props = {
@@ -9,7 +10,9 @@ type Props = {
 };
 
 export function ActionListItem({ action, schoolName }: Props) {
-  const due = daysUntil(action.dueAt);
+  // If the school hasn't published this cycle's dates, show that plainly instead of any date.
+  const awaiting = parseDateStatus(action.rule).kind === "awaiting";
+  const due = awaiting ? null : daysUntil(action.dueAt);
   const overdue = due !== null && due < 0 && !["complete", "waived", "not_applicable"].includes(action.state);
 
   return (
@@ -25,15 +28,17 @@ export function ActionListItem({ action, schoolName }: Props) {
           <span className="text-[11px] font-medium uppercase tracking-wide text-ink/40">{schoolName}</span>
           {action.rule.critical && <span className="text-[11px] font-medium text-accent">Critical</span>}
         </div>
-        <p className="mt-1 truncate font-medium text-ink">{action.guidance?.what ?? action.rule.title}</p>
+        <p className="mt-1 truncate font-medium text-ink">{awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
         <p className="mt-0.5 text-sm text-ink/50">
           {action.rule.checkpointCode} · {action.rule.domain}
-          {action.rule.status === "unverified" && " · not yet researched"}
+          {awaiting ? " · waiting on the school" : action.rule.status === "unverified" && " · not yet researched"}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <div className="text-right text-sm">
-          <div className={overdue ? "font-medium text-urgent" : "text-ink/70"}>{formatDate(action.dueAt)}</div>
+          <div className={overdue ? "font-medium text-urgent" : awaiting ? "text-warn" : "text-ink/70"}>
+            {awaiting ? DATE_NOT_POSTED_LABEL : formatDate(action.dueAt)}
+          </div>
         </div>
         <StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} />
       </div>
