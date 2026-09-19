@@ -1,82 +1,123 @@
-"""
-Shared config and helpers for the three College Navigator agents:
-  - research_agent.py     (Institutional Research Agent)
-  - monitoring_agent.py   (Monitoring / Change-Detection Agent)
-  - guidance_agent.py     (Guidance Generation Agent)
+name: Research a school
 
-Each agent is a standalone script that talks to two things:
-  1. The Anthropic API directly (for research, classification, drafting)
-  2. This app's own /api/agent/* HTTP endpoints (to read/write state)
+# Manual "Run workflow" button (Actions tab). Onboards the school in the live app if it isn't
+# there yet, then runs agents/research_agent.py against it. Costs real Anthropic API money.
 
-They do NOT touch the SQLite file directly. That keeps them runnable from
-anywhere (a cron box, a serverless function, your laptop) regardless of
-where the app itself is deployed — only APP_BASE_URL has to change.
-"""
+on:
+  workflow_dispatch:
+    inputs:
+      school_name:
+        description: "Official school name"
+        required: true
+        default: "The University of Texas at Dallas"
+      slug:
+        description: "App slug (lowercase letters, digits, hyphens)"
+        required: true
+        default: "ut-dallas"
+      domains:
+        description: "Official web domains, comma-separated (search is restricted to these)"
+        required: true
+        default: "utdallas.edu"
+      limit:
+        description: "Max checkpoints to research. 6 = cheap smoke test. Type 0 for no limit (full run). Ignored when 'codes' is filled in."
+        required: false
+        default: "6"
+      codes:
+        description: "Optional: re-research ONLY these checkpoint codes, comma-separated (e.g. ACA-02,HOU-04). Leave empty for a normal run."
+        required: false
+        default: ""
+      term:
+        description: "Entering term the family is planning for"
+        required: true
+        default: "Fall 2027"
+      only_critical:
+        description: "Only research the critical checkpoints"
+        type: boolean
+        default: false
+      budget_searches:
+        description: "Hard stop after this many web searches (safety cap)"
+        required: false
+        default: "400"
 
-import os
-import sys
-import json
-from typing import Any
+# One research run at a time.
+concurrency:
+  group: research-school
+  cancel-in-progress: false
 
-import requests
+permissions:
+  contents: read
 
-try:
-    from dotenv import load_dotenv
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check required secrets are set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          missing=0
+          for v in ANTHROPIC_API_KEY AGENT_API_KEY APP_BASE_URL; do
+            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set (Settings > Secrets and variables > Actions)"; missing=1; fi
+          done
+          exit $missing
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "web", ".env"))
-except ImportError:
-    pass
+      - uses: actions/checkout@v4
 
-APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:3000")
-AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: agents/requirements.txt
 
-PROTECTED_CONTENT_BOUNDARY = (
-    "You manage college-lifecycle PROCESS, TIMING, COST, and LOGISTICS only. "
-    "You must never read, quote, store, summarize, generate, rewrite, or score "
-    "admissions essays, personal statements, or other substantively evaluated "
-    "application content. If a source page contains essay prompts, you may note "
-    "that a prompt exists (checkpoint ADM-08) but must not reproduce or analyze "
-    "its content."
-)
+      - name: Install dependencies
+        run: pip install -r agents/requirements.txt
 
+      - name: Onboard school in the live app (safe to repeat)
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          SCHOOL_NAME: ${{ inputs.school_name }}
+          SLUG: ${{ inputs.slug }}
+          DOMAINS: ${{ inputs.domains }}
+        run: |
+          body=$(jq -n --arg name "$SCHOOL_NAME" --arg slug "$SLUG" --arg domains "$DOMAINS" \
+            '{name:$name, slug:$slug, domains:($domains | split(",") | map(gsub("\\s";"")) | map(select(length>0)))}')
+          curl -sS --fail-with-body -X POST "${APP_BASE_URL%/}/api/agent/institutions" \
+            -H "Authorization: Bearer $AGENT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body"
+          echo
 
-def require_env(name: str, value: str):
-    if not value:
-        print(f"ERROR: {name} is not set. Set it in agents/.env or the environment.", file=sys.stderr)
-        sys.exit(1)
+      - name: Research
+        working-directory: agents
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SLUG: ${{ inputs.slug }}
+          DOMAINS: ${{ inputs.domains }}
+          LIMIT: ${{ inputs.limit }}
+          CODES: ${{ inputs.codes }}
+          TERM: ${{ inputs.term }}
+          ONLY_CRITICAL: ${{ inputs.only_critical }}
+          BUDGET: ${{ inputs.budget_searches }}
+        run: |
+          args=(--institution "$SLUG" --domains "$DOMAINS" --budget-searches "${BUDGET:-400}" --report-file run-report.json --term "${TERM:-Fall 2027}")
+          if [ -n "$CODES" ]; then
+            args+=(--codes "$CODES")
+          elif [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then
+            args+=(--limit "$LIMIT")
+          fi
+          if [ "$ONLY_CRITICAL" = "true" ]; then args+=(--only-critical); fi
+          python -u research_agent.py "${args[@]}"
 
-
-def _headers() -> dict:
-    return {"Authorization": f"Bearer {AGENT_API_KEY}", "Content-Type": "application/json"}
-
-
-def api_get(path: str, params: dict | None = None) -> Any:
-    resp = requests.get(f"{APP_BASE_URL}{path}", headers=_headers(), params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def api_post(path: str, body: dict) -> Any:
-    resp = requests.post(f"{APP_BASE_URL}{path}", headers=_headers(), data=json.dumps(body), timeout=30)
-    if not resp.ok:
-        print(f"POST {path} -> {resp.status_code}: {resp.text}", file=sys.stderr)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def api_patch(path: str, body: dict) -> Any:
-    resp = requests.patch(f"{APP_BASE_URL}{path}", headers=_headers(), data=json.dumps(body), timeout=30)
-    if not resp.ok:
-        print(f"PATCH {path} -> {resp.status_code}: {resp.text}", file=sys.stderr)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_anthropic_client():
-    require_env("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)
-    from anthropic import Anthropic
-
-    return Anthropic(api_key=ANTHROPIC_API_KEY)
+      - name: Save run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-report-${{ inputs.slug }}
+          path: agents/run-report.json
+          if-no-files-found: ignore
