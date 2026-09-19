@@ -2,6 +2,7 @@ import { listHouseholds, listStudentsForHousehold, listRelationshipsForStudent, 
 import { SchoolCard } from "@/components/SchoolCard";
 import { ActionListItem } from "@/components/ActionListItem";
 import Link from "next/link";
+import { parseDateStatus } from "@/lib/date-status";
 
 // This reads the SQLite database on every request — it's a live household
 // dashboard, not static marketing content, so opt out of Next's default
@@ -10,6 +11,10 @@ export const dynamic = "force-dynamic";
 
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 const OPEN_STATES = new Set(["not_started", "started", "submitted", "received", "blocked"]);
+
+// Something the school genuinely doesn't have is not a to-do, even if an older to-do was created for it.
+const isOpen = (a: { state: string; rule: { requirement: string } }) =>
+  OPEN_STATES.has(a.state) && parseDateStatus(a.rule).kind !== "not_applicable";
 
 export default async function DashboardPage() {
   const households = await listHouseholds();
@@ -39,7 +44,7 @@ export default async function DashboardPage() {
 
   const allActions = perSchool.flatMap(({ institution, actions }) =>
     actions
-      .filter((a) => OPEN_STATES.has(a.state))
+      .filter(isOpen)
       .map((a) => ({ ...a, schoolName: institution.name }))
   );
 
@@ -83,7 +88,7 @@ export default async function DashboardPage() {
               key={rel.id}
               institution={institution}
               relationship={rel}
-              openCount={actions.filter((a) => OPEN_STATES.has(a.state)).length}
+              openCount={actions.filter(isOpen).length}
             />
           ))}
         </div>
