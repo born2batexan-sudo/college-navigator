@@ -1,0 +1,178 @@
+name: Export school data report
+
+# Manual "Run workflow" button (Actions tab). Reads researched schools from the live app (read-only),
+# computes comparison numbers, and publishes them as a GitHub "pre-release" page in this repo so they
+# can be read without logging in. Costs nothing (no Anthropic calls). Changes nothing in the app.
+
+on:
+  workflow_dispatch:
+    inputs:
+      slugs:
+        description: "School slugs to compare, comma-separated"
+        required: true
+        default: "ut-dallas,alabama,arkansas,oklahoma,arizona,ut-austin,texas-am"
+      focus:
+        description: "School to list checkpoint-by-checkpoint in the report"
+        required: true
+        default: "ut-dallas"
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check required secrets are set
+        env:
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          missing=0
+          for v in AGENT_API_KEY APP_BASE_URL; do
+            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Build report
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          SLUGS: ${{ inputs.slugs }}
+          FOCUS: ${{ inputs.focus }}
+        run: |
+          mkdir -p out
+          python3 - <<'PY'
+          import json, os, sys, datetime, urllib.request, urllib.error
+          from collections import Counter, defaultdict
+          from urllib.parse import urlparse
+
+          BASE = os.environ["APP_BASE_URL"].rstrip("/")
+          KEY = os.environ["AGENT_API_KEY"]
+          SLUGS = [s.strip() for s in os.environ["SLUGS"].split(",") if s.strip()]
+          FOCUS = os.environ.get("FOCUS", "").strip()
+          OUT = "out"
+
+          def get(path):
+              req = urllib.request.Request(BASE + path, headers={"Authorization": "Bearer " + KEY})
+              with urllib.request.urlopen(req, timeout=90) as r:
+                  return json.load(r)
+
+          def unwrap(data, key):
+              if isinstance(data, list):
+                  return data
+              if key in data:
+                  return data[key]
+              for v in data.values():
+                  if isinstance(v, list):
+                      return v
+              raise KeyError(key)
+
+          def host_of(url):
+              try:
+                  return (urlparse(url).hostname or "").lower()
+              except Exception:
+                  return ""
+
+          def cell(text, n):
+              t = " ".join(str(text or "").split()).replace("|", "/")
+              return t if len(t) <= n else t[: n - 1] + "…"
+
+          schools = {}
+          for slug in SLUGS:
+              try:
+                  rules = unwrap(get("/api/agent/rules?institutionSlug=" + slug), "rules")
+                  sources = unwrap(get("/api/agent/sources?institutionSlug=" + slug), "sources")
+              except urllib.error.HTTPError as e:
+                  print("!! %s: HTTP %s (skipping)" % (slug, e.code), file=sys.stderr)
+                  continue
+              smap = {s["id"]: s for s in sources}
+              rows = []
+              for r in sorted(rules, key=lambda x: x.get("checkpointCode", "")):
+                  src = smap.get(r.get("sourceId")) if r.get("sourceId") else None
+                  url = src["url"] if src else None
+                  rows.append({
+                      "code": r.get("checkpointCode"), "domain": r.get("domain"), "title": r.get("title"),
+                      "critical": bool(r.get("critical")), "status": r.get("status"), "confidence": r.get("confidence"),
+                      "population": r.get("population"), "requirement": r.get("requirement"),
+                      "deadline": r.get("deadlineExpr"), "costCents": r.get("costCents"), "refundable": r.get("refundable"),
+                      "verifiedAt": r.get("verifiedAt"), "sourceUrl": url, "sourceHost": host_of(url) if url else None,
+                  })
+              verified = [x for x in rows if x["status"] == "verified"]
+              unverified = [x for x in rows if x["status"] != "verified"]
+              hosts = Counter(x["sourceHost"] for x in verified if x["sourceHost"])
+              urls = set(x["sourceUrl"] for x in verified if x["sourceUrl"])
+              by_dom = defaultdict(set)
+              for x in verified:
+                  if x["sourceHost"]:
+                      by_dom[x["domain"]].add(x["sourceHost"])
+              top3 = sum(n for _, n in hosts.most_common(3))
+              total_cites = sum(hosts.values()) or 1
+              m = {
+                  "slug": slug, "rules": len(rows), "verified": len(verified), "unverified": len(unverified),
+                  "verifiedPct": round(100.0 * len(verified) / max(len(rows), 1), 1),
+                  "unverifiedCritical": [x["code"] for x in unverified if x["critical"]],
+                  "confidenceVerified": dict(Counter(x["confidence"] for x in verified)),
+                  "distinctHosts": len(hosts), "distinctUrls": len(urls),
+                  "urlsPerVerified": round(len(urls) / max(len(verified), 1), 2),
+                  "top3HostShare": round(100.0 * top3 / total_cites),
+                  "avgHostsPerCheckpointDomain": round(sum(len(v) for v in by_dom.values()) / max(len(by_dom), 1), 1),
+                  "topHosts": hosts.most_common(6),
+              }
+              schools[slug] = {"metrics": m, "rows": rows}
+              with open("%s/%s.json" % (OUT, slug), "w") as f:
+                  json.dump({"metrics": m, "rules": rows}, f, indent=1)
+
+          if not schools:
+              print("No schools could be read. Aborting.", file=sys.stderr)
+              sys.exit(1)
+
+          with open(OUT + "/comparison.json", "w") as f:
+              json.dump([v["metrics"] for v in schools.values()], f, indent=1)
+
+          now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+          L = ["# School data report", "", "Generated %s. Read-only export from the live app." % now, "",
+               "## Comparison", "",
+               "| School | Rules | Verified | Unverified | Unverified critical | Verified: high / med / low | Distinct hosts | Distinct URLs | Top-3 host share | Avg hosts per topic |",
+               "|---|---|---|---|---|---|---|---|---|---|"]
+          for slug, v in schools.items():
+              m = v["metrics"]; c = m["confidenceVerified"]
+              L.append("| %s | %d | %d (%s%%) | %d | %s | %d / %d / %d | %d | %d | %d%% | %s |" % (
+                  slug, m["rules"], m["verified"], m["verifiedPct"], m["unverified"],
+                  ", ".join(m["unverifiedCritical"]) or "none",
+                  c.get("high", 0), c.get("medium", 0), c.get("low", 0),
+                  m["distinctHosts"], m["distinctUrls"], m["top3HostShare"], m["avgHostsPerCheckpointDomain"]))
+          L += ["", "Caution: the six original schools were researched by a different method (interactive research sessions) than",
+                "UT Dallas (the automated agent), so host and URL counts are a directional comparison, not a controlled one.", ""]
+          for slug, v in schools.items():
+              L.append("- %s top hosts: %s" % (slug, "; ".join("%s (%d)" % (h, n) for h, n in v["metrics"]["topHosts"])))
+
+          if FOCUS in schools:
+              rows = schools[FOCUS]["rows"]
+              L += ["", "## %s: unverified checkpoints" % FOCUS, "", "| Code | Critical | Why (requirement text) |", "|---|---|---|"]
+              for x in rows:
+                  if x["status"] != "verified":
+                      L.append("| %s | %s | %s |" % (x["code"], "yes" if x["critical"] else "", cell(x["requirement"], 220)))
+              L += ["", "## %s: medium and low confidence" % FOCUS, "", "| Code | Confidence | Requirement | Source |", "|---|---|---|---|"]
+              for x in rows:
+                  if x["status"] == "verified" and x["confidence"] != "high":
+                      L.append("| %s | %s | %s | %s |" % (x["code"], x["confidence"], cell(x["requirement"], 160), cell((x["sourceUrl"] or "").replace("https://", ""), 70)))
+              L += ["", "## %s: every checkpoint" % FOCUS, "", "| Code | Status | Conf | Requirement | Source |", "|---|---|---|---|---|"]
+              for x in rows:
+                  L.append("| %s | %s | %s | %s | %s |" % (x["code"], x["status"], x["confidence"], cell(x["requirement"], 150), cell((x["sourceUrl"] or "").replace("https://", ""), 70)))
+
+          with open("report.md", "w") as f:
+              f.write("\n".join(L) + "\n")
+          print("\n".join(L[:14]))
+          PY
+
+      - name: Publish report as a GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="report-$(date -u +%Y%m%d-%H%M%S)"
+          gh release create "$tag" out/*.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "School data report $tag" --notes-file report.md
+          echo "Report: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" | tee -a "$GITHUB_STEP_SUMMARY"
