@@ -1,0 +1,18 @@
+# Secrets and local settings: never commit these
+.env
+.env.local
+.env.*.local
+web/.env.local
+agents/.env
+
+# Build output and dependencies
+node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
+
+# Local databases and Python caches
+*.db
+*.db-journal
+__pycache__/
+*.pyc
