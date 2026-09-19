@@ -1,22 +1,13 @@
 import Link from "next/link";
-import {
-  listHouseholds,
-  listStudentsForHousehold,
-  listRelationshipsForStudent,
-  listInstitutions,
-} from "@/lib/db/repo";
+import { listRelationshipsForStudent, listInstitutions } from "@/lib/db/repo";
+import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 import { parseAttributes, resolveAttributes } from "@/lib/rules-engine";
 import { COVERAGE_LABELS, COVERAGE_STYLES } from "@/lib/format";
 import { saveSchoolPreferences, stopTracking } from "./actions";
 import type { Institution, InstitutionRelationship } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
-
-// Scope decision (2026-09-13): the picker only ever offers these six
-// already-researched, "certified"/near-certified schools — not an
-// open add-any-college flow. Extend this list (and re-run research) before
-// offering a school here.
-const TRACKABLE_SCHOOL_SLUGS = ["alabama", "arkansas", "oklahoma", "arizona", "ut-austin", "texas-am"];
 
 const HOUSING_OPTIONS: { value: string; label: string }[] = [
   { value: "undecided", label: "Not decided yet" },
@@ -26,21 +17,7 @@ const HOUSING_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export default async function WelcomePage() {
-  const households = await listHouseholds();
-  const household = households[0];
-
-  if (!household) {
-    return (
-      <main>
-        <p className="text-ink/60">
-          No household seeded yet. Run <code className="rounded bg-ink/5 px-1">npm run db:seed</code> and reload.
-        </p>
-      </main>
-    );
-  }
-
-  const students = await listStudentsForHousehold(household.id);
-  const student = students[0];
+  const { student } = await requireOnboardedHousehold();
   const allInstitutions = await listInstitutions();
   const relationships = await listRelationshipsForStudent(student.id, { includeInactive: true });
   const relByInstitution = new Map<string, InstitutionRelationship>(relationships.map((r) => [r.institutionId, r]));
@@ -99,7 +76,6 @@ export default async function WelcomePage() {
               </div>
 
               <form action={saveSchoolPreferences} className="flex flex-col gap-3">
-                <input type="hidden" name="studentId" value={student.id} />
                 <input type="hidden" name="institutionId" value={institution.id} />
 
                 <label className="flex flex-col gap-1 text-sm text-ink/70">
@@ -153,8 +129,7 @@ export default async function WelcomePage() {
 
               {isActive && (
                 <form action={stopTracking} className="border-t border-line pt-3">
-                  <input type="hidden" name="studentId" value={student.id} />
-                  <input type="hidden" name="institutionId" value={institution.id} />
+                    <input type="hidden" name="institutionId" value={institution.id} />
                   <button type="submit" className="text-sm text-ink/40 underline hover:text-urgent">
                     Stop tracking this school
                   </button>

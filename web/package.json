@@ -11,9 +11,12 @@
     "start": "next start",
     "lint": "next lint",
     "db:seed": "tsx lib/db/seed.ts",
+    "test": "tsx --test tests/*.test.ts",
     "db:reset": "rm -f lib/db/dev.sqlite3 && npm run db:seed"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
     "next": "^14.2.35",
     "pg": "^8.23.0",
     "react": "^18.3.1",

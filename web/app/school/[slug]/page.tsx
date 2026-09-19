@@ -3,11 +3,10 @@ import { notFound } from "next/navigation";
 import {
   getInstitutionBySlug,
   listRulesForInstitution,
-  listHouseholds,
-  listStudentsForHousehold,
   listRelationshipsForStudent,
   listActionInstancesForRelationship,
 } from "@/lib/db/repo";
+import { requireOnboardedHousehold } from "@/lib/auth/session";
 import { COVERAGE_LABELS, COVERAGE_STYLES, STATE_LABELS, STATE_STYLES } from "@/lib/format";
 import { StatePill } from "@/components/StatusPill";
 import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL, ENTERING_TERM } from "@/lib/date-status";
@@ -15,16 +14,15 @@ import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL, ENTERING_TERM } f
 export const dynamic = "force-dynamic";
 
 export default async function SchoolTrackerPage({ params }: { params: { slug: string } }) {
+  // The 144-point standard is the same for everyone; the action states shown are this family's own.
+  const { student } = await requireOnboardedHousehold();
+
   const institution = await getInstitutionBySlug(params.slug);
   if (!institution) notFound();
 
   const rules = await listRulesForInstitution(institution.id);
 
-  const households = await listHouseholds();
-  const household = households[0];
-  const students = household ? await listStudentsForHousehold(household.id) : [];
-  const student = students[0] ?? null;
-  const relationships = student ? await listRelationshipsForStudent(student.id) : [];
+  const relationships = await listRelationshipsForStudent(student.id);
   const relationship = relationships.find((r) => r.institutionId === institution.id) ?? null;
   const actionsByRuleId = new Map<string, Awaited<ReturnType<typeof listActionInstancesForRelationship>>[number]>();
   if (relationship) {

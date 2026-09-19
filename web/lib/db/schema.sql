@@ -176,3 +176,36 @@ CREATE INDEX IF NOT EXISTS idx_rules_institution ON rules(institution_id);
 CREATE INDEX IF NOT EXISTS idx_action_instances_relationship ON action_instances(relationship_id);
 CREATE INDEX IF NOT EXISTS idx_action_events_action ON action_events(action_id);
 CREATE INDEX IF NOT EXISTS idx_sources_institution ON sources(institution_id);
+
+-- ---------------------------------------------------------------------
+-- Accounts (added 2026-09-19, workstream W1: real sign-in).
+-- auth_links ties one signed-in identity (a Supabase Auth user id, or a
+-- local dev id) to exactly one household. Every household-scoped read in
+-- the app starts from this table; see lib/db/accounts.ts.
+-- These two tables are also created automatically on first sign-in
+-- (ensureAccountSchema) so production needs no manual SQL step.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auth_links (
+  id TEXT PRIMARY KEY,
+  auth_user_id TEXT NOT NULL UNIQUE,
+  household_id TEXT NOT NULL REFERENCES households(id),
+  person_id TEXT REFERENCES people(id),
+  role TEXT NOT NULL DEFAULT 'member',
+  email TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS household_invites (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  invited_role TEXT NOT NULL DEFAULT 'parent',
+  created_by TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  accepted_by TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_links_household ON auth_links(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_invites_household ON household_invites(household_id);

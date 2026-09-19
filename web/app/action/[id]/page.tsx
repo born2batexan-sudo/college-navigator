@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getActionInstanceFull, listEventsForAction } from "@/lib/db/repo";
+import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { actionBelongsToHousehold } from "@/lib/db/accounts";
 import { StatePill } from "@/components/StatusPill";
 import { STATE_LABELS, STATE_STYLES, formatDate, formatMoney } from "@/lib/format";
 import { advanceActionState } from "@/app/actions";
@@ -21,6 +23,9 @@ const NEXT_STATES: Record<string, string[]> = {
 };
 
 export default async function ActionDetailPage({ params }: { params: { id: string } }) {
+  const { household } = await requireOnboardedHousehold();
+  // Someone else's action looks exactly like one that does not exist.
+  if (!(await actionBelongsToHousehold(params.id, household.id))) notFound();
   const action = await getActionInstanceFull(params.id);
   if (!action) notFound();
 

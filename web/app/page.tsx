@@ -1,4 +1,5 @@
-import { listHouseholds, listStudentsForHousehold, listRelationshipsForStudent, getInstitution, listActionInstancesForRelationship } from "@/lib/db/repo";
+import { listRelationshipsForStudent, getInstitution, listActionInstancesForRelationship } from "@/lib/db/repo";
+import { requireOnboardedHousehold } from "@/lib/auth/session";
 import { SchoolCard } from "@/components/SchoolCard";
 import { ActionListItem } from "@/components/ActionListItem";
 import Link from "next/link";
@@ -17,21 +18,8 @@ const isOpen = (a: { state: string; rule: { requirement: string } }) =>
   OPEN_STATES.has(a.state) && parseDateStatus(a.rule).kind !== "not_applicable";
 
 export default async function DashboardPage() {
-  const households = await listHouseholds();
-  const household = households[0];
-
-  if (!household) {
-    return (
-      <main>
-        <p className="text-ink/60">
-          No household seeded yet. Run <code className="rounded bg-ink/5 px-1">npm run db:seed</code> and reload.
-        </p>
-      </main>
-    );
-  }
-
-  const students = await listStudentsForHousehold(household.id);
-  const student = students[0];
+  // Signed-in family only; the household comes from the sign-in, never from a URL or form.
+  const { household, student } = await requireOnboardedHousehold();
   const relationships = await listRelationshipsForStudent(student.id);
 
   const perSchool = await Promise.all(
@@ -71,17 +59,34 @@ export default async function DashboardPage() {
               {student.name} · Class of {student.gradYear} · tracking {relationships.length} schools
             </p>
           </div>
-          <Link
-            href="/welcome"
-            className="shrink-0 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
-          >
-            Manage schools
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            <Link
+              href="/welcome"
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
+            >
+              Manage schools
+            </Link>
+            <Link
+              href="/account"
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
+            >
+              Account
+            </Link>
+          </div>
         </div>
       </header>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink/50">Schools in play</h2>
+        {perSchool.length === 0 && (
+          <p className="rounded-lg border border-dashed border-line p-6 text-center text-sm text-ink/50">
+            You are not tracking any schools yet.{" "}
+            <Link href="/welcome" className="underline">
+              Choose your schools
+            </Link>
+            .
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {perSchool.map(({ rel, institution, actions }) => (
             <SchoolCard

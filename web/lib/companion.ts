@@ -2,15 +2,15 @@
  * Support code for the browser companion extension's two public endpoints
  * (app/api/companion/context, app/api/companion/observe).
  *
- * Important scope note: this MVP has exactly one household and no login,
- * so "the household" below just means listHouseholds()[0] — the seeded
- * demo household. Real multi-tenant auth (matching a browser session to a
- * specific household) is explicitly future work; see README.md.
+ * Important scope note: these two endpoints are still unauthenticated (the
+ * extension has no sign-in yet), so they are PINNED to the seeded demo
+ * household by id. They can never read or change a real family's data.
+ * Connecting the extension to a signed-in family (per-user token) is future
+ * work; see the launch tracker.
  */
 
 import {
   listInstitutions,
-  listHouseholds,
   listStudentsForHousehold,
   listRelationshipsForStudent,
   listObservationPatternsForInstitution,
@@ -22,6 +22,8 @@ import {
 } from "./db/repo";
 import { hostnameOf, domainMatches, globMatch } from "./urlmatch";
 import type { Institution, ObservationPattern } from "./db/types";
+
+export const DEMO_HOUSEHOLD_ID = "demo-household";
 
 const ACTION_STATE_ORDER = ["not_started", "started", "submitted", "received", "complete"];
 
@@ -42,9 +44,7 @@ function matchingPatterns(patterns: ObservationPattern[], url: string): Observat
 }
 
 async function getDemoRelationshipFor(institutionId: string) {
-  const household = (await listHouseholds())[0];
-  if (!household) return null;
-  const student = (await listStudentsForHousehold(household.id))[0];
+  const student = (await listStudentsForHousehold(DEMO_HOUSEHOLD_ID))[0];
   if (!student) return null;
   const relationships = await listRelationshipsForStudent(student.id);
   return relationships.find((r) => r.institutionId === institutionId) ?? null;
