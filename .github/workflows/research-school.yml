@@ -19,9 +19,17 @@ on:
         required: true
         default: "utdallas.edu"
       limit:
-        description: "Max checkpoints to research. 6 = cheap smoke test. Leave BLANK for the full 144."
+        description: "Max checkpoints to research. 6 = cheap smoke test. Type 0 for no limit (full run). Ignored when 'codes' is filled in."
         required: false
         default: "6"
+      codes:
+        description: "Optional: re-research ONLY these checkpoint codes, comma-separated (e.g. ACA-02,HOU-04). Leave empty for a normal run."
+        required: false
+        default: ""
+      term:
+        description: "Entering term the family is planning for"
+        required: true
+        default: "Fall 2027"
       only_critical:
         description: "Only research the critical checkpoints"
         type: boolean
@@ -92,11 +100,17 @@ jobs:
           SLUG: ${{ inputs.slug }}
           DOMAINS: ${{ inputs.domains }}
           LIMIT: ${{ inputs.limit }}
+          CODES: ${{ inputs.codes }}
+          TERM: ${{ inputs.term }}
           ONLY_CRITICAL: ${{ inputs.only_critical }}
           BUDGET: ${{ inputs.budget_searches }}
         run: |
-          args=(--institution "$SLUG" --domains "$DOMAINS" --budget-searches "${BUDGET:-400}" --report-file run-report.json)
-          if [ -n "$LIMIT" ]; then args+=(--limit "$LIMIT"); fi
+          args=(--institution "$SLUG" --domains "$DOMAINS" --budget-searches "${BUDGET:-400}" --report-file run-report.json --term "${TERM:-Fall 2027}")
+          if [ -n "$CODES" ]; then
+            args+=(--codes "$CODES")
+          elif [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then
+            args+=(--limit "$LIMIT")
+          fi
           if [ "$ONLY_CRITICAL" = "true" ]; then args+=(--only-critical); fi
           python -u research_agent.py "${args[@]}"
 
