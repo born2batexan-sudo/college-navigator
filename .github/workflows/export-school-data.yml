@@ -44,7 +44,7 @@ jobs:
         run: |
           mkdir -p out
           python3 - <<'PY'
-          import json, os, sys, datetime, urllib.request, urllib.error
+          import json, os, re, sys, datetime, urllib.request, urllib.error
           from collections import Counter, defaultdict
           from urllib.parse import urlparse
 
@@ -78,6 +78,22 @@ jobs:
           def cell(text, n):
               t = " ".join(str(text or "").split()).replace("|", "/")
               return t if len(t) <= n else t[: n - 1] + "…"
+
+          # What the live app currently shows for each school (Certified / Beta / ...).
+          app_status = {}
+          try:
+              for i in unwrap(get("/api/agent/institutions"), "institutions"):
+                  app_status[i.get("slug")] = "%s %s%%" % (i.get("coverageStatus"), i.get("coveragePct"))
+          except Exception as e:
+              print("!! could not read the app's status per school: %s" % e, file=sys.stderr)
+
+          # Labels the research agent (v3) writes at the start of a requirement.
+          def label_of(req):
+              t = (req or "").strip().lower()
+              if t.startswith("not yet published"): return "waiting"
+              if t.startswith("prior cycle only"): return "waiting"
+              if t.startswith("not applicable"): return "n/a"
+              return None
 
           schools = {}
           for slug in SLUGS:
@@ -119,6 +135,9 @@ jobs:
                   "top3HostShare": round(100.0 * top3 / total_cites),
                   "avgHostsPerCheckpointDomain": round(sum(len(v) for v in by_dom.values()) / max(len(by_dom), 1), 1),
                   "topHosts": hosts.most_common(6),
+                  "appStatus": app_status.get(slug, "?"),
+                  "waitingOnSchool": [x["code"] for x in rows if label_of(x["requirement"]) == "waiting"],
+                  "notApplicable": [x["code"] for x in rows if label_of(x["requirement"]) == "n/a"],
               }
               schools[slug] = {"metrics": m, "rows": rows}
               with open("%s/%s.json" % (OUT, slug), "w") as f:
@@ -134,19 +153,30 @@ jobs:
           now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
           L = ["# School data report", "", "Generated %s. Read-only export from the live app." % now, "",
                "## Comparison", "",
-               "| School | Rules | Verified | Unverified | Unverified critical | Verified: high / med / low | Distinct hosts | Distinct URLs | Top-3 host share | Avg hosts per topic |",
-               "|---|---|---|---|---|---|---|---|---|---|"]
+               "| School | App status | Rules | Verified | Unverified | Unverified critical | Waiting on school | Not applicable | Verified: high / med / low | Distinct hosts | Distinct URLs | Top-3 host share | Avg hosts per topic |",
+               "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
           for slug, v in schools.items():
               m = v["metrics"]; c = m["confidenceVerified"]
-              L.append("| %s | %d | %d (%s%%) | %d | %s | %d / %d / %d | %d | %d | %d%% | %s |" % (
-                  slug, m["rules"], m["verified"], m["verifiedPct"], m["unverified"],
+              L.append("| %s | %s | %d | %d (%s%%) | %d | %s | %d | %d | %d / %d / %d | %d | %d | %d%% | %s |" % (
+                  slug, m["appStatus"], m["rules"], m["verified"], m["verifiedPct"], m["unverified"],
                   ", ".join(m["unverifiedCritical"]) or "none",
+                  len(m["waitingOnSchool"]), len(m["notApplicable"]),
                   c.get("high", 0), c.get("medium", 0), c.get("low", 0),
                   m["distinctHosts"], m["distinctUrls"], m["top3HostShare"], m["avgHostsPerCheckpointDomain"]))
           L += ["", "Caution: the six original schools were researched by a different method (interactive research sessions) than",
                 "UT Dallas (the automated agent), so host and URL counts are a directional comparison, not a controlled one.", ""]
           for slug, v in schools.items():
               L.append("- %s top hosts: %s" % (slug, "; ".join("%s (%d)" % (h, n) for h, n in v["metrics"]["topHosts"])))
+
+          L += ["", "## Waiting on the school / not applicable (all schools)", "",
+                "These are answers the research agent labeled: waiting = the school has not published this cycle's details (or only last cycle's are known); n/a = the school does not have this.", ""]
+          for slug, v in schools.items():
+              flagged = [x for x in v["rows"] if label_of(x["requirement"])]
+              L.append("**%s** (%d flagged)" % (slug, len(flagged)))
+              L.append("")
+              for x in flagged:
+                  L.append("- %s%s [%s]: %s" % (x["code"], " (critical)" if x["critical"] else "", label_of(x["requirement"]), cell(x["requirement"], 230)))
+              L.append("")
 
           if FOCUS in schools:
               rows = schools[FOCUS]["rows"]
