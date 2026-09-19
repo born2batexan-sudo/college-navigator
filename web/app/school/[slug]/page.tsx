@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/repo";
 import { COVERAGE_LABELS, COVERAGE_STYLES, STATE_LABELS, STATE_STYLES } from "@/lib/format";
 import { StatePill } from "@/components/StatusPill";
+import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL, ENTERING_TERM } from "@/lib/date-status";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,11 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
 
   const domains = Array.from(new Set(rules.map((r) => r.domain)));
   const verifiedCount = rules.filter((r) => r.status === "verified").length;
-  const criticalUnverified = rules.filter((r) => r.critical && r.status === "unverified").length;
+  const criticalUnverified = rules.filter((r) => r.critical && r.status === "unverified");
+  // Critical items the school simply hasn't published this cycle's details for are a different
+  // situation from critical items nobody has researched yet.
+  const criticalAwaiting = criticalUnverified.filter((r) => parseDateStatus(r).kind === "awaiting").length;
+  const criticalNeedResearch = criticalUnverified.length - criticalAwaiting;
 
   return (
     <main className="flex flex-col gap-6">
@@ -51,9 +56,11 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
         </div>
         <p className="text-sm text-ink/60">
           144-point inspection: {verifiedCount}/144 checkpoints verified ({institution.coveragePct}%).{" "}
-          {criticalUnverified > 0
-            ? `${criticalUnverified} critical checkpoints still need research — this school cannot certify until those clear.`
-            : "All critical checkpoints are verified."}
+          {criticalNeedResearch > 0 &&
+            `${criticalNeedResearch} critical checkpoints still need research — this school cannot certify until those clear. `}
+          {criticalAwaiting > 0 &&
+            `${criticalAwaiting} critical checkpoints are waiting for ${institution.name} to publish ${ENTERING_TERM} details — certification stays on hold until they are posted and verified. `}
+          {criticalUnverified.length === 0 && "All critical checkpoints are verified."}
         </p>
         <p className="text-xs text-ink/40">
           Certification gates (per the platform standard): Certified ≥90% with no critical gaps · Beta 75–89% or one
@@ -69,6 +76,7 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
             <div className="overflow-hidden rounded-lg border border-line bg-white">
               {domainRules.map((rule, i) => {
                 const action = actionsByRuleId.get(rule.id);
+                const dateStatus = parseDateStatus(rule);
                 const content = (
                   <div
                     className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${
@@ -83,7 +91,18 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      {rule.status === "verified" ? (
+                      {dateStatus.kind === "awaiting" ? (
+                        <span
+                          className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] font-medium text-warn"
+                          title={lastYearLine(dateStatus) ?? undefined}
+                        >
+                          {DATE_NOT_POSTED_LABEL}
+                        </span>
+                      ) : dateStatus.kind === "not_applicable" ? (
+                        <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-medium text-ink/50">
+                          Doesn&apos;t apply here
+                        </span>
+                      ) : rule.status === "verified" ? (
                         <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[11px] font-medium text-ok">
                           Verified · {rule.confidence}
                         </span>
