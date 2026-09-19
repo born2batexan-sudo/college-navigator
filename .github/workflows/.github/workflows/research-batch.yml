@@ -1,0 +1,132 @@
+name: Research batch (Fall 2027 date re-check)
+
+# Manual "Run workflow" button (Actions tab). Re-checks the date-dependent checkpoints for every
+# school in the list below, ONE SCHOOL AT A TIME, so there is nothing to fill in per school.
+# Each school is onboarded (safe to repeat), researched, and its certification status recomputed by the app.
+# Costs real Anthropic API money: roughly $3 for each of the five full-list schools and under $1 for
+# the two short-list schools. Stop it any time: Actions > the run > Cancel workflow. Anything already saved stays saved.
+
+on:
+  workflow_dispatch:
+    inputs:
+      term:
+        description: "Entering term the family is planning for"
+        required: true
+        default: "Fall 2027"
+      budget_searches:
+        description: "Hard stop per school after this many web searches (safety cap)"
+        required: false
+        default: "150"
+
+# One research run at a time, shared with the single-school "Research a school" button.
+concurrency:
+  group: research-school
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # 23 date and timing checkpoints (13 critical). Used for every school below that has no "codes" of its own.
+  DEFAULT_CODES: "ADM-02,ADM-03,ENR-02,ENR-03,AID-03,SCH-03,BIL-02,BIL-03,HOU-02,HOU-04,HLT-03,ACA-02,ACA-03,ACA-08,ACA-10,GRK-02,GRK-03,GRK-06,FAM-05,GRK-04,GRK-11,HOU-10,FAM-11"
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - slug: alabama
+            name: "University of Alabama"
+            domains: "ua.edu,uapanhellenic.com"
+          - slug: arkansas
+            name: "University of Arkansas"
+            domains: "uark.edu"
+          - slug: oklahoma
+            name: "University of Oklahoma"
+            domains: "ou.edu"
+          - slug: ut-austin
+            name: "University of Texas at Austin"
+            domains: "utexas.edu,texaspanhellenic.com"
+          - slug: arizona
+            name: "University of Arizona"
+            domains: "arizona.edu"
+          # These two already had the first 19 codes re-checked; only the four extra ones remain.
+          # Running them also makes the app recompute their certification status.
+          - slug: texas-am
+            name: "Texas A&M University"
+            domains: "tamu.edu"
+            codes: "GRK-04,GRK-11,HOU-10,FAM-11"
+          - slug: ut-dallas
+            name: "The University of Texas at Dallas"
+            domains: "utdallas.edu"
+            codes: "GRK-04,GRK-11,HOU-10,FAM-11"
+    steps:
+      - name: Check required secrets are set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          missing=0
+          for v in ANTHROPIC_API_KEY AGENT_API_KEY APP_BASE_URL; do
+            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set (Settings > Secrets and variables > Actions)"; missing=1; fi
+          done
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: agents/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r agents/requirements.txt
+
+      - name: Onboard school in the live app (safe to repeat)
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          SCHOOL_NAME: ${{ matrix.name }}
+          SLUG: ${{ matrix.slug }}
+          DOMAINS: ${{ matrix.domains }}
+        run: |
+          body=$(jq -n --arg name "$SCHOOL_NAME" --arg slug "$SLUG" --arg domains "$DOMAINS" \
+            '{name:$name, slug:$slug, domains:($domains | split(",") | map(gsub("\\s";"")) | map(select(length>0)))}')
+          curl -sS --fail-with-body -X POST "${APP_BASE_URL%/}/api/agent/institutions" \
+            -H "Authorization: Bearer $AGENT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$body"
+          echo
+
+      - name: Research
+        working-directory: agents
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SLUG: ${{ matrix.slug }}
+          DOMAINS: ${{ matrix.domains }}
+          MATRIX_CODES: ${{ matrix.codes }}
+          TERM: ${{ inputs.term }}
+          BUDGET: ${{ inputs.budget_searches }}
+        run: |
+          CODES="${MATRIX_CODES:-$DEFAULT_CODES}"
+          if [ -z "$CODES" ]; then echo "::error::No checkpoint codes to research"; exit 1; fi
+          echo "School: $SLUG   Term: ${TERM:-Fall 2027}   Checkpoints: $CODES"
+          python -u research_agent.py --institution "$SLUG" --domains "$DOMAINS" \
+            --budget-searches "${BUDGET:-150}" --report-file run-report.json \
+            --term "${TERM:-Fall 2027}" --codes "$CODES"
+
+      - name: Save run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-report-${{ matrix.slug }}
+          path: agents/run-report.json
+          if-no-files-found: ignore
