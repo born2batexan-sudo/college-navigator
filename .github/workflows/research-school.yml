@@ -1,45 +1,24 @@
-name: Research a school
+name: Research batch (Fall 2027 date re-check)
 
-# Manual "Run workflow" button (Actions tab). Onboards the school in the live app if it isn't
-# there yet, then runs agents/research_agent.py against it. Costs real Anthropic API money.
+# Manual "Run workflow" button (Actions tab). Re-checks the date-dependent checkpoints for every
+# school in the list below, ONE SCHOOL AT A TIME, so there is nothing to fill in per school.
+# Each school is onboarded (safe to repeat), researched, and its certification status recomputed by the app.
+# Costs real Anthropic API money: roughly $3 for each of the five full-list schools and under $1 for
+# the two short-list schools. Stop it any time: Actions > the run > Cancel workflow. Anything already saved stays saved.
 
 on:
   workflow_dispatch:
     inputs:
-      school_name:
-        description: "Official school name"
-        required: true
-        default: "The University of Texas at Dallas"
-      slug:
-        description: "App slug (lowercase letters, digits, hyphens)"
-        required: true
-        default: "ut-dallas"
-      domains:
-        description: "Official web domains, comma-separated (search is restricted to these)"
-        required: true
-        default: "utdallas.edu"
-      limit:
-        description: "Max checkpoints to research. 6 = cheap smoke test. Type 0 for no limit (full run). Ignored when 'codes' is filled in."
-        required: false
-        default: "6"
-      codes:
-        description: "Optional: re-research ONLY these checkpoint codes, comma-separated (e.g. ACA-02,HOU-04). Leave empty for a normal run."
-        required: false
-        default: ""
       term:
         description: "Entering term the family is planning for"
         required: true
         default: "Fall 2027"
-      only_critical:
-        description: "Only research the critical checkpoints"
-        type: boolean
-        default: false
       budget_searches:
-        description: "Hard stop after this many web searches (safety cap)"
+        description: "Hard stop per school after this many web searches (safety cap)"
         required: false
-        default: "400"
+        default: "150"
 
-# One research run at a time.
+# One research run at a time, shared with the single-school "Research a school" button.
 concurrency:
   group: research-school
   cancel-in-progress: false
@@ -47,10 +26,44 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # 23 date and timing checkpoints (13 critical). Used for every school below that has no "codes" of its own.
+  DEFAULT_CODES: "ADM-02,ADM-03,ENR-02,ENR-03,AID-03,SCH-03,BIL-02,BIL-03,HOU-02,HOU-04,HLT-03,ACA-02,ACA-03,ACA-08,ACA-10,GRK-02,GRK-03,GRK-06,FAM-05,GRK-04,GRK-11,HOU-10,FAM-11"
+
 jobs:
   research:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - slug: alabama
+            name: "University of Alabama"
+            domains: "ua.edu,uapanhellenic.com"
+          - slug: arkansas
+            name: "University of Arkansas"
+            domains: "uark.edu"
+          - slug: oklahoma
+            name: "University of Oklahoma"
+            domains: "ou.edu"
+          - slug: ut-austin
+            name: "University of Texas at Austin"
+            domains: "utexas.edu,texaspanhellenic.com"
+          - slug: arizona
+            name: "University of Arizona"
+            domains: "arizona.edu"
+          # These two already had the first 19 codes re-checked; only the four extra ones remain.
+          # Running them also makes the app recompute their certification status.
+          - slug: texas-am
+            name: "Texas A&M University"
+            domains: "tamu.edu"
+            codes: "GRK-04,GRK-11,HOU-10,FAM-11"
+          - slug: ut-dallas
+            name: "The University of Texas at Dallas"
+            domains: "utdallas.edu"
+            codes: "GRK-04,GRK-11,HOU-10,FAM-11"
     steps:
       - name: Check required secrets are set
         env:
@@ -79,9 +92,9 @@ jobs:
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
-          SCHOOL_NAME: ${{ inputs.school_name }}
-          SLUG: ${{ inputs.slug }}
-          DOMAINS: ${{ inputs.domains }}
+          SCHOOL_NAME: ${{ matrix.name }}
+          SLUG: ${{ matrix.slug }}
+          DOMAINS: ${{ matrix.domains }}
         run: |
           body=$(jq -n --arg name "$SCHOOL_NAME" --arg slug "$SLUG" --arg domains "$DOMAINS" \
             '{name:$name, slug:$slug, domains:($domains | split(",") | map(gsub("\\s";"")) | map(select(length>0)))}')
@@ -97,27 +110,23 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-          SLUG: ${{ inputs.slug }}
-          DOMAINS: ${{ inputs.domains }}
-          LIMIT: ${{ inputs.limit }}
-          CODES: ${{ inputs.codes }}
+          SLUG: ${{ matrix.slug }}
+          DOMAINS: ${{ matrix.domains }}
+          MATRIX_CODES: ${{ matrix.codes }}
           TERM: ${{ inputs.term }}
-          ONLY_CRITICAL: ${{ inputs.only_critical }}
           BUDGET: ${{ inputs.budget_searches }}
         run: |
-          args=(--institution "$SLUG" --domains "$DOMAINS" --budget-searches "${BUDGET:-400}" --report-file run-report.json --term "${TERM:-Fall 2027}")
-          if [ -n "$CODES" ]; then
-            args+=(--codes "$CODES")
-          elif [ -n "$LIMIT" ] && [ "$LIMIT" != "0" ]; then
-            args+=(--limit "$LIMIT")
-          fi
-          if [ "$ONLY_CRITICAL" = "true" ]; then args+=(--only-critical); fi
-          python -u research_agent.py "${args[@]}"
+          CODES="${MATRIX_CODES:-$DEFAULT_CODES}"
+          if [ -z "$CODES" ]; then echo "::error::No checkpoint codes to research"; exit 1; fi
+          echo "School: $SLUG   Term: ${TERM:-Fall 2027}   Checkpoints: $CODES"
+          python -u research_agent.py --institution "$SLUG" --domains "$DOMAINS" \
+            --budget-searches "${BUDGET:-150}" --report-file run-report.json \
+            --term "${TERM:-Fall 2027}" --codes "$CODES"
 
       - name: Save run report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-report-${{ inputs.slug }}
+          name: run-report-${{ matrix.slug }}
           path: agents/run-report.json
           if-no-files-found: ignore
