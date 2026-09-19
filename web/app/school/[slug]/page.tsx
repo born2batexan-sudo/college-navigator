@@ -57,14 +57,15 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
         <p className="text-sm text-ink/60">
           144-point inspection: {verifiedCount}/144 checkpoints verified ({institution.coveragePct}%).{" "}
           {criticalNeedResearch > 0 &&
-            `${criticalNeedResearch} critical checkpoints still need research — this school cannot certify until those clear. `}
+            `${criticalNeedResearch} critical ${criticalNeedResearch === 1 ? "checkpoint still needs" : "checkpoints still need"} research — this school cannot certify until ${criticalNeedResearch === 1 ? "that clears" : "those clear"}. `}
           {criticalAwaiting > 0 &&
-            `${criticalAwaiting} critical checkpoints are waiting for ${institution.name} to publish ${ENTERING_TERM} details — certification stays on hold until they are posted and verified. `}
+            `${criticalAwaiting} critical ${criticalAwaiting === 1 ? "checkpoint is" : "checkpoints are"} waiting for ${institution.name} to publish ${ENTERING_TERM} details. ${criticalAwaiting === 1 ? "It doesn't" : "They don't"} hold back certification, and we verify ${criticalAwaiting === 1 ? "it" : "them"} as soon as ${criticalAwaiting === 1 ? "it is" : "they are"} posted. `}
           {criticalUnverified.length === 0 && "All critical checkpoints are verified."}
         </p>
         <p className="text-xs text-ink/40">
           Certification gates (per the platform standard): Certified ≥90% with no critical gaps · Beta 75–89% or one
-          critical gap · Research 50–74% · Unsupported below 50%.
+          critical gap · Research 50–74% · Unsupported below 50%. A critical item the school has not published yet is
+          not counted as a gap, and it is not counted as verified either.
         </p>
       </header>
 
