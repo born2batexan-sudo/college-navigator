@@ -28,6 +28,8 @@ ALTER TABLE school_requests DROP CONSTRAINT IF EXISTS school_requests_household_
 ALTER TABLE school_requests ADD CONSTRAINT school_requests_household_id_fkey FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE;
 ALTER TABLE school_requests DROP CONSTRAINT IF EXISTS school_requests_person_id_fkey;
 ALTER TABLE school_requests ADD CONSTRAINT school_requests_person_id_fkey FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_school_requests_person ON school_requests(person_id);
+CREATE INDEX IF NOT EXISTS idx_school_requests_unitid ON school_requests(unitid);
 
 -- Replace mutable historical accounting with an append-only conservative
 -- ledger. Legacy entries remain charged as reservations; no unknown spend is

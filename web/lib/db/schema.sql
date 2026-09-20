@@ -293,6 +293,8 @@ CREATE TABLE IF NOT EXISTS budget_ledger (
 );
 
 CREATE INDEX IF NOT EXISTS idx_school_requests_household ON school_requests(household_id);
+CREATE INDEX IF NOT EXISTS idx_school_requests_person ON school_requests(person_id);
+CREATE INDEX IF NOT EXISTS idx_school_requests_unitid ON school_requests(unitid);
 CREATE INDEX IF NOT EXISTS idx_school_directory_institution ON school_directory(institution_id);
 CREATE INDEX IF NOT EXISTS idx_budget_ledger_month ON budget_ledger(month);
 
