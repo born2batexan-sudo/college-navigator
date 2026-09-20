@@ -17,6 +17,7 @@ import { exec, queryOne, queryRows, newId, nowIso, usingPostgres, withTransactio
 import { upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
+import { EMAIL_VALIDATION_DDL, EMAIL_VALIDATION_TABLES } from "./email-validation";
 
 export type AuthLink = {
   id: string;
@@ -111,10 +112,11 @@ export const ALL_TABLES = [
   "demo_invites",
   "demo_households",
   ...REQUEST_TABLES,
+  ...EMAIL_VALIDATION_TABLES,
 ];
 
 /** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */
-export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL];
+export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL, ...EMAIL_VALIDATION_DDL];
 
 let ensurePromise: Promise<void> | null = null;
 
