@@ -5,13 +5,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14171F",
-        paper: "#F7F6F3",
-        line: "#E4E1D9",
-        accent: "#8C1D40", // crimson-adjacent, swap per household/brand later
-        urgent: "#B3261E",
+        ink: "#1F2928",
+        paper: "#F6F3EC",
+        line: "#DDD7C9",
+        accent: "#1F6F6B",
+        tealDark: "#134E4A",
+        gold: "#C89B3C",
+        urgent: "#A83B32",
         warn: "#8A5A00",
-        ok: "#1E6B4E",
+        ok: "#31705C",
+      },
+      fontFamily: {
+        sans: ["var(--font-ibm-plex-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-fraunces)", "Georgia", "serif"],
+      },
+      boxShadow: {
+        card: "0 12px 32px rgba(31, 41, 40, 0.07)",
       },
     },
   },

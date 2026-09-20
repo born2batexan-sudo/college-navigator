@@ -18,7 +18,7 @@ export function ActionListItem({ action, schoolName }: Props) {
   return (
     <Link
       href={`/action/${action.id}`}
-      className="flex flex-col gap-2 rounded-lg border border-line bg-white p-4 transition hover:border-ink/20 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-2xl border border-line bg-white/85 p-4 shadow-card transition duration-200 hover:border-accent/30 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -28,7 +28,7 @@ export function ActionListItem({ action, schoolName }: Props) {
           <span className="text-[11px] font-medium uppercase tracking-wide text-ink/40">{schoolName}</span>
           {action.rule.critical && <span className="text-[11px] font-medium text-accent">Critical</span>}
         </div>
-        <p className="mt-1 truncate font-medium text-ink">{awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
+        <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
         <p className="mt-0.5 text-sm text-ink/50">
           {action.rule.checkpointCode} · {action.rule.domain}
           {awaiting ? " · waiting on the school" : action.rule.status === "unverified" && " · not yet researched"}

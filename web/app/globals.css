@@ -2,7 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: #F6F3EC;
+}
+
 body {
   background-color: theme("colors.paper");
   color: theme("colors.ink");
+  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+::selection {
+  background: rgba(31, 111, 107, 0.18);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(31, 111, 107, 0.35);
+  outline-offset: 3px;
 }

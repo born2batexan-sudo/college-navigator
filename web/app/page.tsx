@@ -6,6 +6,7 @@ import Link from "next/link";
 import { parseDateStatus } from "@/lib/date-status";
 import { listFamilyRequests } from "@/lib/db/requests";
 import { enteringTermFrom, termNotice } from "@/lib/terms";
+import { daysUntil, formatDate } from "@/lib/format";
 
 // This reads the SQLite database on every request — it's a live household
 // dashboard, not static marketing content, so opt out of Next's default
@@ -52,14 +53,24 @@ export default async function DashboardPage() {
 
   const greekActions = allActions.filter((a) => a.rule.domain === "Greek and Student Life");
   const nonGreekActions = allActions.filter((a) => a.rule.domain !== "Greek and Student Life");
+  const waitingOnSchools = allActions.filter((a) => ["submitted", "received"].includes(a.state) || parseDateStatus(a.rule).kind === "awaiting");
+  const needThisWeek = allActions.filter((a) => {
+    const days = daysUntil(a.dueAt);
+    return !waitingOnSchools.includes(a) && days !== null && days <= 7;
+  });
+  const onTrack = allActions.filter((a) => !waitingOnSchools.includes(a) && !needThisWeek.includes(a));
+  const nextDeadline = allActions
+    .filter((a) => !waitingOnSchools.includes(a) && a.dueAt)
+    .sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime())[0];
+  const nextDeadlineDays = nextDeadline ? daysUntil(nextDeadline.dueAt) : null;
 
   return (
-    <main className="flex flex-col gap-8">
-      <header>
-        <div className="flex items-start justify-between gap-3">
+    <main className="flex flex-col gap-10">
+      <header className="border-b border-line pb-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
-            <h1 className="mt-1 text-2xl font-semibold text-ink">{household.name}</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">College Navigator</p>
+            <h1 className="mt-2 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">{household.name}</h1>
             <p className="mt-1 text-ink/60">
               {student.name} · Class of {student.gradYear} · tracking {relationships.length} schools
             </p>
@@ -67,13 +78,13 @@ export default async function DashboardPage() {
           <div className="flex shrink-0 gap-2">
             <Link
               href="/welcome"
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
+              className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink/70 transition hover:border-accent/40 hover:text-accent"
             >
               Manage schools
             </Link>
             <Link
               href="/account"
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink/70 transition hover:border-ink/30"
+              className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink/70 transition hover:border-accent/40 hover:text-accent"
             >
               Account
             </Link>
@@ -81,12 +92,41 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {termMessage && <p className="rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-warn">{termMessage} <Link href="/welcome" className="underline">Update your term</Link>.</p>}
+      {termMessage && <p className="rounded-xl border border-warn/30 bg-warn/10 p-4 text-sm text-warn">{termMessage} <Link href="/welcome" className="font-semibold underline">Update your term</Link>.</p>}
+
+      <section aria-label="Plan summary" className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1.35fr]">
+        {[
+          { label: "Need you this week", value: needThisWeek.length, tone: "text-urgent" },
+          { label: "Waiting on schools", value: waitingOnSchools.length, tone: "text-warn" },
+          { label: "On track, nothing due yet", value: onTrack.length, tone: "text-ok" },
+        ].map((tile) => (
+          <div key={tile.label} className="rounded-2xl border border-line bg-white/80 p-4 shadow-card">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">{tile.label}</p>
+            <p className={`mt-3 font-display text-3xl font-semibold ${tile.tone}`}>{tile.value}</p>
+            <p className="mt-1 text-xs text-ink/45">open item{tile.value === 1 ? "" : "s"}</p>
+          </div>
+        ))}
+        <div className="rounded-2xl bg-tealDark p-5 text-white shadow-card">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold">Next deadline that matters</p>
+          {nextDeadline ? (
+            <>
+              <p className="mt-3 font-display text-xl font-semibold leading-snug">{nextDeadline.guidance?.what ?? nextDeadline.rule.title}</p>
+              <p className="mt-1 text-sm text-white/65">{nextDeadline.schoolName} · {formatDate(nextDeadline.dueAt)}</p>
+              <p className="mt-4 text-sm font-semibold text-gold">{nextDeadlineDays !== null && nextDeadlineDays < 0 ? `${Math.abs(nextDeadlineDays)} days overdue` : nextDeadlineDays === 0 ? "Due today" : `${nextDeadlineDays} days to go`}</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-3 font-display text-xl font-semibold">Nothing pressing</p>
+              <p className="mt-1 text-sm text-white/65">We will surface the next verified deadline here.</p>
+            </>
+          )}
+        </div>
+      </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink/50">Schools in play</h2>
+        <h2 className="mb-4 font-display text-2xl font-semibold text-ink">Schools in play</h2>
         {perSchool.length === 0 && (
-          <p className="rounded-lg border border-dashed border-line p-6 text-center text-sm text-ink/50">
+          <p className="rounded-2xl border border-dashed border-line bg-white/40 p-7 text-center text-sm text-ink/50">
             You are not tracking any schools yet.{" "}
             <Link href="/welcome" className="underline">
               Choose your schools
@@ -94,7 +134,7 @@ export default async function DashboardPage() {
             .
           </p>
         )}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {perSchool.map(({ rel, institution, actions }) => (
             <SchoolCard
               key={rel.id}
@@ -108,11 +148,11 @@ export default async function DashboardPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Household action queue</h2>
+          <h2 className="font-display text-2xl font-semibold text-ink">Household action queue</h2>
           <span className="text-sm text-ink/40">{nonGreekActions.length} open</span>
         </div>
         {nonGreekActions.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line p-6 text-center text-sm text-ink/50">
+          <p className="rounded-2xl border border-dashed border-line bg-white/40 p-7 text-center text-sm text-ink/50">
             Nothing open right now.
           </p>
         ) : (
@@ -127,7 +167,7 @@ export default async function DashboardPage() {
       {greekActions.length > 0 && (
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Greek recruitment</h2>
+            <h2 className="font-display text-2xl font-semibold text-ink">Greek recruitment</h2>
             <span className="text-sm text-ink/40">{greekActions.length} open</span>
           </div>
           <div className="flex flex-col gap-2">
@@ -140,16 +180,16 @@ export default async function DashboardPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">School requests</h2>
-          <Link href="/request" className="text-sm text-accent underline">Request a school</Link>
+          <h2 className="font-display text-2xl font-semibold text-ink">School requests</h2>
+          <Link href="/request" className="text-sm font-semibold text-accent underline decoration-accent/30 underline-offset-4">Request a school</Link>
         </div>
         {schoolRequests.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line p-5 text-center text-sm text-ink/50">Missing a school? Request it and we will add it after research passes verification.</p>
+          <p className="rounded-2xl border border-dashed border-line bg-white/40 p-6 text-center text-sm text-ink/50">Missing a school? Request it and we will add it after research passes verification.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {schoolRequests.slice(0, 5).map((item) => {
               const ready = item.job?.status === "ready" && item.institution?.coverageStatus === "certified";
-              return <div key={item.id} className="flex items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm"><span><span className="font-medium text-ink">{item.school.name}</span><span className="ml-2 text-xs text-ink/40">{item.term}</span></span><span className={ready ? "text-ok" : "text-ink/50"}>{ready ? "Verified plan ready" : item.job?.status === "running" ? "Research in progress" : item.job?.status === "review" ? "Held for review" : "In line"}</span></div>;
+              return <div key={item.id} className="flex items-center justify-between rounded-xl border border-line bg-white/80 px-4 py-3 text-sm shadow-card"><span><span className="font-medium text-ink">{item.school.name}</span><span className="ml-2 text-xs text-ink/40">{item.term}</span></span><span className={ready ? "text-ok" : "text-ink/50"}>{ready ? "Verified plan ready" : item.job?.status === "running" ? "Research in progress" : item.job?.status === "review" ? "Held for review" : "In line"}</span></div>;
             })}
           </div>
         )}
