@@ -15,6 +15,13 @@ describe("secure research and queue invariants",()=>{
   assert.match(source,/rejectUnauthorized:\s*true/);
   assert.doesNotMatch(source,/rejectUnauthorized:\s*false/);
  });
+ it("never substitutes a researched term when the student's term is unknown",async()=>{
+  const dashboard=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../app/page.tsx",import.meta.url),"utf8"));
+  assert.doesNotMatch(dashboard,/enteringTermFrom\(student\)\s*\?\?/);
+  assert.match(dashboard,/enteringTerm \? await listActionInstancesForRelationship/);
+  const { termNotice }=await import("../lib/terms");
+  assert.match(termNotice(null) ?? "",/Choose an entering term/);
+ });
  it("rejects source-less, foreign-source, and off-domain evidence and isolates terms",async()=>{
   const one=await R.upsertInstitution({name:"Evidence One",slug:"evidence-one",domains:["one.edu"]});
   const two=await R.upsertInstitution({name:"Evidence Two",slug:"evidence-two",domains:["two.edu"]});

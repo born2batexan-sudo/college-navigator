@@ -24,13 +24,13 @@ export default async function DashboardPage() {
   const { household, student } = await requireOnboardedHousehold();
   const relationships = await listRelationshipsForStudent(student.id);
   const schoolRequests = await listFamilyRequests(household.id);
-  const enteringTerm = enteringTermFrom(student) ?? "Fall 2027";
+  const enteringTerm = enteringTermFrom(student);
   const termMessage = termNotice(enteringTerm);
 
   const perSchool = await Promise.all(
     relationships.map(async (rel) => {
       const institution = (await getInstitution(rel.institutionId))!;
-      const actions = await listActionInstancesForRelationship(rel.id, enteringTerm);
+      const actions = enteringTerm ? await listActionInstancesForRelationship(rel.id, enteringTerm) : [];
       return { rel, institution, actions };
     })
   );

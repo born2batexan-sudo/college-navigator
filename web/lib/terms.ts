@@ -6,6 +6,7 @@ export function enteringTermFrom(student: { attributes: string }): StartTerm | n
   try { const value = JSON.parse(student.attributes ?? "{}").enteringTerm; return isStartTerm(value) ? value : null; } catch { return null; }
 }
 export function termNotice(term: StartTerm | null): string | null {
-  if (!term || term === RESEARCHED_TERM) return null;
+  if (!term) return "Choose an entering term before relying on school-specific actions or deadlines.";
+  if (term === RESEARCHED_TERM) return null;
   return `Our verified school research currently covers ${RESEARCHED_TERM} entry. We will not present it as current for ${term}.`;
 }
