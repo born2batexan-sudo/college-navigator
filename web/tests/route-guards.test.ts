@@ -24,7 +24,7 @@ const read = (p: string) => readFileSync(p, "utf-8");
 const GUARD = /require(Household|OnboardedHousehold|User)\(/;
 
 // Pages that are allowed without sign-in.
-const PUBLIC_PAGES = new Set(["app/login/page.tsx", "app/debug-page-check/page.tsx"]); // the second is an inert 404 stub (checked below)
+const PUBLIC_PAGES = new Set(["app/page.tsx", "app/login/page.tsx", "app/debug-page-check/page.tsx"]); // homepage is public; the debug page is an inert 404 stub
 // Server-action files whose functions may run without sign-in (signing in itself).
 const PUBLIC_ACTIONS = new Set(["app/login/actions.ts"]);
 // Route handlers that authenticate some other way.
@@ -106,6 +106,7 @@ describe("route guards", () => {
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
     assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/debug/", "/auth/", "/favicon.ico", "/login"]);
+    assert.match(env, /pathname === "\/"/);
     assert.match(read(path.join(ROOT, "proxy.ts")), /!isPublicPath\(pathname\)/);
   });
 

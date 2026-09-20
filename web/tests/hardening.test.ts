@@ -16,7 +16,7 @@ describe("secure research and queue invariants",()=>{
   assert.doesNotMatch(source,/rejectUnauthorized:\s*false/);
  });
  it("never substitutes a researched term when the student's term is unknown",async()=>{
-  const dashboard=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../app/page.tsx",import.meta.url),"utf8"));
+  const dashboard=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../app/dashboard/page.tsx",import.meta.url),"utf8"));
   assert.doesNotMatch(dashboard,/enteringTermFrom\(student\)\s*\?\?/);
   assert.match(dashboard,/enteringTerm \? await listActionInstancesForRelationship/);
   const { termNotice }=await import("../lib/terms");

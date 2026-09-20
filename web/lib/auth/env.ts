@@ -42,8 +42,8 @@ export const enabledProviders: string[] = (process.env.AUTH_PROVIDERS ?? "")
 
 /** Only same-site paths are allowed as a post-sign-in destination. */
 export function safeNext(next: unknown): string {
-  if (typeof next !== "string") return "/";
-  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\") || next.includes("\n") || next.includes("\r")) return "/";
+  if (typeof next !== "string") return "/dashboard";
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\") || next.includes("\n") || next.includes("\r")) return "/dashboard";
   return next;
 }
 
@@ -58,5 +58,6 @@ export const PUBLIC_PATH_PREFIXES = [
 ];
 
 export function isPublicPath(pathname: string): boolean {
+  if (pathname === "/") return true;
   return PUBLIC_PATH_PREFIXES.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
 }
