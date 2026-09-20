@@ -1,0 +1,39 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject tracked environment files
+        shell: bash
+        run: |
+          tracked="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '\.example$' || true)"
+          if [ -n "$tracked" ]; then
+            echo "::error::Environment files must not be tracked: $tracked"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
+      - name: Install
+        working-directory: web
+        run: npm ci
+      - name: Test
+        working-directory: web
+        run: npm test
+      - name: Build
+        working-directory: web
+        run: npm run build
+      - name: Reject high/critical production advisories
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Python syntax
+        run: python -m py_compile agents/*.py

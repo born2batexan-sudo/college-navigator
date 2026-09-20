@@ -68,11 +68,11 @@ jobs:
       - name: Check required secrets are set
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          RESEARCH_WRITER_API_KEY: ${{ secrets.RESEARCH_WRITER_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
           missing=0
-          for v in ANTHROPIC_API_KEY AGENT_API_KEY APP_BASE_URL; do
+          for v in ANTHROPIC_API_KEY RESEARCH_WRITER_API_KEY APP_BASE_URL; do
             if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set (Settings > Secrets and variables > Actions)"; missing=1; fi
           done
           exit $missing
@@ -91,15 +91,16 @@ jobs:
       - name: Onboard school in the live app (safe to repeat)
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          RESEARCH_WRITER_API_KEY: ${{ secrets.RESEARCH_WRITER_API_KEY }}
           SCHOOL_NAME: ${{ matrix.name }}
           SLUG: ${{ matrix.slug }}
           DOMAINS: ${{ matrix.domains }}
+          TERM: ${{ inputs.term }}
         run: |
-          body=$(jq -n --arg name "$SCHOOL_NAME" --arg slug "$SLUG" --arg domains "$DOMAINS" \
-            '{name:$name, slug:$slug, domains:($domains | split(",") | map(gsub("\\s";"")) | map(select(length>0)))}')
+          body=$(jq -n --arg name "$SCHOOL_NAME" --arg slug "$SLUG" --arg domains "$DOMAINS" --arg term "$TERM" \
+            '{name:$name, slug:$slug, researchTerm:$term, domains:($domains | split(",") | map(gsub("\\s";"")) | map(select(length>0)))}')
           curl -sS --fail-with-body -X POST "${APP_BASE_URL%/}/api/agent/institutions" \
-            -H "Authorization: Bearer $AGENT_API_KEY" \
+            -H "Authorization: Bearer $RESEARCH_WRITER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$body"
           echo
@@ -108,7 +109,7 @@ jobs:
         working-directory: agents
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          RESEARCH_WRITER_API_KEY: ${{ secrets.RESEARCH_WRITER_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           SLUG: ${{ matrix.slug }}
           DOMAINS: ${{ matrix.domains }}

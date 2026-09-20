@@ -217,7 +217,7 @@ def host_allowed(url, domains):
     if not host:
         return False
     if not domains:
-        return True
+        return False
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
@@ -431,6 +431,10 @@ def normalize_result(r, code, requested_cp, domains, reference_pop, term=DEFAULT
         "costCents": cost,
         "refundable": refundable,
         "consequence": r.get("consequence"),
+        "researchTerm": term,
+        "cycleState": cycle,
+        "applicability": applicability,
+        "evidenceQuote": quote or None,
     }
     source = None
     if source_url:
@@ -509,7 +513,7 @@ def main():
     started = time.time()
     domains = normalize_domains(args.domains)
 
-    institutions = api_get("/api/agent/institutions")["institutions"]
+    institutions = api_get("/api/agent/institutions", params={"term": args.term})["institutions"]
     institution = next((i for i in institutions if i["slug"] == args.institution), None)
     if not institution:
         print(f"Unknown institution slug '{args.institution}'. Known: {[i['slug'] for i in institutions]}", file=sys.stderr)
@@ -522,7 +526,7 @@ def main():
             c = c.strip().upper()
             if c and c not in wanted:
                 wanted.append(c)
-        rules_now = api_get("/api/agent/rules", params={"institutionSlug": args.institution})["rules"]
+        rules_now = api_get("/api/agent/rules", params={"institutionSlug": args.institution, "term": args.term})["rules"]
         existing_rules = {r["checkpointCode"]: r for r in rules_now if r.get("checkpointCode")}
         outstanding = []
         for code in wanted:

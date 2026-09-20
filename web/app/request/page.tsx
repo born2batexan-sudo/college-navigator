@@ -14,9 +14,10 @@ const statusText: Record<string, string> = {
   failed: "Needs review — we will not publish an unverified plan.",
 };
 
-export default async function RequestSchoolPage({ searchParams }: { searchParams: Params }) {
+export default async function RequestSchoolPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const query = await searchParams;
   const { household } = await requireOnboardedHousehold();
-  const q = (searchParams.q ?? "").trim().slice(0, 100);
+  const q = (query.q ?? "").trim().slice(0, 100);
   const [matches, requests] = await Promise.all([searchDirectory(q), listFamilyRequests(household.id)]);
   return (
     <main className="flex max-w-3xl flex-col gap-7">
@@ -25,8 +26,8 @@ export default async function RequestSchoolPage({ searchParams }: { searchParams
         <h1 className="mt-3 text-2xl font-semibold text-ink">Request a school</h1>
         <p className="mt-1 max-w-2xl text-ink/60">Search the federal school directory. We research one school at a time and show a plan only after it passes the verification gate.</p>
       </header>
-      {searchParams.error && <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">{searchParams.error}</p>}
-      {searchParams.submitted && <p role="status" className="rounded-md border border-ok/30 bg-ok/10 p-3 text-sm text-ok">Your request is in line. We will update this page when a verified plan is ready.</p>}
+      {query.error && <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">{query.error}</p>}
+      {query.submitted && <p role="status" className="rounded-md border border-ok/30 bg-ok/10 p-3 text-sm text-ok">Your request is in line. We will update this page when a verified plan is ready.</p>}
       <form method="get" className="flex gap-2">
         <label htmlFor="q" className="sr-only">Search schools</label>
         <input id="q" name="q" defaultValue={q} placeholder="School name, city, or state" minLength={2} className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2 text-sm" />

@@ -52,7 +52,7 @@ def main():
     parser.add_argument("--file", required=True)
     args = parser.parse_args()
     require_env("APP_BASE_URL", __import__("common").APP_BASE_URL)
-    require_env("AGENT_API_KEY", __import__("common").AGENT_API_KEY)
+    require_env("DIRECTORY_IMPORT_API_KEY", __import__("common").DIRECTORY_IMPORT_API_KEY)
     batch, total = [], 0
     for row in rows_from_zip(args.file):
         batch.append(row)

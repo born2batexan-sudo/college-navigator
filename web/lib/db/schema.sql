@@ -102,13 +102,31 @@ CREATE TABLE IF NOT EXISTS rules (
   cost_cents INTEGER,
   refundable TEXT NOT NULL DEFAULT 'unknown',
   consequence TEXT,
-  status TEXT NOT NULL DEFAULT 'unverified',
-  confidence TEXT NOT NULL DEFAULT 'low',
+  status TEXT NOT NULL DEFAULT 'unverified' CHECK (status IN ('verified','unverified')),
+  confidence TEXT NOT NULL DEFAULT 'low' CHECK (confidence IN ('high','medium','low')),
+  research_term TEXT NOT NULL DEFAULT 'Fall 2027',
+  cycle_state TEXT NOT NULL DEFAULT 'undated' CHECK (cycle_state IN ('current','prior','undated')),
+  applicability TEXT NOT NULL DEFAULT 'applies' CHECK (applicability IN ('applies','not_applicable','not_yet_published')),
+  evidence_quote TEXT,
   verified_at TEXT,
   source_id TEXT REFERENCES sources(id),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE(institution_id, checkpoint_code)
+  UNIQUE(institution_id, checkpoint_code, research_term)
+);
+
+-- Coverage is a property of an immutable research cycle, never of an
+-- institution in the abstract. The legacy institution coverage columns are
+-- retained only for curated data compatibility.
+CREATE TABLE IF NOT EXISTS research_versions (
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  research_term TEXT NOT NULL,
+  coverage_status TEXT NOT NULL CHECK (coverage_status IN ('certified','beta','research','unsupported')),
+  coverage_pct REAL NOT NULL CHECK (coverage_pct >= 0 AND coverage_pct <= 100),
+  critical_gaps INTEGER NOT NULL CHECK (critical_gaps >= 0),
+  certified_at TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (institution_id, research_term)
 );
 
 CREATE TABLE IF NOT EXISTS guidance_assets (
@@ -231,14 +249,18 @@ CREATE TABLE IF NOT EXISTS school_directory (
 CREATE TABLE IF NOT EXISTS school_research_jobs (
   unitid TEXT NOT NULL REFERENCES school_directory(unitid),
   term TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'queued',
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','ready','review')),
   slug TEXT,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  recheck_done INTEGER NOT NULL DEFAULT 0,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 3),
+  attempt_id TEXT,
+  lease_expires_at TEXT,
+  heartbeat_at TEXT,
+  last_report_outcome TEXT,
+  recheck_done INTEGER NOT NULL DEFAULT 0 CHECK (recheck_done IN (0,1)),
   first_requested_at TEXT NOT NULL,
   started_at TEXT,
   finished_at TEXT,
-  cost_cents INTEGER NOT NULL DEFAULT 0,
+  cost_cents INTEGER NOT NULL DEFAULT 0 CHECK (cost_cents >= 0),
   coverage_pct REAL,
   note TEXT,
   updated_at TEXT NOT NULL,
@@ -247,8 +269,8 @@ CREATE TABLE IF NOT EXISTS school_research_jobs (
 
 CREATE TABLE IF NOT EXISTS school_requests (
   id TEXT PRIMARY KEY,
-  household_id TEXT NOT NULL REFERENCES households(id),
-  person_id TEXT REFERENCES people(id),
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  person_id TEXT REFERENCES people(id) ON DELETE SET NULL,
   unitid TEXT NOT NULL REFERENCES school_directory(unitid),
   term TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -257,13 +279,17 @@ CREATE TABLE IF NOT EXISTS school_requests (
   UNIQUE(household_id, unitid, term)
 );
 
+-- Append-only accounting. A positive reservation is always written before
+-- work. A terminal reconciliation may only reduce it; unknown actual cost
+-- deliberately leaves the full conservative reservation charged.
 CREATE TABLE IF NOT EXISTS budget_ledger (
   id TEXT PRIMARY KEY,
   month TEXT NOT NULL,
   cents INTEGER NOT NULL,
-  kind TEXT NOT NULL,
-  reference TEXT,
-  created_at TEXT NOT NULL
+  kind TEXT NOT NULL CHECK (kind IN ('reservation','reconciliation')),
+  reference TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(kind, reference)
 );
 
 CREATE INDEX IF NOT EXISTS idx_school_requests_household ON school_requests(household_id);

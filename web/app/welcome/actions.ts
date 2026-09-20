@@ -7,6 +7,7 @@ import {
   setRelationshipActive,
   updateRelationshipAttributes,
   getInstitution,
+  listRelationshipsForStudent,
 } from "@/lib/db/repo";
 import { materializeActionsForRelationship } from "@/lib/materialize";
 import { requireOnboardedHousehold } from "@/lib/auth/session";
@@ -60,6 +61,10 @@ export async function saveStartTerm(formData: FormData): Promise<void> {
   const term = String(formData.get("enteringTerm") ?? "");
   if (!isStartTerm(term)) throw new Error("Choose a valid start term");
   await updateStudentAttributes(ctx, { enteringTerm: term });
+  // Rebuild each tracked school's actions from this exact term. If that term
+  // has no certified rules yet, no other cycle is substituted.
+  const relationships = await listRelationshipsForStudent(ctx.student.id);
+  await Promise.all(relationships.map((rel) => materializeActionsForRelationship(rel.id)));
   revalidatePath("/welcome"); revalidatePath("/");
 }
 

@@ -6,7 +6,8 @@ import { START_TERMS } from "@/lib/terms";
 
 export const dynamic = "force-dynamic";
 
-export default async function OnboardingPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const query = await searchParams;
   const ctx = await requireHousehold();
   if (ctx.student) redirect("/");
 
@@ -20,9 +21,9 @@ export default async function OnboardingPage({ searchParams }: { searchParams: {
         </p>
       </header>
 
-      {searchParams.error && (
+      {query.error && (
         <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
-          {searchParams.error}
+          {query.error}
         </p>
       )}
 

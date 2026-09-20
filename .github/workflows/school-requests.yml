@@ -1,65 +1,39 @@
-name: School requests
-
+name: School requests (manual, supervised)
 on:
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       task:
-        description: "What to run"
+        description: What to run
         type: choice
-        options:
-          - process the next requested school
-          - load the school directory
-        default: "load the school directory"
+        options: [process the next requested school, load the school directory]
+        default: load the school directory
       year:
-        description: "Directory year to try first"
+        description: Directory year to try first
         required: false
         default: "2024"
-
 concurrency:
   group: research-school
   cancel-in-progress: false
-
 permissions:
   contents: read
-
 jobs:
   process:
-    if: github.event_name == 'schedule' || inputs.task == 'process the next requested school'
+    if: inputs.task == 'process the next requested school'
     runs-on: ubuntu-latest
     timeout-minutes: 160
     steps:
-      - name: Check required secrets
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-        run: |
-          missing=0
-          for v in ANTHROPIC_API_KEY AGENT_API_KEY APP_BASE_URL; do
-            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set"; missing=1; fi
-          done
-          exit $missing
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: agents/requirements.txt
-      - name: Install dependencies
-        run: pip install -r agents/requirements.txt
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: agents/requirements.txt }
+      - run: pip install -r agents/requirements.txt
       - name: Process one request
         working-directory: agents
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          QUEUE_AGENT_API_KEY: ${{ secrets.QUEUE_AGENT_API_KEY }}
+          RESEARCH_WRITER_API_KEY: ${{ secrets.RESEARCH_WRITER_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: python -u process_requests.py | tee process.log
-      - name: Summary
-        if: always()
-        run: |
-          { echo "### School request run"; grep -E "^(Nothing to do|Claimed|RESULT|Reported failure)" agents/process.log || echo "No school was processed."; } >> "$GITHUB_STEP_SUMMARY"
       - name: Save reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,44 +43,27 @@ jobs:
             agents/run-report.json
             agents/run-report-recheck.json
           if-no-files-found: ignore
-
   directory:
-    if: github.event_name == 'workflow_dispatch' && inputs.task == 'load the school directory'
+    if: inputs.task == 'load the school directory'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check required secrets
-        env:
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-        run: |
-          missing=0
-          for v in AGENT_API_KEY APP_BASE_URL; do
-            if [ -z "${!v}" ]; then echo "::error::Repository secret $v is not set"; missing=1; fi
-          done
-          exit $missing
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: agents/requirements.txt
-      - name: Install dependencies
-        run: pip install -r agents/requirements.txt
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: agents/requirements.txt }
+      - run: pip install -r agents/requirements.txt
       - name: Download IPEDS HD file
-        env:
-          YEAR: ${{ inputs.year }}
+        env: { YEAR: "${{ inputs.year }}" }
         run: |
           YEAR="${YEAR:-2024}"; got=""
           for y in "$YEAR" $((YEAR-1)) $((YEAR-2)); do
             url="https://nces.ed.gov/ipeds/datacenter/data/HD${y}.zip"
             if curl -sSL --fail --retry 3 -o hd.zip "$url" && unzip -tq hd.zip >/dev/null 2>&1; then got="$y"; break; fi
           done
-          test -n "$got" || { echo "::error::Could not download an IPEDS directory file"; exit 1; }
-          echo "Using HD${got}.zip" >> "$GITHUB_STEP_SUMMARY"
+          test -n "$got"
       - name: Import directory
         working-directory: agents
         env:
-          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          DIRECTORY_IMPORT_API_KEY: ${{ secrets.DIRECTORY_IMPORT_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: python -u import_ipeds.py --file ../hd.zip

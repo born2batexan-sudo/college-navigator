@@ -81,9 +81,11 @@ describe("route guards", () => {
     }
   });
 
-  it("the extension endpoints are pinned to the demo household and never list households", () => {
+  it("the extension endpoints are production-disabled and never list households", () => {
     const companion = read(path.join(ROOT, "lib", "companion.ts"));
     assert.match(companion, /DEMO_HOUSEHOLD_ID = "demo-household"/);
+    assert.match(read(path.join(ROOT, "app/api/companion/context/route.ts")), /NODE_ENV===?"production"/);
+    assert.match(read(path.join(ROOT, "app/api/companion/observe/route.ts")), /NODE_ENV===?"production"/);
     for (const f of [...files, path.join(ROOT, "lib", "companion.ts")]) {
       if (!/\.(ts|tsx)$/.test(f)) continue;
       assert.doesNotMatch(read(f), /listHouseholds\(/, `${rel(f)} must not use listHouseholds()`);
@@ -99,12 +101,12 @@ describe("route guards", () => {
     }
   });
 
-  it("the middleware denies by default and its public list is the reviewed one", () => {
+  it("the proxy denies by default and its public list is the reviewed one", () => {
     const env = read(path.join(ROOT, "lib", "auth", "env.ts"));
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/companion/", "/api/debug/", "/auth/", "/favicon.ico", "/login"]);
-    assert.match(read(path.join(ROOT, "middleware.ts")), /!isPublicPath\(pathname\)/);
+    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/debug/", "/auth/", "/favicon.ico", "/login"]);
+    assert.match(read(path.join(ROOT, "proxy.ts")), /!isPublicPath\(pathname\)/);
   });
 
   it("dev sign-in cannot be enabled in a production build", () => {

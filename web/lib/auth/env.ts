@@ -52,7 +52,6 @@ export const PUBLIC_PATH_PREFIXES = [
   "/login",
   "/auth/",
   "/api/agent/", // machine callers; each route checks its own bearer key
-  "/api/companion/", // browser extension; pinned to the demo household only
   "/api/debug/", // retired stub, always 404
   "/_next/",
   "/favicon.ico",

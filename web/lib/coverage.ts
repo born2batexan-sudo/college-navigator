@@ -1,36 +1,32 @@
 import { ALL_CHECKPOINTS } from "./checkpoints";
-import { listRulesForInstitution, updateInstitutionCoverage } from "./db/repo";
-import { parseDateStatus } from "./date-status";
+import { listRulesForInstitution } from "./db/repo";
+import { exec, nowIso, queryOne } from "./db/client";
 
-/**
- * Recomputes an institution's 144-point coverage percentage and gate
- * status after a rule is added or verified, per the brief's certification
- * gates (Section 8): Certified >=90% with no critical gaps, Beta 75-89% or
- * one critical gap, Research 50-74%, Unsupported below 50%.
- *
- * A "critical gap" is a critical checkpoint that is neither verified nor
- * legitimately waiting on the school. If the research agent has confirmed
- * that the school has not yet published this cycle's details (the rule is
- * labeled "Not yet published" or "Prior cycle only"), that is not a gap in
- * our research, so it does not block certification. It is still NOT counted
- * as verified in the percentage, and it stays visible to families as
- * "Date not posted yet" until the school posts and the agent verifies it.
- */
-export async function recomputeCoverage(institutionId: string) {
-  const rules = await listRulesForInstitution(institutionId);
-  const verified = rules.filter((r) => r.status === "verified");
-  const criticalGaps = rules.filter(
-    (r) => r.critical && r.status !== "verified" && parseDateStatus(r).kind !== "awaiting"
-  ).length;
+export type CoverageResult = { pct: number; status: "certified" | "beta" | "research" | "unsupported"; criticalGaps: number; researchTerm: string };
 
+/** Coverage is computed only from evidence-valid records for one term. */
+export async function recomputeCoverage(institutionId: string, researchTerm = "Fall 2027"): Promise<CoverageResult> {
+  const rules = await listRulesForInstitution(institutionId, researchTerm);
+  const evidenceValid = (r: (typeof rules)[number]) => !!r.sourceId && !!r.evidenceQuote && r.cycleState !== "prior";
+  const verified = rules.filter((r) => r.status === "verified" && evidenceValid(r));
+  const criticalGaps = rules.filter((r) => r.critical && !(r.status === "verified" && evidenceValid(r)) &&
+    !(r.applicability === "not_yet_published" && evidenceValid(r))).length;
   const pct = Math.round((verified.length / ALL_CHECKPOINTS.length) * 1000) / 10;
-
-  let status: "certified" | "beta" | "research" | "unsupported";
+  let status: CoverageResult["status"];
   if (pct >= 90 && criticalGaps === 0) status = "certified";
-  else if (pct >= 75) status = "beta"; // includes the "one critical workflow incomplete" downgrade case
+  else if (pct >= 75) status = "beta";
   else if (pct >= 50) status = "research";
   else status = "unsupported";
+  const now = nowIso();
+  const certifiedAt = status === "certified" ? now : null;
+  await exec(`INSERT INTO research_versions (institution_id,research_term,coverage_status,coverage_pct,critical_gaps,certified_at,updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (institution_id,research_term) DO UPDATE SET coverage_status=$8,coverage_pct=$9,critical_gaps=$10,certified_at=$11,updated_at=$12`,
+    [institutionId,researchTerm,status,pct,criticalGaps,certifiedAt,now,status,pct,criticalGaps,certifiedAt,now]);
+  return { pct, status, criticalGaps, researchTerm };
+}
 
-  await updateInstitutionCoverage(institutionId, pct, status);
-  return { pct, status, criticalGaps };
+export async function getCoverageVersion(institutionId: string, researchTerm: string): Promise<CoverageResult | null> {
+  const row = await queryOne<any>("SELECT * FROM research_versions WHERE institution_id=$1 AND research_term=$2", [institutionId, researchTerm]);
+  return row ? { pct: Number(row.coverage_pct), status: row.coverage_status, criticalGaps: Number(row.critical_gaps), researchTerm } : null;
 }

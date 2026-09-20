@@ -9,18 +9,29 @@ import {
 import { requireOnboardedHousehold } from "@/lib/auth/session";
 import { COVERAGE_LABELS, COVERAGE_STYLES, STATE_LABELS, STATE_STYLES } from "@/lib/format";
 import { StatePill } from "@/components/StatusPill";
-import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL, ENTERING_TERM } from "@/lib/date-status";
+import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
+import { enteringTermFrom, RESEARCHED_TERM } from "@/lib/terms";
+import { canHouseholdViewInstitution } from "@/lib/db/requests";
+import { getCoverageVersion } from "@/lib/coverage";
 
 export const dynamic = "force-dynamic";
 
-export default async function SchoolTrackerPage({ params }: { params: { slug: string } }) {
+export default async function SchoolTrackerPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   // The 144-point standard is the same for everyone; the action states shown are this family's own.
-  const { student } = await requireOnboardedHousehold();
+  const { student, household } = await requireOnboardedHousehold();
 
-  const institution = await getInstitutionBySlug(params.slug);
+  const institution = await getInstitutionBySlug(slug);
   if (!institution) notFound();
+  const term = enteringTermFrom(student) ?? RESEARCHED_TERM;
+  // Queue-created schools are private until this household requested this
+  // exact term and that term's research version is server-certified/ready.
+  if (!(await canHouseholdViewInstitution(household.id, institution.id, term))) notFound();
 
-  const rules = await listRulesForInstitution(institution.id);
+  const rules = await listRulesForInstitution(institution.id, term);
+  const coverage = await getCoverageVersion(institution.id, term);
+  const coverageStatus = coverage?.status ?? institution.coverageStatus;
+  const coveragePct = coverage?.pct ?? institution.coveragePct;
 
   const relationships = await listRelationshipsForStudent(student.id);
   const relationship = relationships.find((r) => r.institutionId === institution.id) ?? null;
@@ -36,7 +47,7 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
   const criticalUnverified = rules.filter((r) => r.critical && r.status === "unverified");
   // Critical items the school simply hasn't published this cycle's details for are a different
   // situation from critical items nobody has researched yet.
-  const criticalAwaiting = criticalUnverified.filter((r) => parseDateStatus(r).kind === "awaiting").length;
+  const criticalAwaiting = criticalUnverified.filter((r) => r.applicability === "not_yet_published").length;
   const criticalNeedResearch = criticalUnverified.length - criticalAwaiting;
 
   return (
@@ -48,16 +59,16 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-ink">{institution.name}</h1>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COVERAGE_STYLES[institution.coverageStatus]}`}>
-            {COVERAGE_LABELS[institution.coverageStatus]}
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COVERAGE_STYLES[coverageStatus]}`}>
+            {COVERAGE_LABELS[coverageStatus]}
           </span>
         </div>
         <p className="text-sm text-ink/60">
-          144-point inspection: {verifiedCount}/144 checkpoints verified ({institution.coveragePct}%).{" "}
+          144-point inspection: {verifiedCount}/144 checkpoints verified ({coveragePct}%).{" "}
           {criticalNeedResearch > 0 &&
             `${criticalNeedResearch} critical ${criticalNeedResearch === 1 ? "checkpoint still needs" : "checkpoints still need"} research — this school cannot certify until ${criticalNeedResearch === 1 ? "that clears" : "those clear"}. `}
           {criticalAwaiting > 0 &&
-            `${criticalAwaiting} critical ${criticalAwaiting === 1 ? "checkpoint is" : "checkpoints are"} waiting for ${institution.name} to publish ${ENTERING_TERM} details. ${criticalAwaiting === 1 ? "It doesn't" : "They don't"} hold back certification, and we verify ${criticalAwaiting === 1 ? "it" : "them"} as soon as ${criticalAwaiting === 1 ? "it is" : "they are"} posted. `}
+            `${criticalAwaiting} critical ${criticalAwaiting === 1 ? "checkpoint is" : "checkpoints are"} waiting for ${institution.name} to publish ${term} details. ${criticalAwaiting === 1 ? "It doesn't" : "They don't"} hold back certification, and we verify ${criticalAwaiting === 1 ? "it" : "them"} as soon as ${criticalAwaiting === 1 ? "it is" : "they are"} posted. `}
           {criticalUnverified.length === 0 && "All critical checkpoints are verified."}
         </p>
         <p className="text-xs text-ink/40">
@@ -90,14 +101,14 @@ export default async function SchoolTrackerPage({ params }: { params: { slug: st
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      {dateStatus.kind === "awaiting" ? (
+                      {rule.applicability === "not_yet_published" ? (
                         <span
                           className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] font-medium text-warn"
                           title={lastYearLine(dateStatus) ?? undefined}
                         >
                           {DATE_NOT_POSTED_LABEL}
                         </span>
-                      ) : dateStatus.kind === "not_applicable" ? (
+                      ) : rule.applicability === "not_applicable" ? (
                         <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-medium text-ink/50">
                           Doesn&apos;t apply here
                         </span>

@@ -16,6 +16,7 @@ import {
   createActionEvent,
 } from "./db/repo";
 import { evaluateRule } from "./rules-engine";
+import { enteringTermFrom } from "./terms";
 
 const CLOSED_STATES = new Set(["complete", "waived"]);
 
@@ -23,7 +24,11 @@ export async function materializeActionsForRelationship(relationshipId: string) 
   const relationship = await getRelationship(relationshipId);
   if (!relationship) throw new Error(`Relationship ${relationshipId} not found`);
 
-  const rules = await listRulesForInstitution(relationship.institutionId);
+  // A family's action ledger must be built from that student's exact entering
+  // term. Never fall back to another cycle's deadlines or requirements.
+  const researchTerm = enteringTermFrom(relationship.student);
+  if (!researchTerm || researchTerm === "Not sure yet") return [];
+  const rules = await listRulesForInstitution(relationship.institutionId, researchTerm);
   const results: { checkpointCode: string; applicable: boolean }[] = [];
 
   for (const rule of rules) {

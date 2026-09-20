@@ -11,7 +11,7 @@ export type SessionUser = { id: string; email: string | null };
 /** The signed-in user for this request, or null. Verified with Supabase, never trusted from a cookie alone. */
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (devLoginEnabled) {
-    const email = cookies().get(DEV_COOKIE)?.value;
+    const email = (await cookies()).get(DEV_COOKIE)?.value;
     if (email && /^[^\s@]+@[^\s@]+$/.test(email)) {
       return { id: `dev_${createHash("sha1").update(email.toLowerCase()).digest("hex").slice(0, 16)}`, email: email.toLowerCase() };
     }
@@ -19,7 +19,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
   if (!supabaseConfigured) return null;
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub) return null;
   const email = typeof data.claims.email === "string" ? data.claims.email.toLowerCase() : null;
@@ -55,8 +55,8 @@ export async function requireOnboardedHousehold(): Promise<HouseholdContext & { 
 }
 
 /** The address the browser used to reach us (works on preview and production URLs alike). */
-export function requestOrigin(): string {
-  const h = headers();
+export async function requestOrigin(): Promise<string> {
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   return `${proto}://${host}`;

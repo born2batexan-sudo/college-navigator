@@ -9,8 +9,8 @@ import { DEV_COOKIE, SUPABASE_URL, devLoginEnabled, supabaseConfigured } from "@
 import { createInvite, deleteHousehold, removeMember } from "@/lib/db/accounts";
 
 async function endSession() {
-  if (devLoginEnabled) cookies().delete(DEV_COOKIE);
-  else if (supabaseConfigured) await createSupabaseServerClient().auth.signOut();
+  if (devLoginEnabled) (await cookies()).delete(DEV_COOKIE);
+  else if (supabaseConfigured) await (await createSupabaseServerClient()).auth.signOut();
 }
 
 export async function signOut(): Promise<void> {

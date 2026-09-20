@@ -5,10 +5,11 @@ import { deleteAccount, makeInvite, signOut } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage({ searchParams }: { searchParams: { invite?: string; error?: string } }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ invite?: string; error?: string }> }) {
+  const query = await searchParams;
   const ctx = await requireHousehold();
   const members = await listMembers(ctx.household.id);
-  const inviteUrl = searchParams.invite ? `${requestOrigin()}/invite/${searchParams.invite}` : null;
+  const inviteUrl = query.invite ? `${await requestOrigin()}/invite/${query.invite}` : null;
 
   return (
     <main className="flex max-w-2xl flex-col gap-8">
@@ -22,9 +23,9 @@ export default async function AccountPage({ searchParams }: { searchParams: { in
         </p>
       </header>
 
-      {searchParams.error && (
+      {query.error && (
         <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
-          {searchParams.error}
+          {query.error}
         </p>
       )}
 

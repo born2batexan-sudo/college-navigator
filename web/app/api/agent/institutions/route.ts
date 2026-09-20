@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentAuth } from "../_auth";
 import { listInstitutions, listRulesForInstitution, getInstitutionBySlug, upsertInstitution, upsertRule } from "@/lib/db/repo";
-import { recomputeCoverage } from "@/lib/coverage";
+import { recomputeCoverage, getCoverageVersion } from "@/lib/coverage";
 import { ALL_CHECKPOINTS } from "@/lib/checkpoints";
 
 // Talks to the database on every request — never let Next.js try to
@@ -10,19 +10,22 @@ export const dynamic = "force-dynamic";
 
 /** GET: lets an agent see every institution and which of the universal 144 checkpoints still need research. */
 export async function GET(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
+  const researchTerm = req.nextUrl.searchParams.get("term") || "Fall 2027";
   const institutions = await Promise.all(
     (await listInstitutions()).map(async (inst) => {
-      const rules = await listRulesForInstitution(inst.id);
+      const rules = await listRulesForInstitution(inst.id, researchTerm);
       const verifiedCodes = new Set(rules.filter((r) => r.status === "verified").map((r) => r.checkpointCode));
       const outstanding = ALL_CHECKPOINTS.filter((cp) => !verifiedCodes.has(cp.code));
+      const version = await getCoverageVersion(inst.id, researchTerm);
       return {
         slug: inst.slug,
         name: inst.name,
-        coverageStatus: inst.coverageStatus,
-        coveragePct: inst.coveragePct,
+        researchTerm,
+        coverageStatus: version?.status ?? "unsupported",
+        coveragePct: version?.pct ?? 0,
         verifiedCount: verifiedCodes.size,
         totalCheckpoints: ALL_CHECKPOINTS.length,
         outstandingCheckpoints: outstanding,
@@ -53,13 +56,16 @@ export async function GET(req: NextRequest) {
  * Body: { name, slug, domains?: string[], pathway?: string }
  */
 export async function POST(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const body = await req.json();
-  const { name, slug, domains, pathway } = body ?? {};
-  if (!name || !slug) {
-    return NextResponse.json({ error: "name and slug are required" }, { status: 400 });
+  const { name, slug, domains, pathway, researchTerm } = body ?? {};
+  if (!name || !slug || !researchTerm) {
+    return NextResponse.json({ error: "name, slug, and researchTerm are required" }, { status: 400 });
+  }
+  if (!Array.isArray(domains) || domains.length === 0 || domains.some((d) => typeof d !== "string" || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(d))) {
+    return NextResponse.json({ error: "At least one normalized approved institution domain is required" }, { status: 400 });
   }
   if (!/^[a-z0-9-]+$/.test(slug)) {
     return NextResponse.json({ error: "slug must be lowercase letters, digits, and hyphens only" }, { status: 400 });
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest) {
     coveragePct: 0,
   });
 
-  const existingRules = await listRulesForInstitution(institution.id);
+  const existingRules = await listRulesForInstitution(institution.id, researchTerm);
   const existingCodes = new Set(existingRules.map((r) => r.checkpointCode));
 
   let seeded = 0;
@@ -93,12 +99,15 @@ export async function POST(req: NextRequest) {
       trigger: cp.code.startsWith("ADM") ? null : "admitted",
       status: "unverified",
       confidence: "low",
+      researchTerm,
+      cycleState: "undated",
+      applicability: "applies",
       refundable: "unknown",
     });
     seeded++;
   }
 
-  const coverage = await recomputeCoverage(institution.id);
+  const coverage = await recomputeCoverage(institution.id, researchTerm);
 
   return NextResponse.json({
     institution: { slug: institution.slug, name: institution.name, alreadyExisted },

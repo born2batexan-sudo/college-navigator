@@ -7,11 +7,12 @@ export const dynamic = "force-dynamic";
 
 type Search = { error?: string; step?: string; email?: string; next?: string; deleted?: string; out?: string };
 
-export default async function LoginPage({ searchParams }: { searchParams: Search }) {
-  const next = safeNext(searchParams.next);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const query = await searchParams;
+  const next = safeNext(query.next);
   if (await getSessionUser()) redirect(next);
 
-  const codeStep = searchParams.step === "code" && !!searchParams.email;
+  const codeStep = query.step === "code" && !!query.email;
   const inputCls = "w-full rounded-md border border-line bg-white px-3 py-2 text-ink";
   const btnCls = "w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90";
 
@@ -23,18 +24,18 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         <p className="mt-1 text-ink/60">
           {codeStep
             ? emailCodeEnabled
-              ? `We sent a code to ${searchParams.email}. Type it below.`
-              : `We sent a sign-in link to ${searchParams.email}. Open it on this same device and browser to finish signing in.`
+              ? `We sent a code to ${query.email}. Type it below.`
+              : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
             : "Sign in or create your family plan. Signing in never gives us access to your inbox."}
         </p>
       </header>
 
-      {searchParams.deleted && (
+      {query.deleted && (
         <p className="rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
       )}
-      {searchParams.error && (
+      {query.error && (
         <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
-          {searchParams.error}
+          {query.error}
         </p>
       )}
 
@@ -48,7 +49,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         <div className="flex flex-col gap-3">
           {emailCodeEnabled ? (
             <form action={verifyEmailCode} className="flex flex-col gap-3">
-              <input type="hidden" name="email" value={searchParams.email} />
+              <input type="hidden" name="email" value={query.email} />
               <input type="hidden" name="next" value={next} />
               <label className="flex flex-col gap-1 text-sm text-ink/70" htmlFor="code">
                 6-digit code

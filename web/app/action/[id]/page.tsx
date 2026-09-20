@@ -7,6 +7,7 @@ import { StatePill } from "@/components/StatusPill";
 import { STATE_LABELS, STATE_STYLES, formatDate, formatMoney } from "@/lib/format";
 import { advanceActionState } from "@/app/actions";
 import { parseDateStatus, awaitingMessage, lastYearLine, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
+import { enteringTermFrom } from "@/lib/terms";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +23,16 @@ const NEXT_STATES: Record<string, string[]> = {
   not_applicable: [],
 };
 
-export default async function ActionDetailPage({ params }: { params: { id: string } }) {
+export default async function ActionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const { household } = await requireOnboardedHousehold();
   // Someone else's action looks exactly like one that does not exist.
-  if (!(await actionBelongsToHousehold(params.id, household.id))) notFound();
-  const action = await getActionInstanceFull(params.id);
+  if (!(await actionBelongsToHousehold(id, household.id))) notFound();
+  const action = await getActionInstanceFull(id);
   if (!action) notFound();
+  // Ownership alone is not enough: never expose an action generated for a
+  // different admissions cycle after a family changes its entering term.
+  if (enteringTermFrom(action.relationship.student) !== action.rule.researchTerm) notFound();
 
   const events = await listEventsForAction(action.id);
   const g = action.guidance;

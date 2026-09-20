@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   const perSchool = await Promise.all(
     relationships.map(async (rel) => {
       const institution = (await getInstitution(rel.institutionId))!;
-      const actions = await listActionInstancesForRelationship(rel.id);
+      const actions = await listActionInstancesForRelationship(rel.id, enteringTerm);
       return { rel, institution, actions };
     })
   );

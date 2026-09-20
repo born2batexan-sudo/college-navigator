@@ -345,7 +345,8 @@ async function main() {
   let verifiedCount = 0;
   for (const cp of ALL_CHECKPOINTS) {
     const override = OVERRIDES[cp.code];
-    if (override) verifiedCount++;
+    // Legacy seed overrides predate quote-level evidence. Keep their sourced
+    // text for local UI demos, but do not represent them as verified.
 
     await upsertRule({
       institutionId: alabama.id,
@@ -361,9 +362,12 @@ async function main() {
       costCents: override?.costCents ?? null,
       refundable: override?.refundable ?? "unknown",
       consequence: override?.consequence ?? null,
-      status: override ? "verified" : "unverified",
+      status: "unverified",
       confidence: override?.confidence ?? "low",
-      verifiedAt: override ? RESEARCH_DATE : null,
+      researchTerm: "Fall 2027",
+      cycleState: "undated",
+      applicability: "applies",
+      verifiedAt: null,
       sourceId: override ? sourceIds[override.sourceKey] : null,
     });
   }

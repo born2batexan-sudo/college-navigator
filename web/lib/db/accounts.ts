@@ -13,7 +13,7 @@
 // with the functions below.
 
 import { createHash, randomBytes } from "node:crypto";
-import { exec, queryOne, queryRows, newId, nowIso, usingPostgres } from "./client";
+import { exec, queryOne, queryRows, newId, nowIso, usingPostgres, withTransaction } from "./client";
 import { upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
@@ -92,14 +92,11 @@ export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL];
 let ensurePromise: Promise<void> | null = null;
 
 /**
- * Postgres only (SQLite creates everything from schema.sql on boot):
- *  1. creates the two account tables if they do not exist, and
- *  2. turns on Row Level Security for every table. Supabase exposes every
- *     table in the public schema through its REST API to anyone holding the
- *     project's public "anon" key; with RLS on and no policies, that door is
- *     closed. The app itself is unaffected because it connects as the table
- *     owner (which bypasses RLS). RLS is only enabled after checking that.
- * Safe to run repeatedly; memoized per server instance.
+ * Postgres release verification (SQLite creates schema.sql locally).
+ * Production schema changes are applied only through reviewed migrations.
+ * At runtime we fail closed unless every expected public table exists, has
+ * RLS enabled, and grants no direct access to Supabase's anon/authenticated
+ * roles. Safe to run repeatedly; memoized per server instance.
  */
 export function ensureAccountSchema(): Promise<void> {
   if (!usingPostgres) return Promise.resolve();
@@ -113,33 +110,18 @@ export function ensureAccountSchema(): Promise<void> {
 }
 
 async function runEnsure(): Promise<void> {
-  for (const stmt of SCHEMA_DDL) {
-    try {
-      await exec(stmt);
-    } catch {
-      // Two cold starts creating the same table at once can collide.
-      // CREATE ... IF NOT EXISTS is safe to simply try again.
-      await new Promise((r) => setTimeout(r, 300));
-      await exec(stmt);
-    }
-  }
-  try {
-    const probe = await queryOne<{ ok: boolean }>(
-      `SELECT (
-         COALESCE((SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user), false)
-         OR COALESCE((SELECT tableowner = current_user FROM pg_tables WHERE schemaname = 'public' AND tablename = 'households'), false)
-       ) AS ok`
-    );
-    if (probe?.ok) {
-      for (const t of ALL_TABLES) {
-        await exec(`ALTER TABLE IF EXISTS ${t} ENABLE ROW LEVEL SECURITY`);
-      }
-    } else {
-      console.error("[accounts] skipped enabling row level security: this database role does not own the tables");
-    }
-  } catch (err) {
-    console.error("[accounts] could not enable row level security:", err);
-  }
+  // Runtime application roles must not have DDL privileges. Deployment applies
+  // versioned migrations; requests fail closed if schema/RLS verification did
+  // not happen.
+  const rows = await queryRows<any>(`SELECT c.relname AS name,c.relrowsecurity AS rls
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relname = ANY($1::text[])`, [ALL_TABLES]);
+  const byName = new Map(rows.map((r) => [r.name, !!r.rls]));
+  const missing = ALL_TABLES.filter((t) => !byName.has(t));
+  const withoutRls = ALL_TABLES.filter((t) => byName.has(t) && !byName.get(t));
+  const exposed = await queryRows<any>(`SELECT table_name,grantee,privilege_type FROM information_schema.role_table_grants
+    WHERE table_schema='public' AND grantee IN ('anon','authenticated')`);
+  if (missing.length || withoutRls.length || exposed.length) throw new Error(`Database release verification failed (missing: ${missing.join(",") || "none"}; RLS disabled: ${withoutRls.join(",") || "none"}; direct public grants: ${exposed.map((r) => `${r.grantee}:${r.table_name}:${r.privilege_type}`).join(",") || "none"})`);
 }
 
 // ---------- Row mappers ----------
@@ -403,8 +385,13 @@ export async function acceptInvite(ctx: HouseholdContext, token: string): Promis
 
 /** Removes one member (not the household). Returns nothing to delete beyond this member's own rows. */
 export async function removeMember(ctx: HouseholdContext): Promise<void> {
-  await exec("DELETE FROM auth_links WHERE auth_user_id = $1", [ctx.authUserId]);
-  if (ctx.person) await exec("DELETE FROM people WHERE id = $1", [ctx.person.id]);
+  await withTransaction(async () => {
+    // Requests survive member departure as household intent; the FK is SET
+    // NULL and this explicit update also supports pre-migration SQLite data.
+    if (ctx.person) await exec("UPDATE school_requests SET person_id=NULL WHERE person_id=$1", [ctx.person.id]);
+    await exec("DELETE FROM auth_links WHERE auth_user_id=$1", [ctx.authUserId]);
+    if (ctx.person) await exec("DELETE FROM people WHERE id=$1 AND household_id=$2", [ctx.person.id, ctx.household.id]);
+  });
 }
 
 /**
@@ -415,19 +402,20 @@ export async function removeMember(ctx: HouseholdContext): Promise<void> {
  * own sign-in; a fresh empty plan is created if they sign in again).
  */
 export async function deleteHousehold(householdId: string): Promise<string[]> {
-  const members = (await queryRows<any>("SELECT auth_user_id FROM auth_links WHERE household_id = $1", [householdId])).map(
-    (r) => r.auth_user_id as string
-  );
-  const studentIds = "(SELECT id FROM students WHERE household_id = $1)";
-  const relIds = `(SELECT id FROM institution_relationships WHERE student_id IN ${studentIds})`;
-  const actionIds = `(SELECT id FROM action_instances WHERE relationship_id IN ${relIds})`;
-  await exec(`DELETE FROM action_events WHERE action_id IN ${actionIds}`, [householdId]);
-  await exec(`DELETE FROM action_instances WHERE relationship_id IN ${relIds}`, [householdId]);
-  await exec(`DELETE FROM institution_relationships WHERE student_id IN ${studentIds}`, [householdId]);
-  await exec("DELETE FROM students WHERE household_id = $1", [householdId]);
-  await exec("DELETE FROM household_invites WHERE household_id = $1", [householdId]);
-  await exec("DELETE FROM auth_links WHERE household_id = $1", [householdId]);
-  await exec("DELETE FROM people WHERE household_id = $1", [householdId]);
-  await exec("DELETE FROM households WHERE id = $1", [householdId]);
-  return members;
+  return withTransaction(async () => {
+    const members = (await queryRows<any>("SELECT auth_user_id FROM auth_links WHERE household_id=$1", [householdId])).map((r) => r.auth_user_id as string);
+    const studentIds = "(SELECT id FROM students WHERE household_id = $1)";
+    const relIds = `(SELECT id FROM institution_relationships WHERE student_id IN ${studentIds})`;
+    const actionIds = `(SELECT id FROM action_instances WHERE relationship_id IN ${relIds})`;
+    await exec(`DELETE FROM action_events WHERE action_id IN ${actionIds}`, [householdId]);
+    await exec(`DELETE FROM action_instances WHERE relationship_id IN ${relIds}`, [householdId]);
+    await exec(`DELETE FROM institution_relationships WHERE student_id IN ${studentIds}`, [householdId]);
+    await exec("DELETE FROM students WHERE household_id=$1", [householdId]);
+    await exec("DELETE FROM school_requests WHERE household_id=$1", [householdId]);
+    await exec("DELETE FROM household_invites WHERE household_id=$1", [householdId]);
+    await exec("DELETE FROM auth_links WHERE household_id=$1", [householdId]);
+    await exec("DELETE FROM people WHERE household_id=$1", [householdId]);
+    await exec("DELETE FROM households WHERE id=$1", [householdId]);
+    return members;
+  });
 }

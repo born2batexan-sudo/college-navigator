@@ -29,7 +29,7 @@ describe("school request queue", () => {
 
   it("deduplicates by school and start term and reports term demand", async () => {
     const ctx = await A.provisionAccount({ authUserId: "queue-user-terms", email: "terms@example.com" });
-    await Q.upsertDirectorySchool({ unitid: "105", name: "Term College" });
+    await Q.upsertDirectorySchool({ unitid: "105", name: "Term College", domain: "term.edu" });
     const fall = await Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "105", term: "Fall 2027" });
     const winter = await Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "105", term: "Winter 2028" });
     assert.equal(fall.created, true);
@@ -44,15 +44,15 @@ describe("school request queue", () => {
     const ctx = await A.provisionAccount({ authUserId: "queue-user-2", email: "queue2@example.com" });
     const schools = [["101", "One College"], ["102", "Two College"], ["103", "Three College"]] as const;
     for (const [unitid, name] of schools) {
-      await Q.upsertDirectorySchool({ unitid, name });
+      await Q.upsertDirectorySchool({ unitid, name, domain: `${unitid}.edu` });
       await Q.createSchoolRequest({ householdId: ctx.household.id, unitid, term: "Fall 2027" });
     }
-    await Q.upsertDirectorySchool({ unitid: "104", name: "Four College" });
+    await Q.upsertDirectorySchool({ unitid: "104", name: "Four College", domain: "four.edu" });
     await assert.rejects(() => Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "104", term: "Fall 2027" }), /three new schools/);
     const claim = await Q.claimNextResearchJob();
     assert.ok(claim); assert.equal(claim?.job.attempts, 1);
     assert.equal(await Q.claimNextResearchJob(), null);
-    const reviewed = await Q.reportResearchJob({ unitid: claim!.job.unitid, term: claim!.job.term, attempt: 1, outcome: "review", costCents: 0, note: "test hold" });
+    const reviewed = await Q.reportResearchJob({ unitid: claim!.job.unitid, term: claim!.job.term, attempt: 1, attemptId: claim!.job.attemptId!, outcome: "review", costCents: 0, note: "test hold" });
     assert.equal(reviewed.status, "review");
   });
 });

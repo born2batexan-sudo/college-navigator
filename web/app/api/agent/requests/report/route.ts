@@ -9,16 +9,16 @@ export const dynamic = "force-dynamic";
  * a positive result: requests.ts re-reads the institution's server-side
  * certification status before allowing the ready transition. */
 export async function POST(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "queue");
   if (unauthorized) return unauthorized;
   await ensureAccountSchema();
   const body = await req.json().catch(() => null);
-  if (!body?.unitid || !body?.term || !Number.isInteger(Number(body.attempt)) || !["recheck", "certified", "review", "failed"].includes(body.outcome)) {
-    return NextResponse.json({ error: "unitid, term, integer attempt, and valid outcome are required" }, { status: 400 });
+  if (!body?.unitid || !body?.term || typeof body?.attemptId !== "string" || !Number.isInteger(Number(body.attempt)) || !["recheck", "certified", "review", "failed"].includes(body.outcome)) {
+    return NextResponse.json({ error: "unitid, term, attemptId, integer attempt, and valid outcome are required" }, { status: 400 });
   }
   try {
     const job = await reportResearchJob({
-      unitid: String(body.unitid), term: String(body.term), attempt: Number(body.attempt), outcome: body.outcome,
+      unitid: String(body.unitid), term: String(body.term), attempt: Number(body.attempt), attemptId: body.attemptId, outcome: body.outcome,
       costCents: body.costCents, coveragePct: body.coveragePct, note: typeof body.note === "string" ? body.note.slice(0, 1000) : null,
       slug: typeof body.slug === "string" ? body.slug.slice(0, 120) : null,
     });
