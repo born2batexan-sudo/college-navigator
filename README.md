@@ -29,7 +29,8 @@ The application uses a server-only PostgreSQL connection for data and Supabase o
 
 1. `web/lib/db/deploy/accounts-2026-09-19.sql` if the account tables are not already present;
 2. `web/lib/db/deploy/request-queue.sql` if the request queue is not already present;
-3. `web/lib/db/deploy/20260919-secure-research-queue.sql` last, exactly once through the migration ledger.
+3. `web/lib/db/deploy/20260919-secure-research-queue.sql` last, exactly once through the migration ledger;
+4. `web/lib/db/deploy/20260921-email-validation.sql` after the account/request/research release, exactly once through the migration ledger.
 
 For a brand-new production database, first generate and review a current baseline from the canonical schema and seed requirements; do not improvise from the legacy snapshot. Before traffic, verify every expected table exists, RLS is enabled, `anon`/`authenticated` have no grants, the server runtime role can perform required queries, and two-household isolation passes against PostgreSQL. The staging migration and integrity checks have been exercised; production remains intentionally unmigrated while this pull request is a draft.
 
@@ -73,3 +74,32 @@ python research_agent.py --institution example --domains example.edu --term "Fal
 ```
 
 The research agent refuses an empty domain allow-list and writes term/cycle/applicability/evidence fields through the scoped API. Paid agent calls were not made during this hardening work.
+
+## Paid forwarding-first email validation (closed loop)
+
+Email validation is intentionally forwarding-first and provider-neutral. There
+is no OAuth, IMAP, mailbox credential, inbox search, or public unauthenticated
+intake route. A household owner must explicitly consent while the household is
+in an active `trial` or `paid` entitlement. The app can then issue one private
+revocable/rotatable forwarding alias; only a SHA-256 alias digest is persisted.
+Configure only the non-secret `EMAIL_FORWARDING_DOMAIN` and keep
+`EMAIL_VALIDATION_REPLAY_SECRET` in the deployment secret store.
+
+A future inbound adapter passes normalized evidence and authentication results
+through `web/lib/db/email-validation.ts`. Curated institution sender policies
+are exact hostnames under the institution's approved domains; generic `.edu`
+matching is never used. Only authenticated-original evidence with an exact
+institution, applicant, entering-term, checkpoint, and unique action match may
+make the legal monotonic `submitted -> received` or `received -> complete`
+transition. Forward/ARC evidence creates a suggestion. Quoted, unauthenticated,
+domain-mismatched, ambiguous, unsupported, or illegal evidence is quarantined
+with an append-only decision event. No deadline/payment/research record is
+changed, and demo/template households are excluded.
+
+The reviewed PostgreSQL migration is
+`web/lib/db/deploy/20260921-email-validation.sql`; apply it only through the
+reviewed release process after the existing migrations. Local SQLite picks up
+the matching definitions from `web/lib/db/schema.sql`. The library also
+provides pause, revoke, rotation, deletion, and dry-run normalized-ingestion
+controls. Raw message material and sender local-parts are deliberately not
+part of the schema.
