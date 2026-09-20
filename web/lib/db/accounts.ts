@@ -16,6 +16,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { exec, queryOne, queryRows, newId, nowIso, usingPostgres } from "./client";
 import { upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
+import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
 
 export type AuthLink = {
   id: string;
@@ -82,7 +83,11 @@ export const ALL_TABLES = [
   "change_events",
   "auth_links",
   "household_invites",
+  ...REQUEST_TABLES,
 ];
+
+/** All self-creating DDL statements, including the W4 queue. */
+export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL];
 
 let ensurePromise: Promise<void> | null = null;
 
@@ -108,7 +113,7 @@ export function ensureAccountSchema(): Promise<void> {
 }
 
 async function runEnsure(): Promise<void> {
-  for (const stmt of ACCOUNT_DDL) {
+  for (const stmt of SCHEMA_DDL) {
     try {
       await exec(stmt);
     } catch {
@@ -242,7 +247,7 @@ export const ENTERING_CLASS_YEAR = 2027;
 
 export async function completeOnboarding(
   ctx: HouseholdContext,
-  input: { studentName: string; role: "parent" | "student" }
+  input: { studentName: string; role: "parent" | "student"; enteringTerm?: string }
 ): Promise<Student> {
   const name = input.studentName.trim().slice(0, 60);
   if (!name) throw new Error("Student name is required");
@@ -257,7 +262,7 @@ export async function completeOnboarding(
     gradYear: ENTERING_CLASS_YEAR,
     applicantType: "freshman",
     residency: "unknown",
-    attributes: {},
+    attributes: input.enteringTerm ? { enteringTerm: input.enteringTerm } : {},
   });
   await exec("UPDATE households SET name = $1 WHERE id = $2", [`${name}'s family`, ctx.household.id]);
   if (ctx.person) {
@@ -268,6 +273,14 @@ export async function completeOnboarding(
     ]);
   }
   return student;
+}
+
+/** Updates the student's household-scoped preferences without accepting a student id from the browser. */
+export async function updateStudentAttributes(ctx: HouseholdContext, patch: Record<string, unknown>): Promise<void> {
+  if (!ctx.student) throw new Error("Student setup is required");
+  let current: Record<string, unknown> = {};
+  try { current = JSON.parse(ctx.student.attributes || "{}"); } catch { current = {}; }
+  await exec("UPDATE students SET attributes = $1 WHERE id = $2 AND household_id = $3", [JSON.stringify({ ...current, ...patch }), ctx.student.id, ctx.household.id]);
 }
 
 // ---------- Ownership checks (deny by default) ----------

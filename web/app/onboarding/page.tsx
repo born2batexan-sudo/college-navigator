@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireHousehold } from "@/lib/auth/session";
 import { ENTERING_CLASS_YEAR } from "@/lib/db/accounts";
 import { saveOnboarding } from "./actions";
+import { START_TERMS } from "@/lib/terms";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: {
         <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Set up your family plan</h1>
         <p className="mt-1 text-ink/60">
-          Two quick questions. Navigator currently tracks the Fall {ENTERING_CLASS_YEAR} entering class.
+          Three quick questions. Research currently covers the Fall {ENTERING_CLASS_YEAR} entering class; choosing another term keeps that distinction visible.
         </p>
       </header>
 
@@ -37,6 +38,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams: {
             className="rounded-md border border-line bg-white px-3 py-2 text-ink"
           />
         </label>
+
+        <fieldset className="flex flex-col gap-2 text-sm text-ink/70">
+          <legend className="mb-1">When does the student plan to start?</legend>
+          <select name="enteringTerm" required defaultValue="Fall 2027" className="rounded-md border border-line bg-white px-3 py-2 text-ink">
+            {START_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
+          </select>
+        </fieldset>
 
         <fieldset className="flex flex-col gap-2 text-sm text-ink/70">
           <legend className="mb-1">You are the</legend>

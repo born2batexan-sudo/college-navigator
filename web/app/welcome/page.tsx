@@ -4,7 +4,8 @@ import { requireOnboardedHousehold } from "@/lib/auth/session";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 import { parseAttributes, resolveAttributes } from "@/lib/rules-engine";
 import { COVERAGE_LABELS, COVERAGE_STYLES } from "@/lib/format";
-import { saveSchoolPreferences, stopTracking } from "./actions";
+import { saveSchoolPreferences, saveStartTerm, stopTracking } from "./actions";
+import { START_TERMS, enteringTermFrom, termNotice } from "@/lib/terms";
 import type { Institution, InstitutionRelationship } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export default async function WelcomePage() {
   );
 
   const trackedCount = relationships.filter((r) => r.active).length;
+  const enteringTerm = enteringTermFrom(student) ?? "Fall 2027";
+  const notice = termNotice(enteringTerm);
 
   return (
     <main className="flex flex-col gap-8">
@@ -45,6 +48,16 @@ export default async function WelcomePage() {
           </Link>
         </p>
       </header>
+
+      <section className="rounded-lg border border-line bg-white p-4">
+        <form action={saveStartTerm} className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[16rem] flex-col gap-1 text-sm text-ink/70">Planned start term
+            <select name="enteringTerm" defaultValue={enteringTerm} className="rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink">{START_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}</select>
+          </label>
+          <button type="submit" className="rounded-md border border-accent px-3 py-1.5 text-sm font-medium text-accent">Save term</button>
+        </form>
+        {notice && <p className="mt-3 text-sm text-warn">{notice}</p>}
+      </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {schools.map((institution) => {

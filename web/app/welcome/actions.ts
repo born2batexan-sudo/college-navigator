@@ -10,6 +10,8 @@ import {
 } from "@/lib/db/repo";
 import { materializeActionsForRelationship } from "@/lib/materialize";
 import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { updateStudentAttributes } from "@/lib/db/accounts";
+import { isStartTerm } from "@/lib/terms";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 
 // The student always comes from the signed-in family (requireOnboardedHousehold),
@@ -53,6 +55,14 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
  * touching its underlying tracker or action history. Re-tracking later
  * (saveSchoolPreferences) picks up exactly where this left off.
  */
+export async function saveStartTerm(formData: FormData): Promise<void> {
+  const ctx = await requireOnboardedHousehold();
+  const term = String(formData.get("enteringTerm") ?? "");
+  if (!isStartTerm(term)) throw new Error("Choose a valid start term");
+  await updateStudentAttributes(ctx, { enteringTerm: term });
+  revalidatePath("/welcome"); revalidatePath("/");
+}
+
 export async function stopTracking(formData: FormData): Promise<void> {
   const { student } = await requireOnboardedHousehold();
   const institutionId = String(formData.get("institutionId") ?? "");

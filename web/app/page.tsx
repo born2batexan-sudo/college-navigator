@@ -4,6 +4,8 @@ import { SchoolCard } from "@/components/SchoolCard";
 import { ActionListItem } from "@/components/ActionListItem";
 import Link from "next/link";
 import { parseDateStatus } from "@/lib/date-status";
+import { listFamilyRequests } from "@/lib/db/requests";
+import { enteringTermFrom, termNotice } from "@/lib/terms";
 
 // This reads the SQLite database on every request — it's a live household
 // dashboard, not static marketing content, so opt out of Next's default
@@ -21,6 +23,9 @@ export default async function DashboardPage() {
   // Signed-in family only; the household comes from the sign-in, never from a URL or form.
   const { household, student } = await requireOnboardedHousehold();
   const relationships = await listRelationshipsForStudent(student.id);
+  const schoolRequests = await listFamilyRequests(household.id);
+  const enteringTerm = enteringTermFrom(student) ?? "Fall 2027";
+  const termMessage = termNotice(enteringTerm);
 
   const perSchool = await Promise.all(
     relationships.map(async (rel) => {
@@ -76,6 +81,8 @@ export default async function DashboardPage() {
         </div>
       </header>
 
+      {termMessage && <p className="rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-warn">{termMessage} <Link href="/welcome" className="underline">Update your term</Link>.</p>}
+
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink/50">Schools in play</h2>
         {perSchool.length === 0 && (
@@ -130,6 +137,23 @@ export default async function DashboardPage() {
           </div>
         </section>
       )}
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">School requests</h2>
+          <Link href="/request" className="text-sm text-accent underline">Request a school</Link>
+        </div>
+        {schoolRequests.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line p-5 text-center text-sm text-ink/50">Missing a school? Request it and we will add it after research passes verification.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {schoolRequests.slice(0, 5).map((item) => {
+              const ready = item.job?.status === "ready" && item.institution?.coverageStatus === "certified";
+              return <div key={item.id} className="flex items-center justify-between rounded-lg border border-line bg-white px-4 py-3 text-sm"><span><span className="font-medium text-ink">{item.school.name}</span><span className="ml-2 text-xs text-ink/40">{item.term}</span></span><span className={ready ? "text-ok" : "text-ink/50"}>{ready ? "Verified plan ready" : item.job?.status === "running" ? "Research in progress" : item.job?.status === "review" ? "Held for review" : "In line"}</span></div>;
+            })}
+          </div>
+        )}
+      </section>
 
       <footer className="border-t border-line pt-4 text-sm text-ink/40">
         Protected admissions-content zone: this product manages process, timing, and logistics only. It never reads, stores,
