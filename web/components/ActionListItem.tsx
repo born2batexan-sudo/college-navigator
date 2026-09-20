@@ -26,12 +26,10 @@ export function ActionListItem({ action, schoolName }: Props) {
             {action.priority}
           </span>
           <span className="text-[11px] font-medium uppercase tracking-wide text-ink/40">{schoolName}</span>
-          {action.rule.critical && <span className="text-[11px] font-medium text-accent">Critical</span>}
         </div>
         <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
         <p className="mt-0.5 text-sm text-ink/50">
-          {action.rule.checkpointCode} · {action.rule.domain}
-          {awaiting ? " · waiting on the school" : action.rule.status === "unverified" && " · not yet researched"}
+          {action.rule.domain}{awaiting ? " · waiting on the school" : " · included in your school plan"}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">

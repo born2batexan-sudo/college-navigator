@@ -189,16 +189,15 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2">
             {schoolRequests.slice(0, 5).map((item) => {
               const ready = item.job?.status === "ready" && item.institution?.coverageStatus === "certified";
-              return <div key={item.id} className="flex items-center justify-between rounded-xl border border-line bg-white/80 px-4 py-3 text-sm shadow-card"><span><span className="font-medium text-ink">{item.school.name}</span><span className="ml-2 text-xs text-ink/40">{item.term}</span></span><span className={ready ? "text-ok" : "text-ink/50"}>{ready ? "Verified plan ready" : item.job?.status === "running" ? "Research in progress" : item.job?.status === "review" ? "Held for review" : "In line"}</span></div>;
+              return <div key={item.id} className="flex items-center justify-between rounded-xl border border-line bg-white/80 px-4 py-3 text-sm shadow-card"><span><span className="font-medium text-ink">{item.school.name}</span><span className="ml-2 text-xs text-ink/40">{item.term}</span></span><span className={ready ? "text-ok" : "text-ink/50"}>{ready ? "Plan ready" : item.job?.status === "running" ? "Preparing your plan" : item.job?.status === "review" ? "Quality review" : "In line"}</span></div>;
             })}
           </div>
         )}
       </section>
 
       <footer className="border-t border-line pt-4 text-sm text-ink/40">
-        Protected admissions-content zone: this product manages process, timing, and logistics only. It never reads, stores,
-        or scores essays or personal statements. School plans are published only after they pass the 144-check 12² Standard,
-        with checkpoint-level source provenance.
+        School plans are reviewed under the 12² Standard. We examine 144 college-specific requirements and signals, then
+        surface only the actions and deadlines that matter to your family. We never read, store, or score essays or personal statements.
       </footer>
     </main>
   );

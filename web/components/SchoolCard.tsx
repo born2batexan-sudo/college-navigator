@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { COVERAGE_LABELS, COVERAGE_STYLES } from "@/lib/format";
 import { StatePill } from "./StatusPill";
 import type { Institution, InstitutionRelationship } from "@/lib/db/types";
 
@@ -43,8 +42,8 @@ export function SchoolCard({ institution, relationship, openCount }: { instituti
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-display text-lg font-semibold text-ink transition group-hover:text-accent">{institution.name}</span>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COVERAGE_STYLES[institution.coverageStatus]}`}>
-          {COVERAGE_LABELS[institution.coverageStatus]} · {institution.coveragePct}%
+        <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[11px] font-medium text-ok">
+          Plan ready
         </span>
       </div>
       <div className="flex items-center justify-between gap-3 text-sm text-ink/60">

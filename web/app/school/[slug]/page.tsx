@@ -2,141 +2,91 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   getInstitutionBySlug,
-  listRulesForInstitution,
   listRelationshipsForStudent,
   listActionInstancesForRelationship,
 } from "@/lib/db/repo";
 import { requireOnboardedHousehold } from "@/lib/auth/session";
-import { COVERAGE_LABELS, COVERAGE_STYLES, STATE_LABELS, STATE_STYLES } from "@/lib/format";
-import { StatePill } from "@/components/StatusPill";
-import { parseDateStatus, lastYearLine, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
+import { ActionListItem } from "@/components/ActionListItem";
+import { parseDateStatus } from "@/lib/date-status";
 import { enteringTermFrom, RESEARCHED_TERM } from "@/lib/terms";
 import { canHouseholdViewInstitution } from "@/lib/db/requests";
 import { getCoverageVersion } from "@/lib/coverage";
 
 export const dynamic = "force-dynamic";
 
+const OPEN_STATES = new Set(["not_started", "started", "submitted", "received", "blocked"]);
+
 export default async function SchoolTrackerPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  // The 144-point standard is the same for everyone; the action states shown are this family's own.
   const { student, household } = await requireOnboardedHousehold();
-
   const institution = await getInstitutionBySlug(slug);
   if (!institution) notFound();
+
   const term = enteringTermFrom(student) ?? RESEARCHED_TERM;
-  // Queue-created schools are private until this household requested this
-  // exact term and that term's research version is server-certified/ready.
   if (!(await canHouseholdViewInstitution(household.id, institution.id, term))) notFound();
 
-  const rules = await listRulesForInstitution(institution.id, term);
   const coverage = await getCoverageVersion(institution.id, term);
-  const coverageStatus = coverage?.status ?? institution.coverageStatus;
-  const coveragePct = coverage?.pct ?? institution.coveragePct;
+  if (coverage?.status !== "certified" && institution.coverageStatus !== "certified") notFound();
 
   const relationships = await listRelationshipsForStudent(student.id);
   const relationship = relationships.find((r) => r.institutionId === institution.id) ?? null;
-  const actionsByRuleId = new Map<string, Awaited<ReturnType<typeof listActionInstancesForRelationship>>[number]>();
-  if (relationship) {
-    for (const a of await listActionInstancesForRelationship(relationship.id)) {
-      actionsByRuleId.set(a.ruleId, a);
-    }
-  }
-
-  const domains = Array.from(new Set(rules.map((r) => r.domain)));
-  const verifiedCount = rules.filter((r) => r.status === "verified").length;
-  const criticalUnverified = rules.filter((r) => r.critical && r.status === "unverified");
-  // Critical items the school simply hasn't published this cycle's details for are a different
-  // situation from critical items nobody has researched yet.
-  const criticalAwaiting = criticalUnverified.filter((r) => r.applicability === "not_yet_published").length;
-  const criticalNeedResearch = criticalUnverified.length - criticalAwaiting;
+  const actions = relationship ? await listActionInstancesForRelationship(relationship.id, term) : [];
+  const pertinentActions = actions
+    .filter((action) => OPEN_STATES.has(action.state) && parseDateStatus(action.rule).kind !== "not_applicable")
+    .sort((a, b) => {
+      if (a.dueAt && b.dueAt) return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+      if (a.dueAt) return -1;
+      if (b.dueAt) return 1;
+      return 0;
+    });
 
   return (
-    <main className="flex flex-col gap-6">
+    <main className="flex flex-col gap-8">
       <Link href="/" className="text-sm text-ink/50 hover:underline">
         ← Back to household dashboard
       </Link>
 
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold text-ink">{institution.name}</h1>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${COVERAGE_STYLES[coverageStatus]}`}>
-            {COVERAGE_LABELS[coverageStatus]}
-          </span>
-        </div>
-        <p className="text-sm text-ink/60">
-          144-point inspection: {verifiedCount}/144 checkpoints verified ({coveragePct}%).{" "}
-          {criticalNeedResearch > 0 &&
-            `${criticalNeedResearch} critical ${criticalNeedResearch === 1 ? "checkpoint still needs" : "checkpoints still need"} research — this school cannot certify until ${criticalNeedResearch === 1 ? "that clears" : "those clear"}. `}
-          {criticalAwaiting > 0 &&
-            `${criticalAwaiting} critical ${criticalAwaiting === 1 ? "checkpoint is" : "checkpoints are"} waiting for ${institution.name} to publish ${term} details. ${criticalAwaiting === 1 ? "It doesn't" : "They don't"} hold back certification, and we verify ${criticalAwaiting === 1 ? "it" : "them"} as soon as ${criticalAwaiting === 1 ? "it is" : "they are"} posted. `}
-          {criticalUnverified.length === 0 && "All critical checkpoints are verified."}
-        </p>
-        <p className="text-xs text-ink/40">
-          Certification gates (per the platform standard): Certified ≥90% with no critical gaps · Beta 75–89% or one
-          critical gap · Research 50–74% · Unsupported below 50%. A critical item the school has not published yet is
-          not counted as a gap, and it is not counted as verified either.
+      <header className="rounded-2xl bg-tealDark p-6 text-white shadow-card sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gold">Your school plan</p>
+        <h1 className="mt-2 font-display text-3xl font-semibold leading-tight">{institution.name}</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/70">
+          Reviewed for {term} under the 12² Standard. We examine 144 college-specific requirements and signals, then
+          surface only the actions and deadlines that matter to your family.
         </p>
       </header>
 
-      {domains.map((domain) => {
-        const domainRules = rules.filter((r) => r.domain === domain);
-        return (
-          <section key={domain}>
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/50">{domain}</h2>
-            <div className="overflow-hidden rounded-lg border border-line bg-white">
-              {domainRules.map((rule, i) => {
-                const action = actionsByRuleId.get(rule.id);
-                const dateStatus = parseDateStatus(rule);
-                const content = (
-                  <div
-                    className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm ${
-                      i !== domainRules.length - 1 ? "border-b border-line" : ""
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-ink/40">{rule.checkpointCode}</span>
-                        {rule.critical && <span className="text-[10px] font-semibold uppercase text-accent">Critical</span>}
-                        <span className="truncate text-ink/80">{rule.title}</span>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {rule.applicability === "not_yet_published" ? (
-                        <span
-                          className="rounded-full bg-warn/10 px-2 py-0.5 text-[11px] font-medium text-warn"
-                          title={lastYearLine(dateStatus) ?? undefined}
-                        >
-                          {DATE_NOT_POSTED_LABEL}
-                        </span>
-                      ) : rule.applicability === "not_applicable" ? (
-                        <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-medium text-ink/50">
-                          Doesn&apos;t apply here
-                        </span>
-                      ) : rule.status === "verified" ? (
-                        <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[11px] font-medium text-ok">
-                          Verified · {rule.confidence}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-medium text-ink/40">
-                          Not yet researched
-                        </span>
-                      )}
-                      {action && <StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} />}
-                    </div>
-                  </div>
-                );
-                return action ? (
-                  <Link key={rule.id} href={`/action/${action.id}`} className="block hover:bg-ink/[0.02]">
-                    {content}
-                  </Link>
-                ) : (
-                  <div key={rule.id}>{content}</div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+      <section>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Prioritized for your family</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-ink">What needs attention</h2>
+          </div>
+          <span className="text-sm text-ink/45">
+            {pertinentActions.length} open action{pertinentActions.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {pertinentActions.length === 0 ? (
+          <div className="rounded-2xl border border-line bg-white/80 p-7 text-center shadow-card">
+            <p className="font-display text-xl font-semibold text-ink">Nothing needs your attention right now.</p>
+            <p className="mt-2 text-sm text-ink/55">We will add an action here when a relevant requirement or deadline needs you.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {pertinentActions.map((action) => (
+              <ActionListItem key={action.id} action={action} schoolName={institution.name} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <aside className="rounded-2xl border border-line bg-white/65 p-5 text-sm text-ink/60">
+        <p className="font-semibold text-ink">How this plan stays simple</p>
+        <p className="mt-1 leading-relaxed">
+          We monitor admissions, financial aid, housing, enrollment, health, orientation, and other applicable areas in
+          the background. You see only the items that require awareness or action.
+        </p>
+      </aside>
     </main>
   );
 }

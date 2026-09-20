@@ -60,27 +60,20 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         <div className="flex items-center gap-2 text-sm text-ink/40">
           <span>{action.relationship.institution.name}</span>
           <span>·</span>
-          <span>
-            {action.rule.checkpointCode} — {action.rule.domain}
-          </span>
+          <span>{action.rule.domain}</span>
         </div>
         <h1 className="text-xl font-semibold text-ink">
           {dateStatus.kind === "awaiting" ? action.rule.title : (g?.what ?? action.rule.title)}
         </h1>
         <div className="flex items-center gap-2">
           <StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} />
-          {action.rule.critical && <span className="text-xs font-medium text-accent">Critical checkpoint</span>}
           {dateStatus.kind === "awaiting" ? (
             <span className="text-xs font-medium text-warn">
               Waiting for {schoolName} to post {dateStatus.term} details
             </span>
           ) : dateStatus.kind === "not_applicable" ? (
             <span className="text-xs font-medium text-ink/50">Doesn&apos;t apply at {schoolName}</span>
-          ) : (
-            action.rule.status === "unverified" && (
-              <span className="text-xs font-medium text-warn">Not yet independently researched</span>
-            )
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -115,12 +108,9 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           )}
         </section>
       ) : dateStatus.kind === "not_applicable" ? null : (
-        <section className="rounded-lg border border-dashed border-line p-4 text-sm text-ink/60">
-          {dateStatus.kind === "current" && <p className="mb-2 font-medium text-ink">{action.rule.requirement}</p>}
-          <p>
-            No plain-language guidance has been generated for this checkpoint yet. This is queued for the Guidance
-            Generation Agent once the underlying rule reaches verified status.
-          </p>
+        <section className="rounded-lg border border-line bg-white p-4 text-sm text-ink/70">
+          <p className="font-medium text-ink">{action.rule.requirement}</p>
+          <p className="mt-2 text-ink/55">We are preparing clearer instructions for this item. Use the official source below before acting.</p>
         </section>
       )}
 
@@ -131,11 +121,10 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </p>
       )}
 
-      <section className="grid grid-cols-2 gap-4 rounded-lg border border-line bg-white p-4 text-sm sm:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-white p-4 text-sm sm:grid-cols-3">
         <Stat label="Due" value={dateStatus.kind === "awaiting" ? "Not posted yet" : formatDate(action.dueAt)} />
         <Stat label="Cost" value={formatMoney(dateStatus.kind === "awaiting" ? null : action.rule.costCents)} />
         <Stat label="Refundable" value={action.rule.refundable} />
-        <Stat label="Confidence" value={action.rule.confidence} />
       </section>
 
       <section>
@@ -159,10 +148,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
               </form>
             ))}
           </div>
-          <p className="mt-2 text-xs text-ink/40">
-            In the full product, Submitted → Received → Complete transitions are also detected automatically by the
-            browser companion observing the school's own portal — this button is the manual fallback.
-          </p>
+          <p className="mt-2 text-xs text-ink/40">Keep this status current so your household plan reflects what has happened.</p>
         </section>
       )}
 
@@ -184,7 +170,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
 
       {action.source && (
         <footer className="border-t border-line pt-3 text-xs text-ink/40">
-          Source: {action.source.label} — last verified {formatDate(action.source.lastVerified)} —{" "}
+          Official source: {action.source.label} — last reviewed {formatDate(action.source.lastVerified)} —{" "}
           <a href={action.source.url} target="_blank" rel="noreferrer" className="underline">
             {action.source.url}
           </a>
