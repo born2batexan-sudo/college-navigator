@@ -157,11 +157,8 @@ export default async function DashboardPage() {
 
       <footer className="border-t border-line pt-4 text-sm text-ink/40">
         Protected admissions-content zone: this product manages process, timing, and logistics only. It never reads, stores,
-        or scores essays or personal statements. See the{" "}
-        <Link href="/school/alabama" className="underline">
-          Alabama 144-point tracker
-        </Link>{" "}
-        for full checkpoint-level provenance.
+        or scores essays or personal statements. School plans are published only after they pass the 144-check 12² Standard,
+        with checkpoint-level source provenance.
       </footer>
     </main>
   );
