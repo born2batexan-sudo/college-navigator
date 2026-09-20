@@ -47,9 +47,12 @@ function sqliteStatement(sql: string, db = getSqlite()): StatementSync {
 function getPgPool(): Pool {
   if (!globalThis.__cnPgPool) {
     const isLocal = /localhost|127\.0\.0\.1/.test(DATABASE_URL!);
+    const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n").trim();
     globalThis.__cnPgPool = new Pool({
       connectionString: DATABASE_URL,
-      ssl: isLocal ? false : { rejectUnauthorized: true },
+      // Remote database certificates are always verified. Supabase's pooler
+      // uses its own CA, supplied through the deployment secret store.
+      ssl: isLocal ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
       max: 3,
     });
   }
@@ -111,3 +114,4 @@ export async function withTransaction<T>(fn: () => Promise<T>, mode: "deferred" 
 
 export function newId(prefix: string): string { return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`; }
 export function nowIso(): string { return new Date().toISOString(); }
+

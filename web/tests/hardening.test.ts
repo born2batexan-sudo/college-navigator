@@ -8,6 +8,13 @@ process.env.DB_PATH=path.join(dir,"hardening.sqlite3");delete process.env.DATABA
 let R:typeof import("../lib/db/repo"),Q:typeof import("../lib/db/requests"),A:typeof import("../lib/db/accounts"),D:typeof import("../lib/db/client"),C:typeof import("../lib/coverage"),M:typeof import("../lib/materialize");
 describe("secure research and queue invariants",()=>{
  before(async()=>{R=await import("../lib/db/repo");Q=await import("../lib/db/requests");A=await import("../lib/db/accounts");D=await import("../lib/db/client");C=await import("../lib/coverage");M=await import("../lib/materialize");});
+
+ it("keeps remote Postgres TLS verification enabled and accepts an explicit CA",async()=>{
+  const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../lib/db/client.ts",import.meta.url),"utf8"));
+  assert.match(source,/DATABASE_CA_CERT/);
+  assert.match(source,/rejectUnauthorized:\s*true/);
+  assert.doesNotMatch(source,/rejectUnauthorized:\s*false/);
+ });
  it("rejects source-less, foreign-source, and off-domain evidence and isolates terms",async()=>{
   const one=await R.upsertInstitution({name:"Evidence One",slug:"evidence-one",domains:["one.edu"]});
   const two=await R.upsertInstitution({name:"Evidence Two",slug:"evidence-two",domains:["two.edu"]});
@@ -72,3 +79,4 @@ describe("secure research and queue invariants",()=>{
   await A.deleteHousehold(hh.household.id);assert.equal((await Q.listFamilyRequests(hh.household.id)).length,0);
  });
 });
+
