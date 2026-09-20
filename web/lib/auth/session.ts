@@ -1,9 +1,9 @@
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createHash } from "node:crypto";
 import { createSupabaseServerClient } from "./supabase-server";
 import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "./env";
-import { ensureAccountSchema, provisionAccount, type HouseholdContext } from "@/lib/db/accounts";
+import { ensureAccountSchema, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
 import type { Student } from "@/lib/db/types";
 
 export type SessionUser = { id: string; email: string | null };
@@ -52,6 +52,25 @@ export async function requireOnboardedHousehold(): Promise<HouseholdContext & { 
   const ctx = await requireHousehold();
   if (!ctx.student) redirect("/onboarding");
   return ctx as HouseholdContext & { student: Student };
+}
+
+/** Signed-in household write gates. Reads continue to use the normal helpers. */
+export async function requireWritableHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
+  const ctx = await requireHousehold(opts);
+  return assertWritableHousehold(ctx);
+}
+
+export async function requireWritableOnboardedHousehold(): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireOnboardedHousehold();
+  return assertWritableOnboardedHousehold(ctx);
+}
+
+/** Private-preview administration is intentionally fail-closed. */
+export async function requireDemoOwner(): Promise<SessionUser> {
+  const user = await requireUser({ next: "/admin/demo" });
+  if (!isDemoOwnerEmail(user.email)) notFound();
+  await ensureAccountSchema();
+  return user;
 }
 
 /** The address the browser used to reach us (works on preview and production URLs alike). */

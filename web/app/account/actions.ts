@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { requireHousehold, requireUser } from "@/lib/auth/session";
+import { requireHousehold, requireUser, requireWritableHousehold } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 import { DEV_COOKIE, SUPABASE_URL, devLoginEnabled, supabaseConfigured } from "@/lib/auth/env";
 import { createInvite, deleteHousehold, removeMember } from "@/lib/db/accounts";
@@ -21,7 +21,7 @@ export async function signOut(): Promise<void> {
 
 /** Makes a one-time link the family can send to the other parent or the student. */
 export async function makeInvite(formData: FormData): Promise<void> {
-  const ctx = await requireHousehold();
+  const ctx = await requireWritableHousehold();
   const role = formData.get("role") === "student" ? "student" : "parent";
   const result = await createInvite(ctx, role);
   if (!result.ok) redirect("/account?error=" + encodeURIComponent("You already have 5 open invites. Wait for one to be used or expire."));
@@ -49,7 +49,7 @@ async function deleteSignInRecords(authUserIds: string[]): Promise<boolean> {
  * any other member only removes themself.
  */
 export async function deleteAccount(formData: FormData): Promise<void> {
-  const ctx = await requireHousehold();
+  const ctx = await requireWritableHousehold();
   if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
     redirect("/account?error=" + encodeURIComponent("Type DELETE to confirm."));
   }

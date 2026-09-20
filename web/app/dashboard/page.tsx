@@ -22,7 +22,7 @@ const isOpen = (a: { state: string; rule: { requirement: string } }) =>
 
 export default async function DashboardPage() {
   // Signed-in family only; the household comes from the sign-in, never from a URL or form.
-  const { household, student } = await requireOnboardedHousehold();
+  const { household, student, isDemo } = await requireOnboardedHousehold();
   const relationships = await listRelationshipsForStudent(student.id);
   const schoolRequests = await listFamilyRequests(household.id);
   const enteringTerm = enteringTermFrom(student);
@@ -76,12 +76,12 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Link
+            {!isDemo && <Link
               href="/welcome"
               className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink/70 transition hover:border-accent/40 hover:text-accent"
             >
               Manage schools
-            </Link>
+            </Link>}
             <Link
               href="/account"
               className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink/70 transition hover:border-accent/40 hover:text-accent"
@@ -92,6 +92,7 @@ export default async function DashboardPage() {
         </div>
       </header>
 
+      {isDemo && <p className="rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="font-semibold text-accent">Private Preview</strong> · This sample household is read-only. Changes are disabled.</p>}
       {termMessage && <p className="rounded-xl border border-warn/30 bg-warn/10 p-4 text-sm text-warn">{termMessage} <Link href="/welcome" className="font-semibold underline">Update your term</Link>.</p>}
 
       <section aria-label="Plan summary" className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1.35fr]">
@@ -178,7 +179,7 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      <section>
+      {!isDemo && <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-2xl font-semibold text-ink">School requests</h2>
           <Link href="/request" className="text-sm font-semibold text-accent underline decoration-accent/30 underline-offset-4">Request a school</Link>
@@ -193,7 +194,7 @@ export default async function DashboardPage() {
             })}
           </div>
         )}
-      </section>
+      </section>}
 
       <footer className="border-t border-line pt-4 text-sm text-ink/40">
         School plans are reviewed under the 12² Standard. We examine 144 college-specific requirements and signals, then

@@ -25,7 +25,7 @@ const NEXT_STATES: Record<string, string[]> = {
 
 export default async function ActionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { household } = await requireOnboardedHousehold();
+  const { household, isDemo } = await requireOnboardedHousehold();
   // Someone else's action looks exactly like one that does not exist.
   if (!(await actionBelongsToHousehold(id, household.id))) notFound();
   const action = await getActionInstanceFull(id);
@@ -132,7 +132,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         <p className="rounded-lg bg-ink/5 p-3 text-sm text-ink/70">{action.applicabilityReason}</p>
       </section>
 
-      {NEXT_STATES[action.state]?.length > 0 && (
+      {!isDemo && NEXT_STATES[action.state]?.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/50">Update status</h2>
           <div className="flex flex-wrap gap-2">

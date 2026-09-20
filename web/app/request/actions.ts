@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { requireWritableOnboardedHousehold } from "@/lib/auth/session";
 import { createSchoolRequest } from "@/lib/db/requests";
 import { enteringTermFrom } from "@/lib/terms";
 
 export async function requestSchool(formData: FormData): Promise<void> {
-  const ctx = await requireOnboardedHousehold();
+  const ctx = await requireWritableOnboardedHousehold();
   const unitid = String(formData.get("unitid") ?? "").trim();
   if (!/^\d+$/.test(unitid)) redirect("/request?error=Choose+a+school+from+the+directory.");
   const term = enteringTermFrom(ctx.student);

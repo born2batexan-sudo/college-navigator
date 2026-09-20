@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireHousehold } from "@/lib/auth/session";
+import { requireWritableHousehold } from "@/lib/auth/session";
 import { completeOnboarding } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
 
@@ -13,7 +13,7 @@ const schema = z.object({
 });
 
 export async function saveOnboarding(formData: FormData): Promise<void> {
-  const ctx = await requireHousehold();
+  const ctx = await requireWritableHousehold();
   const parsed = schema.safeParse({ studentName: formData.get("studentName"), role: formData.get("role"), enteringTerm: formData.get("enteringTerm") });
   if (!parsed.success) {
     redirect(`/onboarding?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Please check the form.")}`);

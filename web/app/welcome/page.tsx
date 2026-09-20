@@ -3,7 +3,6 @@ import { listRelationshipsForStudent, listInstitutions } from "@/lib/db/repo";
 import { requireOnboardedHousehold } from "@/lib/auth/session";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 import { parseAttributes, resolveAttributes } from "@/lib/rules-engine";
-import { COVERAGE_LABELS, COVERAGE_STYLES } from "@/lib/format";
 import { saveSchoolPreferences, saveStartTerm, stopTracking } from "./actions";
 import { START_TERMS, enteringTermFrom, termNotice } from "@/lib/terms";
 import type { Institution, InstitutionRelationship } from "@/lib/db/types";
@@ -18,7 +17,7 @@ const HOUSING_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export default async function WelcomePage() {
-  const { student } = await requireOnboardedHousehold();
+  const { student, isDemo } = await requireOnboardedHousehold();
   const allInstitutions = await listInstitutions();
   const relationships = await listRelationshipsForStudent(student.id, { includeInactive: true });
   const relByInstitution = new Map<string, InstitutionRelationship>(relationships.map((r) => [r.institutionId, r]));
@@ -37,10 +36,10 @@ export default async function WelcomePage() {
         <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Schools to track</h1>
         <p className="mt-1 max-w-2xl text-ink/60">
-          Choose which schools {student.name} is actively juggling, and answer a few quick questions for each one.
-          Those answers — housing plan, Greek life interest, bringing a car, disability accommodations — decide which
-          of the 144 checkpoints actually apply, so the action queue only shows what's relevant to that school.
+          Keep every college-specific requirement in one calm plan. A few household preferences help us surface only
+          the actions, deadlines, and decisions that are pertinent to this student.
         </p>
+        {isDemo && <p className="mt-3 rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="text-accent">Private Preview</strong> · School settings are shown for context; changes are disabled.</p>}
         <p className="mt-3 text-sm text-ink/40">
           Currently tracking {trackedCount} of {schools.length} schools ·{" "}
           <Link href="/" className="underline">
@@ -52,9 +51,9 @@ export default async function WelcomePage() {
       <section className="rounded-lg border border-line bg-white p-4">
         <form action={saveStartTerm} className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[16rem] flex-col gap-1 text-sm text-ink/70">Planned start term
-            <select name="enteringTerm" defaultValue={enteringTerm} className="rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink">{START_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}</select>
+            <select name="enteringTerm" defaultValue={enteringTerm} disabled={isDemo} className="rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink disabled:opacity-60">{START_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}</select>
           </label>
-          <button type="submit" className="rounded-md border border-accent px-3 py-1.5 text-sm font-medium text-accent">Save term</button>
+          <button type="submit" disabled={isDemo} className="rounded-md border border-accent px-3 py-1.5 text-sm font-medium text-accent disabled:cursor-not-allowed disabled:opacity-50">Save term</button>
         </form>
         {notice && <p className="mt-3 text-sm text-warn">{notice}</p>}
       </section>
@@ -81,11 +80,7 @@ export default async function WelcomePage() {
                     )}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${COVERAGE_STYLES[institution.coverageStatus]}`}
-                >
-                  {COVERAGE_LABELS[institution.coverageStatus]} · {institution.coveragePct}%
-                </span>
+                {isActive && <span className="shrink-0 rounded-full bg-ok/10 px-2 py-0.5 text-[11px] font-medium text-ok">Plan ready</span>}
               </div>
 
               <form action={saveSchoolPreferences} className="flex flex-col gap-3">
@@ -96,7 +91,8 @@ export default async function WelcomePage() {
                   <select
                     name="housingPlan"
                     defaultValue={attrs.housingPlan ?? "undecided"}
-                    className="rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink"
+                    disabled={isDemo}
+                    className="rounded-md border border-line bg-white px-2 py-1.5 text-sm text-ink disabled:opacity-60"
                   >
                     {HOUSING_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -107,12 +103,12 @@ export default async function WelcomePage() {
                 </label>
 
                 <label className="flex items-center gap-2 text-sm text-ink/70">
-                  <input type="checkbox" name="greekInterest" defaultChecked={attrs.greekInterest === true} />
+                  <input type="checkbox" name="greekInterest" defaultChecked={attrs.greekInterest === true} disabled={isDemo} />
                   Interested in Greek life / recruitment
                 </label>
 
                 <label className="flex items-center gap-2 text-sm text-ink/70">
-                  <input type="checkbox" name="bringingCar" defaultChecked={attrs.bringingCar === true} />
+                  <input type="checkbox" name="bringingCar" defaultChecked={attrs.bringingCar === true} disabled={isDemo} />
                   Bringing a car to campus
                 </label>
 
@@ -121,6 +117,7 @@ export default async function WelcomePage() {
                     type="checkbox"
                     name="disabilityAccommodation"
                     defaultChecked={attrs.disabilityAccommodation === true}
+                    disabled={isDemo}
                   />
                   Needs disability accommodations
                 </label>
@@ -128,7 +125,8 @@ export default async function WelcomePage() {
                 <div className="mt-1 flex items-center gap-3">
                   <button
                     type="submit"
-                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90"
+                    disabled={isDemo}
+                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isActive ? "Save preferences" : wasRemoved ? "Resume tracking" : "Start tracking"}
                   </button>
@@ -143,7 +141,7 @@ export default async function WelcomePage() {
               {isActive && (
                 <form action={stopTracking} className="border-t border-line pt-3">
                     <input type="hidden" name="institutionId" value={institution.id} />
-                  <button type="submit" className="text-sm text-ink/40 underline hover:text-urgent">
+                  <button type="submit" disabled={isDemo} className="text-sm text-ink/40 underline hover:text-urgent disabled:cursor-not-allowed disabled:opacity-40">
                     Stop tracking this school
                   </button>
                 </form>

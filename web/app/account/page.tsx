@@ -29,6 +29,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         </p>
       )}
 
+      {ctx.isDemo && <p className="rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="text-accent">Private Preview</strong> · This sample household is read-only. Changes are disabled.</p>}
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Who shares this plan</h2>
         <ul className="flex flex-col gap-1 text-sm text-ink/70">
@@ -39,7 +40,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
           ))}
         </ul>
 
-        {inviteUrl ? (
+        {ctx.isDemo ? <p className="text-sm text-ink/55">Member invitations are unavailable in Private Preview.</p> : inviteUrl ? (
           <div className="rounded-lg border border-line bg-white p-4 text-sm">
             <p className="font-medium text-ink">Send this link to the person you are inviting</p>
             <p className="mt-1 break-all rounded bg-ink/5 p-2 font-mono text-xs text-ink/80">{inviteUrl}</p>
@@ -71,7 +72,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         </form>
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-line pt-6">
+      {!ctx.isDemo && <section className="flex flex-col gap-3 border-t border-line pt-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/50">Delete my account</h2>
         <p className="text-sm text-ink/60">
           {ctx.isOwner
@@ -87,7 +88,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             Delete my account
           </button>
         </form>
-      </section>
+      </section>}
     </main>
   );
 }

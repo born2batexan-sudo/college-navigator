@@ -10,7 +10,7 @@ import {
   listRelationshipsForStudent,
 } from "@/lib/db/repo";
 import { materializeActionsForRelationship } from "@/lib/materialize";
-import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { requireWritableOnboardedHousehold } from "@/lib/auth/session";
 import { updateStudentAttributes } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
@@ -26,7 +26,7 @@ import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
  * interest on) immediately updates which of the 144 checkpoints apply.
  */
 export async function saveSchoolPreferences(formData: FormData): Promise<void> {
-  const { student } = await requireOnboardedHousehold();
+  const { student } = await requireWritableOnboardedHousehold();
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
   const institution = await getInstitution(institutionId);
@@ -57,7 +57,7 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
  * (saveSchoolPreferences) picks up exactly where this left off.
  */
 export async function saveStartTerm(formData: FormData): Promise<void> {
-  const ctx = await requireOnboardedHousehold();
+  const ctx = await requireWritableOnboardedHousehold();
   const term = String(formData.get("enteringTerm") ?? "");
   if (!isStartTerm(term)) throw new Error("Choose a valid start term");
   await updateStudentAttributes(ctx, { enteringTerm: term });
@@ -69,7 +69,7 @@ export async function saveStartTerm(formData: FormData): Promise<void> {
 }
 
 export async function stopTracking(formData: FormData): Promise<void> {
-  const { student } = await requireOnboardedHousehold();
+  const { student } = await requireWritableOnboardedHousehold();
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
 
