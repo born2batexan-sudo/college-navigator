@@ -38,7 +38,7 @@ export type HouseholdContext = {
   isOwner: boolean;
 };
 
-// ---------- Schema (self-creating on Postgres) ----------
+// ---------- Schema contract (migrations on Postgres; self-created only in local SQLite) ----------
 
 // Same statements as the end of schema.sql (tests/isolation.test.ts checks
 // they stay identical). All TEXT columns, so they run unchanged on both
@@ -86,7 +86,7 @@ export const ALL_TABLES = [
   ...REQUEST_TABLES,
 ];
 
-/** All self-creating DDL statements, including the W4 queue. */
+/** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */
 export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL];
 
 let ensurePromise: Promise<void> | null = null;
@@ -345,40 +345,55 @@ export type AcceptResult = { ok: true; alreadyMember: boolean } | { ok: false; r
  * no other members), so nobody can lose real data by tapping a link.
  */
 export async function acceptInvite(ctx: HouseholdContext, token: string): Promise<AcceptResult> {
-  const tokenHash = hashToken(token);
-  const inv = await queryOne<any>(
-    "SELECT * FROM household_invites WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > $2",
-    [tokenHash, nowIso()]
-  );
-  if (!inv) return { ok: false, reason: "invalid" };
-  if (inv.household_id === ctx.household.id) return { ok: true, alreadyMember: true };
+  return withTransaction(async () => {
+    // Serialize every invite acceptance for this identity. The context was
+    // created before this transaction, so re-read the link while holding the
+    // lock and fail closed if another request already moved the user.
+    const lock = usingPostgres ? " FOR UPDATE" : "";
+    const currentLink = await queryOne<any>(
+      `SELECT * FROM auth_links WHERE auth_user_id = $1${lock}`,
+      [ctx.authUserId]
+    );
+    if (!currentLink || currentLink.household_id !== ctx.household.id || currentLink.person_id !== (ctx.person?.id ?? null)) {
+      return { ok: false, reason: "invalid" };
+    }
 
-  const memberCount = Number((await queryOne<any>("SELECT COUNT(*) AS n FROM auth_links WHERE household_id = $1", [ctx.household.id]))?.n ?? 0);
-  if (ctx.student || memberCount > 1) return { ok: false, reason: "has_own_family" };
+    const tokenHash = hashToken(token);
+    const inv = await queryOne<any>(
+      `SELECT * FROM household_invites WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > $2${lock}`,
+      [tokenHash, nowIso()]
+    );
+    if (!inv) return { ok: false, reason: "invalid" };
+    if (inv.household_id === currentLink.household_id) return { ok: true, alreadyMember: true };
 
-  // Claim the invite first; only one caller can win.
-  const claimed = await queryOne<any>(
-    "UPDATE household_invites SET accepted_at = $1, accepted_by = $2 WHERE id = $3 AND accepted_at IS NULL RETURNING id",
-    [nowIso(), ctx.authUserId, inv.id]
-  );
-  if (!claimed) return { ok: false, reason: "invalid" };
+    const studentCount = Number((await queryOne<any>("SELECT COUNT(*) AS n FROM students WHERE household_id = $1", [currentLink.household_id]))?.n ?? 0);
+    const memberCount = Number((await queryOne<any>("SELECT COUNT(*) AS n FROM auth_links WHERE household_id = $1", [currentLink.household_id]))?.n ?? 0);
+    if (studentCount > 0 || memberCount > 1) return { ok: false, reason: "has_own_family" };
 
-  const oldHouseholdId = ctx.household.id;
-  const oldPersonId = ctx.person?.id ?? null;
-  const newPersonId = newId("person");
-  await exec(
-    "INSERT INTO people (id, household_id, name, role, email, phone, consent_state, created_at) VALUES ($1, $2, $3, $4, $5, NULL, 'pending', $6)",
-    [newPersonId, inv.household_id, ctx.email ? ctx.email.split("@")[0] : "Member", inv.invited_role, ctx.email, nowIso()]
-  );
-  await exec("UPDATE auth_links SET household_id = $1, person_id = $2, role = 'member' WHERE auth_user_id = $3", [
-    inv.household_id,
-    newPersonId,
-    ctx.authUserId,
-  ]);
-  // Remove the empty household created at sign-up.
-  if (oldPersonId) await exec("DELETE FROM people WHERE id = $1", [oldPersonId]);
-  await exec("DELETE FROM households WHERE id = $1", [oldHouseholdId]);
-  return { ok: true, alreadyMember: false };
+    // Claim, membership move, and empty-household cleanup are one atomic unit.
+    const claimed = await queryOne<any>(
+      "UPDATE household_invites SET accepted_at = $1, accepted_by = $2 WHERE id = $3 AND accepted_at IS NULL RETURNING id",
+      [nowIso(), ctx.authUserId, inv.id]
+    );
+    if (!claimed) return { ok: false, reason: "invalid" };
+
+    const oldHouseholdId = currentLink.household_id;
+    const oldPersonId = currentLink.person_id ?? null;
+    const newPersonId = newId("person");
+    await exec(
+      "INSERT INTO people (id, household_id, name, role, email, phone, consent_state, created_at) VALUES ($1, $2, $3, $4, $5, NULL, 'pending', $6)",
+      [newPersonId, inv.household_id, ctx.email ? ctx.email.split("@")[0] : "Member", inv.invited_role, ctx.email, nowIso()]
+    );
+    await exec("UPDATE auth_links SET household_id = $1, person_id = $2, role = 'member' WHERE auth_user_id = $3 AND household_id = $4", [
+      inv.household_id,
+      newPersonId,
+      ctx.authUserId,
+      oldHouseholdId,
+    ]);
+    if (oldPersonId) await exec("DELETE FROM people WHERE id = $1 AND household_id = $2", [oldPersonId, oldHouseholdId]);
+    await exec("DELETE FROM households WHERE id = $1", [oldHouseholdId]);
+    return { ok: true, alreadyMember: false };
+  });
 }
 
 // ---------- Deleting data ----------

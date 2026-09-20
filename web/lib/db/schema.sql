@@ -1,12 +1,10 @@
 -- College Lifecycle Intelligence Platform — canonical data model.
 -- Mirrors the entity model in the Master Transfer Brief (Section 6).
 --
--- This runs on Node's built-in node:sqlite for local dev (zero external
--- dependencies — see lib/db/client.ts). To move to Postgres for production
--- (e.g. Supabase), port this DDL 1:1 (types map directly: TEXT, INTEGER,
--- REAL all exist in Postgres) and swap lib/db/client.ts's driver; every
--- other file in the app only calls the functions in lib/db/repo.ts, so the
--- migration is contained to those two files. See README.md.
+-- This is the canonical local-development schema for Node's built-in
+-- node:sqlite (see lib/db/client.ts). Production already uses PostgreSQL and
+-- must be changed only through reviewed files in lib/db/deploy; do not apply
+-- this SQLite bootstrap directly to Supabase. See README.md.
 
 CREATE TABLE IF NOT EXISTS households (
   id TEXT PRIMARY KEY,
@@ -200,8 +198,8 @@ CREATE INDEX IF NOT EXISTS idx_sources_institution ON sources(institution_id);
 -- auth_links ties one signed-in identity (a Supabase Auth user id, or a
 -- local dev id) to exactly one household. Every household-scoped read in
 -- the app starts from this table; see lib/db/accounts.ts.
--- These two tables are also created automatically on first sign-in
--- (ensureAccountSchema) so production needs no manual SQL step.
+-- PostgreSQL receives these tables through reviewed migrations.
+-- ensureAccountSchema validates the release at runtime and fails closed.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auth_links (
   id TEXT PRIMARY KEY,

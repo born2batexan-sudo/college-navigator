@@ -144,6 +144,29 @@ describe("accounts and household isolation", () => {
     assert.deepEqual(await A.createInvite(famA, "parent"), { ok: false, reason: "too_many" });
   });
 
+  it("serializes concurrent invitations for one empty account", async () => {
+    const ownerOne = await newFamily("invite-owner-one", "Owner One");
+    const ownerTwo = await newFamily("invite-owner-two", "Owner Two");
+    const inviteOne = await A.createInvite(ownerOne, "parent");
+    const inviteTwo = await A.createInvite(ownerTwo, "parent");
+    assert.ok(inviteOne.ok && inviteTwo.ok);
+    if (!inviteOne.ok || !inviteTwo.ok) return;
+
+    const joining = await A.provisionAccount({ authUserId: "invite-race", email: "race@example.com" });
+    const results = await Promise.all([
+      A.acceptInvite(joining, inviteOne.token),
+      A.acceptInvite(joining, inviteTwo.token),
+    ]);
+    assert.equal(results.filter((r) => r.ok).length, 1);
+    const after = (await A.getContextForUser("invite-race"))!;
+    assert.ok([ownerOne.household.id, ownerTwo.household.id].includes(after.household.id));
+    const accepted = await C.queryOne<any>(
+      "SELECT COUNT(*) AS n FROM household_invites WHERE accepted_by = $1",
+      ["invite-race"]
+    );
+    assert.equal(Number(accepted?.n ?? 0), 1);
+  });
+
   it("a member removing themself leaves the household and its data intact", async () => {
     const d = (await A.getContextForUser("user-d"))!;
     await A.removeMember(d);

@@ -23,13 +23,15 @@ Without `DATABASE_URL`, local development uses Node's `node:sqlite` and `web/lib
 
 ## Database release process
 
-Do not give the runtime application role DDL privileges and do not rely on request-time schema creation. For a new database, apply the canonical schema, then apply versioned files in `web/lib/db/deploy/` in order. For the queue hardening upgrade, apply:
+The application uses a server-only PostgreSQL connection for data and Supabase only for authentication. Do not grant browser roles (`anon` or `authenticated`) direct table access, do not add client-facing RLS policies for the current architecture, and do not give the runtime role DDL privileges. `ensureAccountSchema()` verifies the completed release and fails closed; it never creates PostgreSQL tables.
 
-1. existing account/Supabase setup migrations as appropriate;
-2. `web/lib/db/deploy/request-queue.sql` for an installation that does not yet have the queue;
-3. `web/lib/db/deploy/20260919-secure-research-queue.sql`.
+`web/lib/db/schema.sql` is the canonical SQLite development schema. `web/lib/db/deploy/supabase-setup.sql` is a legacy baseline/seed snapshot and must never be applied by itself or treated as the current security baseline. For the existing production baseline, apply reviewed migrations in this order:
 
-Before traffic, verify every application table exists, RLS is enabled, and `anon`/`authenticated` cannot read or mutate data directly. The application now fails closed on PostgreSQL when this verification is missing. The migration has not been exercised against a live PostgreSQL service in this review environment.
+1. `web/lib/db/deploy/accounts-2026-09-19.sql` if the account tables are not already present;
+2. `web/lib/db/deploy/request-queue.sql` if the request queue is not already present;
+3. `web/lib/db/deploy/20260919-secure-research-queue.sql` last, exactly once through the migration ledger.
+
+For a brand-new production database, first generate and review a current baseline from the canonical schema and seed requirements; do not improvise from the legacy snapshot. Before traffic, verify every expected table exists, RLS is enabled, `anon`/`authenticated` have no grants, the server runtime role can perform required queries, and two-household isolation passes against PostgreSQL. The staging migration and integrity checks have been exercised; production remains intentionally unmigrated while this pull request is a draft.
 
 ## Authentication and machine credentials
 
