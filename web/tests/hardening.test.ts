@@ -43,10 +43,12 @@ describe("secure research and queue invariants",()=>{
   const student=await A.completeOnboarding(account,{studentName:"Term Student",role:"parent",enteringTerm:"Fall 2027"});
   const rel=await R.upsertRelationship({studentId:student.id,institutionId:inst.id});
   for (const researchTerm of ["Fall 2027","Winter 2028"]) await R.upsertRule({institutionId:inst.id,checkpointCode:"ADM-02",domain:"Admissions",title:"Submit records",critical:true,requirement:`Submit records for ${researchTerm}`,status:"verified",confidence:"high",researchTerm,cycleState:"current",applicability:"applies",evidenceQuote:`Official requirements for ${researchTerm}.`,sourceId:source.id});
+  await R.upsertRule({institutionId:inst.id,checkpointCode:"ADM-03",domain:"Admissions",title:"Low confidence",critical:true,requirement:"Do not show this.",status:"verified",confidence:"low",researchTerm:"Fall 2027",cycleState:"current",applicability:"applies",evidenceQuote:"A weakly supported statement.",sourceId:source.id});
+  await R.upsertRule({institutionId:inst.id,checkpointCode:"ADM-04",domain:"Admissions",title:"Unverified",critical:true,requirement:"Do not show this either.",status:"unverified",confidence:"medium",researchTerm:"Fall 2027",cycleState:"undated",applicability:"not_yet_published",evidenceQuote:"The current date has not been published.",sourceId:source.id});
   await D.exec("UPDATE students SET attributes=$1 WHERE id=$2",[JSON.stringify({enteringTerm:"Fall 2027"}),student.id]);
   await M.materializeActionsForRelationship(rel.id);
   const fall=await R.listActionInstancesForRelationship(rel.id,"Fall 2027");
-  assert.equal(fall.length,1);assert.equal(fall[0].rule.researchTerm,"Fall 2027");
+  assert.equal(fall.length,1,"unverified and low-confidence research must not reach a family plan");assert.equal(fall[0].rule.researchTerm,"Fall 2027");
   await D.exec("UPDATE students SET attributes=$1 WHERE id=$2",[JSON.stringify({enteringTerm:"Winter 2028"}),student.id]);
   await M.materializeActionsForRelationship(rel.id);
   const winter=await R.listActionInstancesForRelationship(rel.id,"Winter 2028");

@@ -430,7 +430,12 @@ export async function upsertRule(input: RuleInput): Promise<Rule> {
 }
 
 export async function listRulesForInstitution(institutionId: string, researchTerm = "Fall 2027"): Promise<Rule[]> {
-  return (await queryRows<any>("SELECT * FROM rules WHERE institution_id=$1 AND research_term=$2 ORDER BY checkpoint_code", [institutionId, researchTerm])).map(toRule);
+  // Customer plans may use only evidence-backed, customer-ready research.
+  // Low-confidence or unverified checkpoints remain internal and never become actions.
+  return (await queryRows<any>(`SELECT * FROM rules
+    WHERE institution_id=$1 AND research_term=$2
+      AND status='verified' AND confidence IN ('high','medium')
+    ORDER BY checkpoint_code`, [institutionId, researchTerm])).map(toRule);
 }
 
 export async function getRuleByCode(institutionId: string, checkpointCode: string, researchTerm = "Fall 2027"): Promise<Rule | null> {
