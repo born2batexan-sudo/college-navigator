@@ -50,6 +50,7 @@ export function safeNext(next: unknown): string {
 /** Paths that never require sign-in. Everything else does (deny by default). */
 export const PUBLIC_PATH_PREFIXES = [
   "/login",
+  "/request-access",
   "/auth/",
   "/api/agent/", // machine callers; each route checks its own bearer key
   "/api/debug/", // retired stub, always 404

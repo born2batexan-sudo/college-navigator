@@ -17,6 +17,8 @@ import { exec, queryOne, queryRows, newId, nowIso, usingPostgres, withTransactio
 import { upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
+import { EMAIL_VALIDATION_DDL, EMAIL_VALIDATION_TABLES } from "./email-validation";
+import { DEMO_ACCESS_DDL, DEMO_ACCESS_TABLES } from "./demo-access-schema";
 
 export type AuthLink = {
   id: string;
@@ -82,6 +84,7 @@ export const ACCOUNT_DDL: string[] = [
   accepted_by TEXT,
   accepted_email TEXT,
   accepted_household_id TEXT REFERENCES households(id),
+  access_request_id TEXT,
   created_at TEXT NOT NULL
 )`,
   `CREATE TABLE IF NOT EXISTS demo_households (
@@ -91,6 +94,8 @@ export const ACCOUNT_DDL: string[] = [
   cloned_at TEXT NOT NULL
 )`,
   `CREATE INDEX IF NOT EXISTS idx_demo_invites_template ON demo_invites(template_household_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_demo_invites_access_request ON demo_invites(access_request_id)`,
+  ...DEMO_ACCESS_DDL,
 ];
 
 export const ALL_TABLES = [
@@ -110,11 +115,13 @@ export const ALL_TABLES = [
   "household_invites",
   "demo_invites",
   "demo_households",
+  ...DEMO_ACCESS_TABLES,
   ...REQUEST_TABLES,
+  ...EMAIL_VALIDATION_TABLES,
 ];
 
 /** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */
-export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL];
+export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL, ...EMAIL_VALIDATION_DDL];
 
 let ensurePromise: Promise<void> | null = null;
 

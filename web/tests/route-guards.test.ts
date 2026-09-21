@@ -24,9 +24,9 @@ const read = (p: string) => readFileSync(p, "utf-8");
 const GUARD = /require(?:Writable(?:Onboarded)?Household|OnboardedHousehold|Household|User|DemoOwner)\(/;
 
 // Pages that are allowed without sign-in.
-const PUBLIC_PAGES = new Set(["app/page.tsx", "app/login/page.tsx", "app/debug-page-check/page.tsx"]); // homepage is public; the debug page is an inert 404 stub
-// Server-action files whose functions may run without sign-in (signing in itself).
-const PUBLIC_ACTIONS = new Set(["app/login/actions.ts"]);
+const PUBLIC_PAGES = new Set(["app/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // homepage and generic demo request page are public; the debug page is an inert 404 stub
+// Server-action files whose functions may run without sign-in (signing in itself or submitting a generic demo request).
+const PUBLIC_ACTIONS = new Set(["app/login/actions.ts", "app/request-access/actions.ts"]);
 // Route handlers that authenticate some other way.
 const PUBLIC_ROUTES = new Set(["app/auth/callback/route.ts"]);
 
@@ -105,7 +105,7 @@ describe("route guards", () => {
     const env = read(path.join(ROOT, "lib", "auth", "env.ts"));
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/debug/", "/auth/", "/favicon.ico", "/login"]);
+    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/debug/", "/auth/", "/favicon.ico", "/login", "/request-access"]);
     assert.match(env, /pathname === "\/"/);
     assert.match(read(path.join(ROOT, "proxy.ts")), /!isPublicPath\(pathname\)/);
   });
