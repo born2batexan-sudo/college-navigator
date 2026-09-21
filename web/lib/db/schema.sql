@@ -388,6 +388,8 @@ CREATE INDEX IF NOT EXISTS idx_budget_ledger_month ON budget_ledger(month);
 -- ---------------------------------------------------------------------
 -- Paid, forwarding-first email validation. Only normalized evidence and
 -- keyed digests are retained; the schema has no unneeded payload fields.
+-- Household deletion removes evidence/matches/aliases/entitlement; status
+-- events remain as an append-only deletion/control audit ledger.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS email_validation_entitlements (
   household_id TEXT PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
@@ -435,7 +437,7 @@ CREATE TABLE IF NOT EXISTS normalized_email_evidence (
   provenance_class TEXT NOT NULL CHECK (provenance_class IN ('authenticated_original','forwarded_arc','quoted_sender','unknown')),
   authentication_result TEXT NOT NULL CHECK (authentication_result IN ('authenticated','failed','unknown')),
   signal TEXT NOT NULL CHECK (signal IN ('received','complete','other')),
-  replay_hash TEXT NOT NULL UNIQUE,
+  replay_hash TEXT NOT NULL,
   observed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -469,6 +471,7 @@ CREATE INDEX IF NOT EXISTS idx_intake_aliases_household ON intake_aliases(househ
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_intake_alias ON intake_aliases(household_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_sender_policies_institution ON institution_sender_policies(institution_id);
 CREATE INDEX IF NOT EXISTS idx_email_evidence_household ON normalized_email_evidence(household_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_evidence_household_replay ON normalized_email_evidence(household_id, replay_hash);
 CREATE INDEX IF NOT EXISTS idx_email_matches_household ON email_task_matches(household_id);
 CREATE INDEX IF NOT EXISTS idx_email_status_events_household ON email_status_events(household_id);
 

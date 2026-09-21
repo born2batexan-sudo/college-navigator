@@ -598,6 +598,14 @@ export async function createActionInstance(input: {
   priority: string;
   state?: string;
 }): Promise<ActionInstance> {
+  const institutions = await queryOne<any>(`SELECT r.institution_id AS relationship_institution_id,
+      ru.institution_id AS rule_institution_id
+    FROM institution_relationships r
+    CROSS JOIN rules ru
+    WHERE r.id=$1 AND ru.id=$2`, [input.relationshipId, input.ruleId]);
+  if (institutions && institutions.relationship_institution_id !== institutions.rule_institution_id) {
+    throw new Error("Action relationship and rule must belong to the same institution");
+  }
   const id = newId("action");
   const now = nowIso();
   await exec(

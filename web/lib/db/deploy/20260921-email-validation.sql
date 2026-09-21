@@ -2,6 +2,9 @@
 -- Apply after the existing account/request/research and private-demo migrations.
 -- Stores normalized evidence and keyed digests only; it does not retain raw
 -- email payloads, subjects, bodies, attachments, or mailbox credentials.
+-- Owner deletion removes evidence, matches, aliases, and entitlement. The
+-- email_status_events ledger is intentionally append-only and retains only
+-- deletion/control audit facts; deleted evidence/match references are nulled.
 
 BEGIN;
 
@@ -48,7 +51,7 @@ CREATE TABLE IF NOT EXISTS normalized_email_evidence (
   provenance_class TEXT NOT NULL CHECK (provenance_class IN ('authenticated_original','forwarded_arc','quoted_sender','unknown')),
   authentication_result TEXT NOT NULL CHECK (authentication_result IN ('authenticated','failed','unknown')),
   signal TEXT NOT NULL CHECK (signal IN ('received','complete','other')),
-  replay_hash TEXT NOT NULL UNIQUE,
+  replay_hash TEXT NOT NULL,
   observed_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
@@ -78,7 +81,61 @@ CREATE TABLE IF NOT EXISTS email_status_events (
 CREATE INDEX IF NOT EXISTS idx_intake_aliases_household ON intake_aliases(household_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_intake_alias ON intake_aliases(household_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_sender_policies_institution ON institution_sender_policies(institution_id);
-CREATE INDEX IF NOT EXISTS idx_email_evidence_household ON normalized_email_evidence(household_id);
+-- Replay keys are provider-scoped only within a household. A provider may
+-- legitimately reuse the same metadata across separate forwarding aliases.
+-- Drop the first-draft single-column constraint if this migration was already
+-- applied, then enforce the household-scoped uniqueness invariant.
+DO $$
+DECLARE
+  replay_constraint text;
+BEGIN
+  SELECT con.conname INTO replay_constraint
+  FROM pg_constraint con
+  JOIN pg_class rel ON rel.oid = con.conrelid
+  JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+  WHERE nsp.nspname = current_schema()
+    AND rel.relname = 'normalized_email_evidence'
+    AND con.contype = 'u'
+    AND array_length(con.conkey, 1) = 1
+    AND EXISTS (
+      SELECT 1
+      FROM unnest(con.conkey) AS keynum(attnum)
+      JOIN pg_attribute attr ON attr.attrelid = rel.oid AND attr.attnum = keynum.attnum
+      WHERE attr.attname = 'replay_hash'
+    );
+  IF replay_constraint IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE normalized_email_evidence DROP CONSTRAINT %I', replay_constraint);
+  END IF;
+END $$;
+-- A prior draft may have enforced the same legacy invariant with a standalone
+-- unique index rather than a table constraint. Remove only single-column,
+-- non-constraint unique indexes whose sole key is replay_hash.
+DO $$
+DECLARE
+  replay_index text;
+BEGIN
+  FOR replay_index IN
+    SELECT idx_rel.relname
+    FROM pg_index idx
+    JOIN pg_class rel ON rel.oid = idx.indrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    JOIN pg_class idx_rel ON idx_rel.oid = idx.indexrelid
+    JOIN pg_attribute attr
+      ON attr.attrelid = rel.oid
+     AND attr.attnum = (idx.indkey::smallint[])[0]
+    WHERE nsp.nspname = current_schema()
+      AND rel.relname = 'normalized_email_evidence'
+      AND idx.indisunique
+      AND idx.indnkeyatts = 1
+      AND attr.attname = 'replay_hash'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_constraint con WHERE con.conindid = idx.indexrelid
+      )
+  LOOP
+    EXECUTE format('DROP INDEX %I.%I', current_schema(), replay_index);
+  END LOOP;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_evidence_household_replay ON normalized_email_evidence(household_id, replay_hash);
 CREATE INDEX IF NOT EXISTS idx_email_matches_household ON email_task_matches(household_id);
 CREATE INDEX IF NOT EXISTS idx_email_status_events_household ON email_status_events(household_id);
 

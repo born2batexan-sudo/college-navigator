@@ -1,7 +1,7 @@
 // Paid, forwarding-first email validation. The future inbound adapter must
 // provide only normalized evidence and authentication results. This module
 // retains only minimized fields and keyed digests.
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { exec, newId, nowIso, queryOne, queryRows, withTransaction } from "./client";
 import { createActionEvent, getActionInstance, updateActionInstance } from "./repo";
 
@@ -60,7 +60,7 @@ export const EMAIL_VALIDATION_DDL: string[] = [
     provenance_class TEXT NOT NULL CHECK (provenance_class IN ('authenticated_original','forwarded_arc','quoted_sender','unknown')),
     authentication_result TEXT NOT NULL CHECK (authentication_result IN ('authenticated','failed','unknown')),
     signal TEXT NOT NULL CHECK (signal IN ('received','complete','other')),
-    replay_hash TEXT NOT NULL UNIQUE,
+    replay_hash TEXT NOT NULL,
     observed_at TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`,
@@ -91,6 +91,7 @@ export const EMAIL_VALIDATION_DDL: string[] = [
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_intake_alias ON intake_aliases(household_id) WHERE status='active'",
   "CREATE INDEX IF NOT EXISTS idx_sender_policies_institution ON institution_sender_policies(institution_id)",
   "CREATE INDEX IF NOT EXISTS idx_email_evidence_household ON normalized_email_evidence(household_id)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_email_evidence_household_replay ON normalized_email_evidence(household_id, replay_hash)",
   "CREATE INDEX IF NOT EXISTS idx_email_matches_household ON email_task_matches(household_id)",
   "CREATE INDEX IF NOT EXISTS idx_email_status_events_household ON email_status_events(household_id)",
 ];
@@ -163,14 +164,59 @@ export type IngestionDecision = {
 
 type OwnerInput = { householdId: string; ownerAuthUserId?: string; authUserId?: string; actorId?: string };
 
+/**
+ * Ingress is deliberately provider-neutral and server-to-server only. The
+ * private symbol prevents a normal caller from manufacturing a trusted
+ * context by merely asserting a TypeScript type; the configured secret must
+ * still be present in the server environment.
+ */
+const TRUSTED_NORMALIZER = Symbol("trusted-normalized-envelope");
+export type TrustedNormalizedEnvelopeContext = {
+  readonly [TRUSTED_NORMALIZER]: true;
+};
+
+function normalizerSecret(): string {
+  const secret = process.env.EMAIL_VALIDATION_NORMALIZER_SECRET?.trim();
+  if (!secret || secret.length < 32) throw new Error("Trusted normalized-envelope capability is not configured");
+  return secret;
+}
+
+export function createTrustedNormalizedEnvelopeContext(secret = process.env.EMAIL_VALIDATION_NORMALIZER_SECRET): TrustedNormalizedEnvelopeContext {
+  const expected = normalizerSecret();
+  const supplied = String(secret ?? "");
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new Error("Trusted normalized-envelope capability is invalid");
+  return Object.freeze({ [TRUSTED_NORMALIZER]: true } as TrustedNormalizedEnvelopeContext);
+}
+
+function requireTrustedNormalizer(context: TrustedNormalizedEnvelopeContext | undefined): void {
+  normalizerSecret();
+  if (!context || context[TRUSTED_NORMALIZER] !== true) throw new Error("Trusted normalized-envelope capability is required");
+}
+
 function ownerId(input: OwnerInput): string {
   const id = input.ownerAuthUserId ?? input.authUserId ?? input.actorId;
   if (!id) throw new Error("Owner authorization is required");
   return id;
 }
 
+type AdminActor = { authUserId: string; email?: string | null };
+
+function configuredAdminIds(): Set<string> {
+  return new Set((process.env.EMAIL_VALIDATION_ADMIN_USER_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean));
+}
+/** Server-side allowlists are the authorization boundary; labels supplied by
+ * billing/curation callers are never accepted as proof of admin identity. */
+function assertAdmin(actor: AdminActor | undefined): string {
+  const id = actor?.authUserId?.trim();
+  if (!id) throw new Error("Admin authorization is required");
+  if (!configuredAdminIds().has(id)) throw new Error("Trusted admin authorization is required");
+  return id;
+}
+
 function normalizeDomain(raw: string): string {
-  const domain = raw.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/^www\./, "");
+  const domain = raw.trim().toLowerCase().replace(/^\[|\]$/g, "");
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(domain)) {
     throw new Error("Sender domain must be an exact hostname");
   }
@@ -191,7 +237,7 @@ function replayDigest(value: string): string {
   // Replay identifiers may derive from external message metadata. Never fall
   // back to an unkeyed digest, which would make low-entropy identifiers
   // guessable. Missing secure configuration fails closed.
-  if (!secret || secret.length < 16) throw new Error("Email validation replay protection is not configured");
+  if (!secret || secret.length < 32) throw new Error("Email validation replay protection is not configured");
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 function isDemoExcluded(householdId: string): Promise<boolean> {
@@ -223,9 +269,13 @@ async function activeAccess(householdId: string): Promise<"active" | "paused" | 
 export async function provisionEmailValidationEntitlement(input: {
   householdId: string;
   entitlementState: EntitlementState;
-  provisionedBy: string;
+  adminAuthUserId?: string;
+  adminEmail?: string | null;
+  /** @deprecated caller labels are not authorization; use adminAuthUserId. */
+  provisionedBy?: string;
 }): Promise<EmailValidationEntitlement> {
-  if (!input.provisionedBy.trim()) throw new Error("Provisioning authority is required");
+  const actor = assertAdmin(input.adminAuthUserId ? { authUserId: input.adminAuthUserId, email: input.adminEmail } : undefined);
+  if (!["trial", "paid", "inactive", "past_due"].includes(input.entitlementState)) throw new Error("Invalid entitlement state");
   const household = await queryOne("SELECT 1 AS ok FROM households WHERE id=$1", [input.householdId]);
   if (!household || configuredTemplate(input.householdId) || await isDemoExcluded(input.householdId)) throw new Error("Household is unavailable for email validation");
   const now = nowIso();
@@ -262,7 +312,9 @@ export async function getEmailValidationEntitlement(householdId: string): Promis
 }
 
 function forwardingDomain(): string {
-  return normalizeDomain(process.env.EMAIL_FORWARDING_DOMAIN?.trim() || "forwarding.invalid");
+  const configured = process.env.EMAIL_FORWARDING_DOMAIN?.trim();
+  if (!configured) throw new Error("EMAIL_FORWARDING_DOMAIN is not configured");
+  return normalizeDomain(configured);
 }
 
 async function makeAlias(input: OwnerInput, mode: "issue" | "rotate"): Promise<IntakeAlias> {
@@ -313,10 +365,18 @@ export async function revokeEmailValidation(input: OwnerInput): Promise<void> {
   await recordControlEvent(input.householdId, "feature_revoked", "revoked", null);
 }
 
-/** Removes household-owned evidence and aliases; append-only status events remain. */
+/**
+ * Removes household-owned evidence, matches, aliases, and entitlement. The
+ * status-event ledger is intentionally append-only: FK references to deleted
+ * evidence/matches are nulled by ON DELETE SET NULL, while the feature_deleted
+ * control event remains as the retention/deletion audit record.
+ */
 export async function deleteEmailValidationData(input: OwnerInput): Promise<void> {
   await assertOwner(input);
   await withTransaction(async () => {
+    // Delete children explicitly before evidence so this remains valid on both
+    // PostgreSQL and SQLite even when cascade behavior differs by deployment.
+    await exec("DELETE FROM email_task_matches WHERE household_id=$1", [input.householdId]);
     await exec("DELETE FROM normalized_email_evidence WHERE household_id=$1", [input.householdId]);
     await exec("DELETE FROM intake_aliases WHERE household_id=$1", [input.householdId]);
     await exec("DELETE FROM email_validation_entitlements WHERE household_id=$1", [input.householdId]);
@@ -324,7 +384,8 @@ export async function deleteEmailValidationData(input: OwnerInput): Promise<void
   });
 }
 
-export async function createInstitutionSenderPolicy(input: { institutionId: string; senderDomain: string; curatedBy?: string }): Promise<{ id: string; institutionId: string; senderDomain: string }> {
+export async function createInstitutionSenderPolicy(input: { institutionId: string; senderDomain: string; adminAuthUserId?: string; adminEmail?: string | null; /** @deprecated caller labels are not authorization. */ curatedBy?: string }): Promise<{ id: string; institutionId: string; senderDomain: string }> {
+  const actor = assertAdmin(input.adminAuthUserId ? { authUserId: input.adminAuthUserId, email: input.adminEmail } : undefined);
   const institution = await queryOne<any>("SELECT domains FROM institutions WHERE id=$1", [input.institutionId]);
   if (!institution) throw new Error("Institution not found");
   const domain = normalizeDomain(input.senderDomain);
@@ -333,12 +394,15 @@ export async function createInstitutionSenderPolicy(input: { institutionId: stri
   if (!approved.some((d) => domain === d || domain.endsWith(`.${d}`))) throw new Error("Sender domain must be under the institution's approved domain");
   const id = newId("sender");
   await exec(`INSERT INTO institution_sender_policies(id,institution_id,sender_domain,active,curated_by,created_at,revoked_at)
-    VALUES($1,$2,$3,1,$4,$5,NULL) ON CONFLICT(institution_id,sender_domain) DO UPDATE SET active=1,curated_by=excluded.curated_by,revoked_at=NULL`, [id, input.institutionId, domain, input.curatedBy ?? "curated", nowIso()]);
+    VALUES($1,$2,$3,1,$4,$5,NULL) ON CONFLICT(institution_id,sender_domain) DO UPDATE SET active=1,curated_by=excluded.curated_by,revoked_at=NULL`, [id, input.institutionId, domain, actor, nowIso()]);
   const row = await queryOne<any>("SELECT id,institution_id,sender_domain FROM institution_sender_policies WHERE institution_id=$1 AND sender_domain=$2", [input.institutionId, domain]);
   return { id: row.id, institutionId: row.institution_id, senderDomain: row.sender_domain };
 }
 export const curateInstitutionSenderDomain = createInstitutionSenderPolicy;
-export async function revokeInstitutionSenderPolicy(id: string): Promise<void> { await exec("UPDATE institution_sender_policies SET active=0,revoked_at=$1 WHERE id=$2", [nowIso(), id]); }
+export async function revokeInstitutionSenderPolicy(id: string, actor?: AdminActor): Promise<void> {
+  assertAdmin(actor);
+  await exec("UPDATE institution_sender_policies SET active=0,revoked_at=$1 WHERE id=$2", [nowIso(), id]);
+}
 
 function parseStudentTerm(raw: unknown): string | null {
   try { const parsed = JSON.parse(String(raw || "{}")); return typeof parsed.enteringTerm === "string" ? parsed.enteringTerm : null; } catch { return null; }
@@ -349,10 +413,14 @@ async function findCandidates(householdId: string, input: NormalizedEmailEvidenc
       ru.checkpoint_code,ru.research_term,s.id AS student_id,s.attributes
     FROM action_instances a
     JOIN institution_relationships r ON r.id=a.relationship_id AND r.active=1
-    JOIN rules ru ON ru.id=a.rule_id
+    JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=r.institution_id
+    JOIN research_versions rv ON rv.institution_id=ru.institution_id AND rv.research_term=ru.research_term
     JOIN students s ON s.id=r.student_id
     WHERE s.household_id=$1 AND r.institution_id=$2 AND ru.checkpoint_code=$3 AND ru.research_term=$4
-      AND ru.status='verified' AND ru.confidence IN ('high','medium') AND ru.applicability='applies'`, [householdId, input.institutionId, input.checkpointCode, input.enteringTerm]);
+      AND rv.coverage_status='certified' AND rv.certified_at IS NOT NULL
+      AND ru.status='verified' AND ru.confidence IN ('high','medium')
+      AND ru.applicability='applies' AND ru.cycle_state='current' AND ru.source_id IS NOT NULL
+      AND trim(COALESCE(ru.evidence_quote,'')) <> ''`, [householdId, input.institutionId, input.checkpointCode, input.enteringTerm]);
   return rows.filter((row) => parseStudentTerm(row.attributes) === input.enteringTerm && (!input.applicantId || input.applicantId === row.student_id));
 }
 
@@ -372,78 +440,100 @@ async function resolveAlias(alias: string): Promise<any | null> {
   try { return await queryOne<any>("SELECT * FROM intake_aliases WHERE alias_hash=$1 AND status='active'", [hashAlias(alias)]); } catch { return null; }
 }
 
-async function baseDecision(input: NormalizedEmailEvidence): Promise<{ decision: IngestionDecision; alias: any | null; action: any | null; replayHash: string }> {
+async function baseDecision(input: NormalizedEmailEvidence): Promise<{ decision: IngestionDecision; alias: any | null; action: any | null; replayHash: string; replayHouseholdId: string | null }> {
   const replayHash = replayDigest(input.replayKey.trim());
-  const prior = await queryOne<any>("SELECT id FROM normalized_email_evidence WHERE replay_hash=$1", [replayHash]);
-  if (prior) return { decision: { status: "replay_suppressed", reasonCode: "replay_suppressed", evidenceId: prior.id, matchId: null, actionId: null, fromState: null, toState: null }, alias: null, action: null, replayHash };
   const alias = await resolveAlias(input.alias);
-  if (!alias) return { decision: { status: "quarantined", reasonCode: "invalid_alias", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias: null, action: null, replayHash };
+  if (!alias) return { decision: { status: "quarantined", reasonCode: "invalid_alias", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias: null, action: null, replayHash, replayHouseholdId: null };
   const access = await activeAccess(alias.household_id);
-  if (access === "demo_excluded") return { decision: { status: "quarantined", reasonCode: "demo_excluded", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (access === "not_entitled") return { decision: { status: "quarantined", reasonCode: "not_entitled", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (access === "paused") return { decision: { status: "quarantined", reasonCode: "paused", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (input.authenticationResult === "failed" || input.provenanceClass === "quoted_sender" || input.provenanceClass === "unknown") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
+  if (access === "demo_excluded") return { decision: { status: "quarantined", reasonCode: "demo_excluded", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  if (access === "not_entitled") return { decision: { status: "quarantined", reasonCode: "not_entitled", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  if (access === "paused") return { decision: { status: "quarantined", reasonCode: "paused", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  const prior = await queryOne<any>("SELECT id,household_id FROM normalized_email_evidence WHERE household_id=$1 AND replay_hash=$2", [alias.household_id, replayHash]);
+  if (prior) return { decision: { status: "replay_suppressed", reasonCode: "replay_suppressed", evidenceId: prior.id, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: prior.household_id };
+  if (input.authenticationResult === "failed" || input.provenanceClass === "quoted_sender" || input.provenanceClass === "unknown") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
   const domainOkay = await policyMatches(input.institutionId, input.senderDomain);
-  if (!domainOkay) return { decision: { status: "quarantined", reasonCode: "domain_mismatch", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (input.provenanceClass !== "authenticated_original" && input.provenanceClass !== "forwarded_arc") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (input.authenticationResult !== "authenticated") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
-  if (input.signal !== "received" && input.signal !== "complete") return { decision: { status: "quarantined", reasonCode: "unsupported_signal", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
+  if (!domainOkay) return { decision: { status: "quarantined", reasonCode: "domain_mismatch", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  if (input.provenanceClass !== "authenticated_original" && input.provenanceClass !== "forwarded_arc") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  if (input.authenticationResult !== "authenticated") return { decision: { status: "quarantined", reasonCode: "auth_failure", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
+  if (input.signal !== "received" && input.signal !== "complete") return { decision: { status: "quarantined", reasonCode: "unsupported_signal", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
   const candidates = await findCandidates(alias.household_id, input);
-  if (candidates.length !== 1) return { decision: { status: "quarantined", reasonCode: candidates.length > 1 ? "ambiguous_match" : "no_exact_match", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash };
+  if (candidates.length !== 1) return { decision: { status: "quarantined", reasonCode: candidates.length > 1 ? "ambiguous_match" : "no_exact_match", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null }, alias, action: null, replayHash, replayHouseholdId: null };
   const action = candidates[0];
-  if (input.provenanceClass === "forwarded_arc") return { decision: { status: "suggestion", reasonCode: "forwarded_suggestion", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: null }, alias, action, replayHash };
+  if (input.provenanceClass === "forwarded_arc") return { decision: { status: "suggestion", reasonCode: "forwarded_suggestion", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: null }, alias, action, replayHash, replayHouseholdId: null };
   const target = legalTarget(action.action_state, input.signal);
-  if (!target) return { decision: { status: "quarantined", reasonCode: "illegal_transition", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: null }, alias, action, replayHash };
-  return { decision: { status: "applied", reasonCode: "applied", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: target }, alias, action, replayHash };
+  if (!target) return { decision: { status: "quarantined", reasonCode: "illegal_transition", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: null }, alias, action, replayHash, replayHouseholdId: null };
+  return { decision: { status: "applied", reasonCode: "applied", evidenceId: null, matchId: null, actionId: action.action_id, fromState: action.action_state, toState: target }, alias, action, replayHash, replayHouseholdId: null };
 }
 
 function validInput(input: NormalizedEmailEvidence): void {
   if (!input || typeof input !== "object") throw new Error("Normalized evidence is required");
-  if (!input.institutionId || !input.enteringTerm || !input.checkpointCode || !input.senderDomain || !input.replayKey.trim()) throw new Error("Normalized evidence is incomplete");
+  const strings = ["alias", "institutionId", "enteringTerm", "checkpointCode", "senderDomain", "replayKey"] as const;
+  if (strings.some((key) => typeof input[key] !== "string" || !input[key].trim())) throw new Error("Normalized evidence is incomplete");
+  if (!(["authenticated_original", "forwarded_arc", "quoted_sender", "unknown"] as string[]).includes(input.provenanceClass)) throw new Error("Invalid provenance class");
+  if (!( ["authenticated", "failed", "unknown"] as string[]).includes(input.authenticationResult)) throw new Error("Invalid authentication result");
+  if (!( ["received", "complete", "other"] as string[]).includes(input.signal)) throw new Error("Invalid signal");
+  if (input.applicantId !== undefined && input.applicantId !== null && typeof input.applicantId !== "string") throw new Error("Invalid applicant id");
+  if (input.observedAt !== undefined && (typeof input.observedAt !== "string" || Number.isNaN(Date.parse(input.observedAt)))) throw new Error("Invalid observedAt");
   if (input.institutionId.length > 200 || input.enteringTerm.length > 100 || input.checkpointCode.length > 160 || input.senderDomain.length > 255 || input.replayKey.length > 512 || (input.applicantId?.length ?? 0) > 200) throw new Error("Normalized evidence field is too long");
+  normalizeDomain(input.senderDomain);
+  normalizeAlias(input.alias);
 }
 
 async function recordControlEvent(householdId: string, eventType: string, reasonCode: string, actionId: string | null): Promise<void> {
   await exec("INSERT INTO email_status_events(id,household_id,evidence_id,match_id,action_id,event_type,reason_code,from_state,to_state,observed_at) VALUES($1,$2,NULL,NULL,$3,$4,$5,NULL,NULL,$6)", [newId("email_evt"), householdId, actionId, eventType, reasonCode, nowIso()]);
 }
 
-export async function evaluateNormalizedEvidence(input: NormalizedEmailEvidence): Promise<IngestionDecision> {
+export async function evaluateNormalizedEvidence(input: NormalizedEmailEvidence, context?: TrustedNormalizedEnvelopeContext): Promise<IngestionDecision> {
+  requireTrustedNormalizer(context);
   validInput(input);
   return (await baseDecision(input)).decision;
 }
 
-export async function ingestNormalizedEvidence(input: NormalizedEmailEvidence): Promise<IngestionDecision> {
+export async function ingestNormalizedEvidence(input: NormalizedEmailEvidence, context?: TrustedNormalizedEnvelopeContext): Promise<IngestionDecision> {
+  requireTrustedNormalizer(context);
   validInput(input);
   return withTransaction(async () => {
     const resolved = await baseDecision(input);
     if (resolved.decision.reasonCode === "replay_suppressed") {
-      if (resolved.alias) await recordControlEvent(resolved.alias.household_id, "replay_suppressed", "replay_suppressed", null);
+      // Replay suppression is auditable without retaining a duplicate payload.
+      if (resolved.replayHouseholdId) await recordControlEvent(resolved.replayHouseholdId, "replay_suppressed", "replay_suppressed", null);
       return resolved.decision;
     }
     // Invalid aliases and disabled/demo access are intentionally not persisted:
     // accepting them would create a side channel for probing household state.
-    if (!resolved.alias) return resolved.decision;
+    const nonPersisted = new Set<IngestionReason>(["invalid_alias", "not_entitled", "paused", "demo_excluded"]);
+    if (!resolved.alias || nonPersisted.has(resolved.decision.reasonCode)) return resolved.decision;
     const now = nowIso();
-    const evidenceId = newId("evidence");
     let senderDomain: string;
-    try { senderDomain = normalizeDomain(input.senderDomain); } catch { senderDomain = input.senderDomain.trim().toLowerCase().slice(0, 255); }
+    try { senderDomain = normalizeDomain(input.senderDomain); } catch { return { ...resolved.decision, status: "quarantined", reasonCode: "domain_mismatch" }; }
     const observed = input.observedAt ?? now;
-    await exec(`INSERT INTO normalized_email_evidence(id,household_id,alias_id,institution_id,applicant_id,entering_term,checkpoint_code,sender_domain,provenance_class,authentication_result,signal,replay_hash,observed_at,created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [evidenceId, resolved.alias.household_id, resolved.alias.id, input.institutionId, input.applicantId ?? null, input.enteringTerm.trim(), input.checkpointCode.trim(), senderDomain, input.provenanceClass, input.authenticationResult, input.signal, resolved.replayHash, observed, now]);
+    const evidenceId = newId("evidence");
+    // The household-scoped replay digest is claimed atomically. ON CONFLICT
+    // avoids a PostgreSQL transaction-aborting unique violation under concurrent ingress.
+    const inserted = await queryOne<any>(`INSERT INTO normalized_email_evidence(id,household_id,alias_id,institution_id,applicant_id,entering_term,checkpoint_code,sender_domain,provenance_class,authentication_result,signal,replay_hash,observed_at,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      ON CONFLICT(household_id,replay_hash) DO NOTHING RETURNING id`, [evidenceId, resolved.alias.household_id, resolved.alias.id, input.institutionId, input.applicantId ?? null, input.enteringTerm.trim(), input.checkpointCode.trim(), senderDomain, input.provenanceClass, input.authenticationResult, input.signal, resolved.replayHash, observed, now]);
+    if (!inserted) {
+      const prior = await queryOne<any>("SELECT id,household_id FROM normalized_email_evidence WHERE household_id=$1 AND replay_hash=$2", [resolved.alias.household_id, resolved.replayHash]);
+      if (prior) {
+        await recordControlEvent(prior.household_id, "replay_suppressed", "replay_suppressed", null);
+        return { status: "replay_suppressed", reasonCode: "replay_suppressed", evidenceId: prior.id, matchId: null, actionId: null, fromState: null, toState: null };
+      }
+      // A conflict without a visible committed row is not actionable evidence.
+      return { status: "replay_suppressed", reasonCode: "replay_suppressed", evidenceId: null, matchId: null, actionId: null, fromState: null, toState: null };
+    }
     const matchId = newId("email_match");
     let status = resolved.decision.status;
     let reason = resolved.decision.reasonCode;
     let actionId = resolved.decision.actionId;
     let fromState = resolved.decision.fromState;
     let toState = resolved.decision.toState;
-    if (status === "applied" && actionId && toState) {
-      const action = await getActionInstance(actionId);
-      const changed = action && action.state === fromState;
+    if (status === "applied" && actionId && toState && fromState) {
+      // Compare-and-set prevents two different messages from advancing the
+      // same action based on the same stale state.
+      const changed = await queryOne<any>("UPDATE action_instances SET state=$1,updated_at=$2 WHERE id=$3 AND state=$4 RETURNING id", [toState, now, actionId, fromState]);
       if (!changed) { status = "quarantined"; reason = "illegal_transition"; toState = null; }
-      else {
-        await updateActionInstance(actionId, { state: toState });
-        await createActionEvent({ actionId, eventType: "state_change", fromState, toState, actorType: "email_validation", evidenceRef: evidenceId });
-      }
+      else await createActionEvent({ actionId, eventType: "state_change", fromState, toState, actorType: "email_validation", evidenceRef: evidenceId });
     }
     await exec("INSERT INTO email_task_matches(id,evidence_id,household_id,action_id,match_status,reason_code,from_state,to_state,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", [matchId, evidenceId, resolved.alias.household_id, actionId, status, reason, fromState, toState, now]);
     await exec("INSERT INTO email_status_events(id,household_id,evidence_id,match_id,action_id,event_type,reason_code,from_state,to_state,observed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", [newId("email_evt"), resolved.alias.household_id, evidenceId, matchId, actionId, status === "applied" ? "state_applied" : status === "suggestion" ? "suggestion_created" : "quarantined", reason, fromState, toState, now]);
@@ -452,8 +542,9 @@ export async function ingestNormalizedEvidence(input: NormalizedEmailEvidence): 
 }
 
 export type NormalizedIngestionAdapter = { ingest(input: NormalizedEmailEvidence): Promise<IngestionDecision>; dryRun(input: NormalizedEmailEvidence): Promise<IngestionDecision> };
-export function createNormalizedIngestionAdapter(): NormalizedIngestionAdapter {
-  return { ingest: ingestNormalizedEvidence, dryRun: evaluateNormalizedEvidence };
+export function createNormalizedIngestionAdapter(context: TrustedNormalizedEnvelopeContext): NormalizedIngestionAdapter {
+  requireTrustedNormalizer(context);
+  return { ingest: (input) => ingestNormalizedEvidence(input, context), dryRun: (input) => evaluateNormalizedEvidence(input, context) };
 }
 export const dryRunNormalizedEvidence = evaluateNormalizedEvidence;
 // Naming aliases keep the provider-neutral library easy to discover without
