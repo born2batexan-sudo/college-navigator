@@ -32,7 +32,14 @@ The application uses a server-only PostgreSQL connection for data and Supabase o
 3. `web/lib/db/deploy/20260919-secure-research-queue.sql` last, exactly once through the migration ledger;
 4. `web/lib/db/deploy/20260920-private-demo-invites.sql` for the existing private-demo invitation tables, exactly once through the migration ledger;
 5. `web/lib/db/deploy/20260921-email-validation.sql` after the account/request/research release, exactly once through the migration ledger;
-6. `web/lib/db/deploy/20260922-demo-access-requests.sql` after the private-demo invitation migration, exactly once through the migration ledger.
+6. `web/lib/db/deploy/20260922-demo-access-requests.sql` after the private-demo invitation migration, exactly once through the migration ledger;
+7. `web/lib/db/deploy/20260923-reminder-foundation.sql` after the account/demo/request release, exactly once through the migration ledger.
+
+Reminder delivery is provider-neutral and dry-run by default. The reminder foundation
+stores no message body and performs no network delivery. A future reviewed adapter
+must additionally require `REMINDER_PRODUCTION_DELIVERY_ENABLED=1`; leaving that
+variable unset (the default) rejects non-dry-run recipient mode. Applying the
+migration alone does not enable delivery or create a provider account.
 
 For a brand-new production database, first generate and review a current baseline from the canonical schema and seed requirements; do not improvise from the legacy snapshot. Before traffic, verify every expected table exists, RLS is enabled, `anon`/`authenticated` have no grants, the server runtime role can perform required queries, and two-household isolation passes against PostgreSQL. The staging migration and integrity checks have been exercised; production remains intentionally unmigrated while this pull request is a draft.
 

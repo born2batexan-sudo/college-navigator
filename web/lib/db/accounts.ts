@@ -19,6 +19,7 @@ import type { Household, Person, Student } from "./types";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
 import { EMAIL_VALIDATION_DDL, EMAIL_VALIDATION_TABLES } from "./email-validation";
 import { DEMO_ACCESS_DDL, DEMO_ACCESS_TABLES } from "./demo-access-schema";
+import { REMINDER_DDL, REMINDER_TABLES } from "./reminders";
 
 export type AuthLink = {
   id: string;
@@ -96,6 +97,7 @@ export const ACCOUNT_DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_demo_invites_template ON demo_invites(template_household_id)`,
   `CREATE INDEX IF NOT EXISTS idx_demo_invites_access_request ON demo_invites(access_request_id)`,
   ...DEMO_ACCESS_DDL,
+  ...REMINDER_DDL,
 ];
 
 export const ALL_TABLES = [
@@ -118,9 +120,11 @@ export const ALL_TABLES = [
   ...DEMO_ACCESS_TABLES,
   ...REQUEST_TABLES,
   ...EMAIL_VALIDATION_TABLES,
+  ...REMINDER_TABLES,
 ];
 
 /** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */
+// ACCOUNT_DDL already includes the reminder definitions; do not register them a second time.
 export const SCHEMA_DDL = [...ACCOUNT_DDL, ...REQUEST_DDL, ...EMAIL_VALIDATION_DDL];
 
 let ensurePromise: Promise<void> | null = null;
