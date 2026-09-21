@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-6 pt-10">
       <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">UVOYANT</p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Sign in"}</h1>
         <p className="mt-1 text-ink/60">
           {codeStep

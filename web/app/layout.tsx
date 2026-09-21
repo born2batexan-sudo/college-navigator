@@ -6,7 +6,7 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", dis
 const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-ibm-plex-sans", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "College Navigator",
+  title: "UVOYANT",
   description: "One household. One action plan. Every school still in play.",
 };
 

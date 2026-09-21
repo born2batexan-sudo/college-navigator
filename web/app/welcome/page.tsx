@@ -33,7 +33,7 @@ export default async function WelcomePage() {
   return (
     <main className="flex flex-col gap-8">
       <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">UVOYANT</p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Schools to track</h1>
         <p className="mt-1 max-w-2xl text-ink/60">
           Keep every college-specific requirement in one calm plan. A few household preferences help us surface only

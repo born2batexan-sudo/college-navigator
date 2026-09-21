@@ -41,7 +41,7 @@ const plan = [
 
 const steps = [
   ["1", "Create the household plan", "Add every student, entering term and school in one place."],
-  ["2", "We verify every school", "Each school-and-term record is checked against authoritative sources before guidance is released."],
+  ["2", "We verify every school", "Each school and applicable term is reviewed against authoritative sources before guidance is released."],
   ["3", "Follow what matters next", "The household sees the next deadline, what is waiting on a school and what is already complete."],
 ];
 
@@ -57,7 +57,7 @@ export default async function LandingPage() {
       <nav className="-mt-16 flex items-center justify-between border-b border-line pb-5 sm:-mt-24" aria-label="Primary navigation">
         <a href="#top" className="flex items-center gap-3 font-display text-xl font-semibold text-ink">
           <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-accent text-sm text-accent">◇</span>
-          College Navigator
+          UVOYANT
         </a>
         <div className="flex items-center gap-4 text-sm">
           <a href="#how-it-works" className="hidden font-medium text-ink/70 hover:text-accent md:inline">How it works</a>
@@ -122,7 +122,7 @@ export default async function LandingPage() {
       <section className="grid gap-5 border-y border-line py-7 md:grid-cols-3" aria-label="Product promises">
         {[
           ["✓", "Every date checked against the school’s own site.", "Each step shows where it came from."],
-          ["☷", "144 checkpoints per school.", "Housing, aid, billing, health, orientation and more."],
+          ["☷", "Reviewed under the 12² Standard.", "A comprehensive college-and-term review surfaces only what matters to your family."],
           ["▢", "No school-portal passwords.", "We never sign in to a school as you."],
         ].map(([icon, title, text]) => (
           <div key={title} className="flex gap-3"><span className="text-xl text-accent">{icon}</span><p className="text-sm leading-6"><strong>{title}</strong> <span className="text-ink/65">{text}</span></p></div>
@@ -169,7 +169,7 @@ export default async function LandingPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gold">Researched, not guessed</p>
             <h2 className="mt-3 font-display text-4xl font-semibold leading-tight sm:text-5xl">Every school is checked to the 12² Standard.</h2>
-            <p className="mt-5 leading-7 text-white/70">We inspect 144 checkpoints across admissions, aid, housing, billing, health, orientation and more. Each fact is tied to an authoritative source, entering term and last-checked date.</p>
+            <p className="mt-5 leading-7 text-white/70">Behind every plan is a comprehensive 144-check review of the college and applicable term. We turn that work into a calm, prioritized family plan instead of exposing a wall of research.</p>
             <p className="mt-4 leading-7 text-white/70">If a school has not published something yet, we say so. Uncertain information is held for review instead of silently reaching families.</p>
           </div>
           <div>
@@ -217,7 +217,7 @@ export default async function LandingPage() {
       </section>
 
       <footer className="flex flex-col gap-3 border-t border-line pt-6 text-sm text-ink/45 sm:flex-row sm:items-center sm:justify-between">
-        <p>© 2026 College Navigator. Working name. Not affiliated with any college or application service.</p>
+        <p>© 2026 UVOYANT. Working name. Not affiliated with any college or application service.</p>
         <div className="flex gap-5"><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><Link href="/login">Log in</Link></div>
       </footer>
     </main>
