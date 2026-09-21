@@ -20,7 +20,7 @@ export default async function DemoAdminPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-7 py-5">
       <header className="border-b border-line pb-5">
-        <p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">UVOYANT</p>
+        <p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">CampusPassage</p>
         <h1 className="mt-2 font-display text-3xl font-semibold text-ink">Private Preview invitations</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink/65">
           Create a single-use, seven-day preview link. Each accepted link produces a separate, read-only sample household.

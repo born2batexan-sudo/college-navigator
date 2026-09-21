@@ -57,7 +57,7 @@ export default async function LandingPage() {
       <nav className="-mt-16 flex items-center justify-between border-b border-line pb-5 sm:-mt-24" aria-label="Primary navigation">
         <a href="#top" className="flex items-center gap-3 font-display text-xl font-semibold text-ink">
           <span className="grid h-8 w-8 place-items-center rounded-full border-2 border-accent text-sm text-accent">◇</span>
-          UVOYANT
+          CampusPassage
         </a>
         <div className="flex items-center gap-4 text-sm">
           <a href="#how-it-works" className="hidden font-medium text-ink/70 hover:text-accent md:inline">How it works</a>
@@ -217,7 +217,7 @@ export default async function LandingPage() {
       </section>
 
       <footer className="flex flex-col gap-3 border-t border-line pt-6 text-sm text-ink/45 sm:flex-row sm:items-center sm:justify-between">
-        <p>© 2026 UVOYANT. Working name. Not affiliated with any college or application service.</p>
+        <p>© 2026 CampusPassage. Working name. Not affiliated with any college or application service.</p>
         <div className="flex gap-5"><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><Link href="/login">Log in</Link></div>
       </footer>
     </main>

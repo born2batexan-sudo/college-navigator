@@ -69,7 +69,7 @@ export default async function DashboardPage() {
       <header className="border-b border-line pb-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">UVOYANT</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">CampusPassage</p>
             <h1 className="mt-2 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">{household.name}</h1>
             <p className="mt-1 text-ink/60">
               {student.name} · Class of {student.gradYear} · tracking {relationships.length} schools
