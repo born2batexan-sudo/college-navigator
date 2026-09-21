@@ -46,7 +46,11 @@ export default function RequestAccessPage() {
           <button disabled={pending} className="rounded-lg bg-coral px-5 py-3 font-semibold text-white transition hover:bg-coralDeep disabled:cursor-wait disabled:opacity-60" type="submit">
             {pending ? "Sending request…" : "Request private-preview access"}
           </button>
-          <p className="text-xs leading-5 text-ink/45">Requests are reviewed manually. Do not send passwords, payment details, or application materials.</p>
+          <div className="space-y-1 text-xs leading-5 text-ink/50">
+            <p>Requests are reviewed manually for a read-only demonstration. This is not enrollment in a live service, and no response time or approval is promised.</p>
+            <p>We use the submitted name and email only to review the request, prevent abuse, and provide access instructions if approved. This does not subscribe you to marketing.</p>
+            <p>Do not send passwords, payment details, application materials, school records, or financial information.</p>
+          </div>
         </form>
       )}
     </main>
