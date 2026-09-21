@@ -51,6 +51,9 @@ export function safeNext(next: unknown): string {
 export const PUBLIC_PATH_PREFIXES = [
   "/login",
   "/request-access",
+  "/media/", // reviewed public marketing media only
+  "/robots.txt",
+  "/sitemap.xml",
   "/auth/",
   "/api/agent/", // machine callers; each route checks its own bearer key
   "/api/debug/", // retired stub, always 404
