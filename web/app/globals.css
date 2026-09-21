@@ -121,6 +121,14 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
 .outcome h3 { margin: .45rem 0; font-family: var(--serif); font-size: 1.4rem; letter-spacing: -.03em; }
 .outcome p { margin: 0; color: var(--muted); font-size: .9rem; max-width: 17rem; }
 
+.experience-film { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 1.25fr); gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
+.film-copy h2 { margin: .55rem 0 1rem; font-size: clamp(2.35rem, 4.4vw, 4.5rem); line-height: .98; }
+.film-copy > p:not(.eyebrow):not(.caption) { color: var(--muted); font-size: 1.02rem; line-height: 1.7; }
+.film-frame { position: relative; padding: .75rem; background: linear-gradient(135deg, var(--violet), var(--teal-deep)); box-shadow: var(--shadow); }
+.film-frame::before { content: "Private-preview story"; position: absolute; z-index: 1; top: 1.1rem; left: 1.1rem; padding: .3rem .5rem; background: rgba(16, 47, 73, .88); color: #fff; font-size: .65rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.film-frame video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #102f49; }
+.film-transcript { display: inline-block; margin: .72rem .25rem .1rem; color: #fffaf0; font-size: .78rem; font-weight: 800; text-underline-offset: .2em; }
+
 .plan-section { position: relative; overflow: hidden; color: #f9f2e5; background: linear-gradient(135deg, #102f49, var(--teal-deep) 48%, #3f397a); }
 .plan-section::after { content: ""; position: absolute; width: 50vw; height: 50vw; right: -28vw; top: -37vw; border: 1px solid rgba(239, 205, 130, .22); border-radius: 50%; }
 .plan-section::before { content: ""; position: absolute; width: 24rem; height: 24rem; left: -10rem; bottom: -12rem; border-radius: 50%; background: radial-gradient(circle, rgba(233, 101, 85, .38), rgba(237, 174, 53, .12) 52%, transparent 70%); }
@@ -243,7 +251,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-
   .topbar { min-height: 63px; }
   .navlinks > a:not(.nav-cta):not(.login-link) { display: none; }
   .view-switch button { padding: .4rem .55rem; }
-  .hero, .status-layout, .reminders, .dash-grid { grid-template-columns: 1fr; gap: 2.3rem; }
+  .hero, .status-layout, .reminders, .dash-grid, .experience-film { grid-template-columns: 1fr; gap: 2.3rem; }
   .hero { padding: 3.8rem 0 4.2rem; }
   .hero-note { transform: none; }
   .section-head { grid-template-columns: 1fr; gap: .75rem; }
