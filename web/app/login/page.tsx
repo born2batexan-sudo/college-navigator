@@ -18,33 +18,38 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-6 pt-10">
-      <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">CampusPassage</p>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Sign in"}</h1>
-        <p className="mt-1 text-ink/60">
-          {codeStep
-            ? emailCodeEnabled
-              ? `We sent a code to ${query.email}. Type it below.`
-              : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
-            : "Sign in or create your family plan. Signing in never gives us access to your inbox."}
-        </p>
-      </header>
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-tealDark font-display text-base text-white">◇</span>
+        <p className="text-sm font-semibold uppercase tracking-wide text-ink/50">Campus Passage</p>
+      </div>
+      <div className="rounded-2xl border border-line bg-white/85 p-6 shadow-card">
+        <header>
+          <h1 className="font-display text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Welcome back"}</h1>
+          <p className="mt-1 text-ink/60">
+            {codeStep
+              ? emailCodeEnabled
+                ? `We sent a code to ${query.email}. Type it below to open your household plan.`
+                : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
+              : "Sign in to keep every student's plan in one place. Signing in never gives Campus Passage access to your email inbox."}
+          </p>
+        </header>
 
-      {query.deleted && (
-        <p className="rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
-      )}
-      {query.error && (
-        <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
-          {query.error}
-        </p>
-      )}
+        {query.deleted && (
+          <p className="mt-4 rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
+        )}
+        {query.error && (
+          <p role="alert" className="mt-4 rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
+            {query.error}
+          </p>
+        )}
 
       {!supabaseConfigured && !devLoginEnabled && (
-        <p className="rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">
+        <p className="mt-4 rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">
           Sign-in is not switched on for this site yet.
         </p>
       )}
 
+      <div className="mt-5">
       {codeStep ? (
         <div className="flex flex-col gap-3">
           {emailCodeEnabled ? (
@@ -113,6 +118,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           )}
         </>
       )}
+      </div>
+      </div>
     </main>
   );
 }

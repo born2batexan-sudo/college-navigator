@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import { answerReviewGuide, filterReviewWork, horizonEvents, pageAssistMode, reviewStudents } from "../lib/review-lab";
 
 describe("owner review lab fixed-demo logic", () => {
+  it("keeps every fixed-demo applicant in the same Class of 2027 / Fall 2027 cycle", () => {
+    assert.ok(reviewStudents.length >= 2);
+    assert.ok(reviewStudents.every((student) => student.year === "Class of 2027"));
+    assert.ok(reviewStudents.every((student) => student.graduationYear === 2027));
+    assert.ok(reviewStudents.every((student) => student.admissionsCycle === "Fall 2027"));
+  });
+
   it("filters preference-dependent work and retains a reason for every hidden item", () => {
     const maya = reviewStudents[0];
     const filtered = filterReviewWork(maya);

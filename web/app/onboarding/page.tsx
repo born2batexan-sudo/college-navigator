@@ -11,15 +11,18 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
   if (ctx.student) redirect("/");
 
   return (
-    <main className="mx-auto flex max-w-lg flex-col gap-6 pt-10">
-      <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">CampusPassage</p>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">Set up your household plan</h1>
-        <p className="mt-1 text-ink/60">Set up one household account, then give every student an independent plan. Research currently covers the Fall {ENTERING_CLASS_YEAR} entering class; another term stays clearly labeled.</p>
+    <main className="mx-auto flex max-w-2xl flex-col gap-7 pt-10">
+      <header className="border-b border-line pb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Campus Passage</p>
+        <h1 className="mt-2 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">Set up your household plan</h1>
+        <p className="mt-2 max-w-xl text-ink/60">Set up one household account, then give every student an independent plan. Research currently covers the Fall {ENTERING_CLASS_YEAR} entering class; another term stays clearly labeled.</p>
       </header>
 
-      {query.error && <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">{query.error}</p>}
-      <OnboardingForm />
+      {query.error && <p role="alert" className="rounded-2xl border border-urgent/30 bg-urgent/10 p-4 text-sm font-medium text-urgent shadow-card">{query.error}</p>}
+
+      <div className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
+        <OnboardingForm />
+      </div>
     </main>
   );
 }

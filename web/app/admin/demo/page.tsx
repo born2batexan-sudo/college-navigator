@@ -21,7 +21,7 @@ export default async function DemoAdminPage() {
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-7 py-5">
       <header className="border-b border-line pb-5">
-        <p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">CampusPassage</p>
+        <p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">Campus Passage</p>
         <h1 className="mt-2 font-display text-3xl font-semibold text-ink">Private Preview access</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink/65">Review requests before issuing a single-use, seven-day read-only invitation. Invitation tokens are shown once and are never stored in plain text.</p>
       </header>

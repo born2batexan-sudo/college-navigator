@@ -14,7 +14,7 @@ export default async function InvitePage({ params, searchParams }: { params: Pro
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-6 pt-10">
       <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">CampusPassage</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">Campus Passage</p>
         <h1 className="mt-1 text-2xl font-semibold text-ink">Family plan invite</h1>
       </header>
 

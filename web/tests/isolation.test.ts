@@ -93,7 +93,7 @@ describe("accounts and household isolation", () => {
       role: "parent",
       students: [
         { name: "Jordan", enteringTerm: "Fall 2027" },
-        { name: "Casey", enteringTerm: "Fall 2028" },
+        { name: "Casey", enteringTerm: "Fall 2027" },
       ],
       purchaserAttested: true,
     });
@@ -114,6 +114,22 @@ describe("accounts and household isolation", () => {
 
     await A.recordHouseholdReviewFlag({ householdId: ctx.household.id, signalCode: "duplicate_payment_attempt" });
     assert.ok(await A.getContextForUser("multi-student"), "a review hook never denies access automatically");
+  });
+
+  it("rejects a household plan that mixes high-school graduation years or admissions cycles", async () => {
+    const ctx = await A.provisionAccount({ authUserId: "mixed-cycle", email: "mixed-cycle@example.com" });
+    await assert.rejects(
+      () => A.completeOnboarding(ctx, {
+        role: "parent",
+        students: [
+          { name: "Same Cycle", enteringTerm: "Fall 2027" },
+          { name: "Different Cycle", enteringTerm: "Fall 2028" },
+        ],
+        purchaserAttested: true,
+      }),
+      /same high-school graduation year and admissions cycle/i,
+    );
+    assert.equal((await R.listStudentsForHousehold(ctx.household.id)).length, 0);
   });
 
   it("a family passes ownership checks for its own data only", async () => {

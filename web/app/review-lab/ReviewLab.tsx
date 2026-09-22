@@ -31,13 +31,13 @@ export function ReviewLab() {
 
   return <main className="mx-auto flex max-w-6xl flex-col gap-6 py-5">
     <header className="border-b border-line pb-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">CampusPassage · owner review lab</p><h1 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">Private product pressure test</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-ink/65">A controlled interface review with fixed, fictional sample data. Nothing here is a customer feature, live school information, advice, or a sending workflow.</p></div><Link href="/dashboard" className="shrink-0 text-sm font-semibold text-accent underline">Back to dashboard</Link></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">Campus Passage · owner review lab</p><h1 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">Private product pressure test</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-ink/65">A controlled interface review with fixed, fictional sample data. Nothing here is a customer feature, live school information, advice, or a sending workflow.</p></div><Link href="/dashboard" className="shrink-0 text-sm font-semibold text-accent underline">Back to dashboard</Link></div>
       <p className="mt-5 rounded-xl border border-gold/40 bg-goldPale/60 px-4 py-3 text-sm text-ink/75"><strong>Internal only.</strong> Every school, student, date, source, and status below is fictional and exists solely for same-day owner review.</p>
     </header>
 
-    <Section eyebrow="Household view" title="A two-student household, with a clear active plan">
+    <Section eyebrow="Household view" title="A same-cycle household, with clear active plans">
       <div className="mt-4 grid gap-3 sm:grid-cols-2">{students.map((entry) => <button type="button" key={entry.id} onClick={() => setSelectedId(entry.id)} aria-pressed={entry.id === selectedId} className={`rounded-xl border p-4 text-left transition ${entry.id === selectedId ? "border-accent bg-sky/55 ring-2 ring-accent/20" : "border-line bg-paper/45 hover:bg-paperDeep/35"}`}><p className="font-display text-xl font-semibold text-ink">{entry.name}</p><p className="mt-1 text-sm text-ink/60">{entry.year} · {entry.id === selectedId ? "Active review plan" : "Switch to this plan"}</p></button>)}</div>
-      <p className="mt-4 text-sm text-ink/60">Reviewing: <strong className="text-ink">{student.name}</strong>. Switching changes only this fictional plan; it does not affect the other student.</p>
+      <p className="mt-4 text-sm text-ink/60">Reviewing: <strong className="text-ink">{student.name}</strong> · {student.year} / {student.admissionsCycle}. This fixed illustration uses two applicants; the household model supports two or more qualifying students under a purchaser&apos;s genuine caregiving responsibility when they share the same cycle. Switching changes only this fictional plan.</p>
     </Section>
 
     <div className="grid gap-6 lg:grid-cols-2">
@@ -56,14 +56,14 @@ export function ReviewLab() {
       <ol className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{journeyThemes.map((theme, index) => <li key={theme} className="flex gap-3 rounded-xl border border-line bg-paper/35 p-3 text-sm text-ink"><span className="font-display text-lg font-semibold text-accent">{String(index + 1).padStart(2, "0")}</span><span>{theme}</span></li>)}</ol>
     </Section>
 
-    <Section eyebrow="CampusPassage Horizon · review concept" title="Upcoming timing, with certainty made visible">
+    <Section eyebrow="Campus Passage Horizon · review concept" title="Upcoming timing, with certainty made visible">
       <p className="mt-3 text-sm text-ink/65">Illustrative timeline states only. Dates are fictional; expected and unpublished items are never represented as confirmed.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{horizonEvents.map((event) => <article key={`${event.label}-${event.state}`} className="rounded-xl border border-line bg-paper/35 p-4"><p className="text-xs font-semibold uppercase tracking-[.12em] text-violet">{event.state}</p><h3 className="mt-2 font-semibold text-ink">{event.label}</h3><p className="mt-1 font-display text-lg text-ink">{event.date ?? "—"}</p><p className="mt-2 text-xs leading-5 text-ink/60">{event.note}</p></article>)}</div>
     </Section>
 
     <div className="grid gap-6 lg:grid-cols-2">
       <Section eyebrow="Scholarship awareness · review concept" title="Family tracking, never a qualification decision">
-        <article className="mt-4 rounded-xl border border-line bg-paper/35 p-4"><p className="text-xs font-semibold uppercase tracking-[.12em] text-violet">Fictional source</p><h3 className="mt-1 font-semibold text-ink">River County Community Foundation award</h3><p className="mt-1 text-sm text-ink/65">Sample deadline: February 18 · Status is family-reported, not verified by CampusPassage.</p><label className="mt-4 flex cursor-pointer items-center gap-3 text-sm font-medium text-ink"><input type="checkbox" checked={trackedScholarship} onChange={() => setTrackedScholarship(!trackedScholarship)} className="h-5 w-5 accent-accent" /> Family reports this opportunity as {trackedScholarship ? "tracked" : "not yet tracked"}</label></article>
+        <article className="mt-4 rounded-xl border border-line bg-paper/35 p-4"><p className="text-xs font-semibold uppercase tracking-[.12em] text-violet">Fictional source</p><h3 className="mt-1 font-semibold text-ink">River County Community Foundation award</h3><p className="mt-1 text-sm text-ink/65">Sample deadline: February 18 · Status is family-reported, not verified by Campus Passage.</p><label className="mt-4 flex cursor-pointer items-center gap-3 text-sm font-medium text-ink"><input type="checkbox" checked={trackedScholarship} onChange={() => setTrackedScholarship(!trackedScholarship)} className="h-5 w-5 accent-accent" /> Family reports this opportunity as {trackedScholarship ? "tracked" : "not yet tracked"}</label></article>
         <p className="mt-4 rounded-xl bg-violetPale/60 p-3 text-sm leading-6 text-ink/75"><strong>No qualification assessment.</strong> This concept can surface an awareness item and record what a family reports; it never says a student qualifies, will be selected, or will receive funding.</p>
       </Section>
       <Section eyebrow="Reminders · simulated preferences" title="Channels are visible; delivery is off">
@@ -74,7 +74,7 @@ export function ReviewLab() {
     </div>
 
     <div className="grid gap-6 lg:grid-cols-2">
-      <Section eyebrow="CampusPassage Guide · review concept" title="Answers grounded in fixed demo facts">
+      <Section eyebrow="Campus Passage Guide · review concept" title="Answers grounded in fixed demo facts">
         <p className="mt-3 text-sm text-ink/65">This simulation searches only the fictional facts listed below. It does not browse, infer facts, or give an answer when the evidence is absent.</p>
         <form onSubmit={askGuide} className="mt-4 flex gap-2"><label className="sr-only" htmlFor="review-guide-question">Ask a fictional fact question</label><input id="review-guide-question" value={question} onChange={(event) => setQuestion(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-2 text-sm text-ink" placeholder="Ask about aid, parking, housing, or billing" /><button className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white">Ask Guide</button></form>
         <div className="mt-3 flex flex-wrap gap-2">{["When does the aid offer open?", "What is the parking window?", "When is billing due?", "Will I get a scholarship?"].map((prompt) => <button key={prompt} type="button" onClick={() => { setQuestion(prompt); setGuide(answerReviewGuide(prompt)); }} className="rounded-full border border-line px-3 py-1 text-xs text-ink/70 hover:bg-paperDeep/40">{prompt}</button>)}</div>

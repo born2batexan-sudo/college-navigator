@@ -12,7 +12,7 @@ export default function RequestAccessPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-7 px-6 py-8 sm:py-14">
       <header>
-        <Link href="/" className="text-sm text-ink/60 underline underline-offset-4">Back to CampusPassage</Link>
+        <Link href="/" className="text-sm text-ink/60 underline underline-offset-4">Back to Campus Passage</Link>
         <p className="mt-8 text-xs font-semibold uppercase tracking-[.18em] text-violet">Private preview</p>
         <h1 className="mt-2 font-display text-4xl font-semibold text-ink">Request access</h1>
         <p className="mt-3 leading-7 text-ink/65">Tell us where to send a decision. We review requests before issuing a private, read-only invitation.</p>
@@ -22,7 +22,7 @@ export default function RequestAccessPage() {
         <section className="rounded-2xl border border-ok/30 bg-sky p-5" role="status">
           <h2 className="font-semibold text-ink">Thanks — your request is recorded.</h2>
           <p className="mt-2 text-sm leading-6 text-ink/70">If the request is approved, we will send next steps to the address provided. This page does not confirm whether an address already has access.</p>
-          <Link href="/" className="mt-4 inline-block text-sm font-semibold text-accent underline underline-offset-4">Return to CampusPassage</Link>
+          <Link href="/" className="mt-4 inline-block text-sm font-semibold text-accent underline underline-offset-4">Return to Campus Passage</Link>
         </section>
       ) : (
         <form action={action} className="flex flex-col gap-5 rounded-2xl border border-line bg-white/80 p-6 shadow-card">
@@ -41,7 +41,7 @@ export default function RequestAccessPage() {
           </div>
           <label className="flex gap-3 text-sm leading-6 text-ink/70">
             <input name="consent" type="checkbox" required className="mt-1 h-4 w-4 accent-accent" />
-            <span>I consent to CampusPassage using my name and email to review this private-preview request and, if approved, provide access instructions.</span>
+            <span>I consent to Campus Passage using my name and email to review this private-preview request and, if approved, provide access instructions.</span>
           </label>
           <button disabled={pending} className="rounded-lg bg-coral px-5 py-3 font-semibold text-white transition hover:bg-coralDeep disabled:cursor-wait disabled:opacity-60" type="submit">
             {pending ? "Sending request…" : "Request private-preview access"}

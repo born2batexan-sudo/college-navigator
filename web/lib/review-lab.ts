@@ -1,16 +1,21 @@
 // Fixed, fictional data used only by the protected owner review lab. It never
 // reads or writes household records and must not be presented as live service data.
+// The fixed illustration uses two applicants in one cycle; the household model
+// supports two or more qualifying students under a purchaser's genuine
+// caregiving responsibility when they share a graduation year/admissions cycle.
 
 export type ReviewStudent = {
   id: "maya" | "noah";
   name: string;
-  year: string;
+  year: "Class of 2027";
+  graduationYear: 2027;
+  admissionsCycle: "Fall 2027";
   preferences: { carParking: boolean; campusHousing: boolean; greekLife: boolean; accommodations: boolean };
 };
 
 export const reviewStudents: ReviewStudent[] = [
-  { id: "maya", name: "Maya Rivera", year: "Class of 2027", preferences: { carParking: false, campusHousing: true, greekLife: false, accommodations: true } },
-  { id: "noah", name: "Noah Rivera", year: "Class of 2028", preferences: { carParking: true, campusHousing: false, greekLife: true, accommodations: false } },
+  { id: "maya", name: "Maya Rivera", year: "Class of 2027", graduationYear: 2027, admissionsCycle: "Fall 2027", preferences: { carParking: false, campusHousing: true, greekLife: false, accommodations: true } },
+  { id: "noah", name: "Noah Rivera", year: "Class of 2027", graduationYear: 2027, admissionsCycle: "Fall 2027", preferences: { carParking: true, campusHousing: false, greekLife: true, accommodations: false } },
 ];
 
 type PreferenceKey = keyof ReviewStudent["preferences"];

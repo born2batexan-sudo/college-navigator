@@ -350,6 +350,10 @@ export async function completeOnboarding(
   if (!requested.length || requested.length > 6) throw new Error("Choose between one and six students");
   const students = requested.map((item) => ({ name: item.name.trim().slice(0, 60), enteringTerm: item.enteringTerm }));
   if (students.some((item) => !item.name)) throw new Error("Student name is required");
+  const cycles = students.map((item) => item.enteringTerm).filter((term): term is string => !!term);
+  if (students.length > 1 && (cycles.length !== students.length || new Set(cycles).size !== 1)) {
+    throw new Error("All students in a household plan must share the same high-school graduation year and admissions cycle.");
+  }
 
   return withTransaction(async () => {
     // Onboarding remains idempotent, including races from two first requests.
@@ -383,6 +387,13 @@ export async function addStudentProfile(ctx: HouseholdContext, input: StudentSet
   if (!name) throw new Error("Student name is required");
   if (input.purchaserAttested) await recordPurchaserAttestation(ctx);
   if (!(await getPurchaserAttestation(ctx.household.id))) throw new Error("Confirm authorization to manage this household plan before adding a student.");
+  const existingStudents = await listStudentsForHousehold(ctx.household.id);
+  const existingCycles = existingStudents.map((student) => {
+    try { return JSON.parse(student.attributes || "{}").enteringTerm; } catch { return undefined; }
+  }).filter((term): term is string => typeof term === "string" && term.length > 0);
+  if (existingCycles.length > 0 && (!input.enteringTerm || existingCycles.some((term) => term !== input.enteringTerm))) {
+    throw new Error("Every student in a household plan must share the same high-school graduation year and admissions cycle.");
+  }
   return upsertStudent({ householdId: ctx.household.id, name, gradYear: ENTERING_CLASS_YEAR, applicantType: "freshman", residency: "unknown", attributes: input.enteringTerm ? { enteringTerm: input.enteringTerm } : {} });
 }
 
