@@ -6,7 +6,8 @@ import { createClient } from "@supabase/supabase-js";
 import { requireHousehold, requireUser, requireWritableHousehold } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 import { DEV_COOKIE, SUPABASE_URL, devLoginEnabled, supabaseConfigured } from "@/lib/auth/env";
-import { createInvite, deleteHousehold, removeMember } from "@/lib/db/accounts";
+import { addStudentProfile, createInvite, deleteHousehold, getPurchaserAttestation, removeMember } from "@/lib/db/accounts";
+import { isStartTerm } from "@/lib/terms";
 
 async function endSession() {
   if (devLoginEnabled) (await cookies()).delete(DEV_COOKIE);
@@ -17,6 +18,23 @@ export async function signOut(): Promise<void> {
   await requireUser();
   await endSession();
   redirect("/login");
+}
+
+/** Adds an independent profile to the signed-in household; no surname proof is collected. */
+export async function addStudent(formData: FormData): Promise<void> {
+  const ctx = await requireWritableHousehold();
+  const name = String(formData.get("studentName") ?? "").trim();
+  const enteringTerm = String(formData.get("enteringTerm") ?? "");
+  const attested = formData.get("purchaserAttested") === "yes";
+  if (!name || name.length > 60 || !isStartTerm(enteringTerm)) redirect("/account?error=" + encodeURIComponent("Enter a first or preferred name and a valid start term."));
+  const hasAttestation = await getPurchaserAttestation(ctx.household.id);
+  if (!hasAttestation && !attested) redirect("/account?error=" + encodeURIComponent("Confirm authorization to manage this household plan before adding a student."));
+  try {
+    const student = await addStudentProfile(ctx, { name, enteringTerm, purchaserAttested: attested });
+    redirect(`/welcome?student=${encodeURIComponent(student.id)}`);
+  } catch (error) {
+    redirect("/account?error=" + encodeURIComponent(error instanceof Error ? error.message : "Could not add the student."));
+  }
 }
 
 /** Makes a one-time link the family can send to the other parent or the student. */
