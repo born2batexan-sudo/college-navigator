@@ -229,6 +229,10 @@ export async function createPerson(input: { householdId: string; name: string; r
   return { id, householdId: input.householdId, name: input.name, role: input.role, email: input.email ?? null, phone: null, consentState: input.consentState ?? "pending", createdAt: now };
 }
 
+export async function listPeopleForHousehold(householdId: string): Promise<Person[]> {
+  return (await queryRows<any>("SELECT * FROM people WHERE household_id = $1", [householdId])).map(toPerson);
+}
+
 export async function upsertStudent(input: {
   id?: string;
   householdId: string;
