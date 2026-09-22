@@ -5,7 +5,7 @@ import {
   listRelationshipsForStudent,
   listActionInstancesForRelationship,
 } from "@/lib/db/repo";
-import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { requireSelectedStudent } from "@/lib/auth/session";
 import { ActionListItem } from "@/components/ActionListItem";
 import { parseDateStatus } from "@/lib/date-status";
 import { enteringTermFrom, RESEARCHED_TERM } from "@/lib/terms";
@@ -16,9 +16,9 @@ export const dynamic = "force-dynamic";
 
 const OPEN_STATES = new Set(["not_started", "started", "submitted", "received", "blocked"]);
 
-export default async function SchoolTrackerPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const { student, household } = await requireOnboardedHousehold();
+export default async function SchoolTrackerPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ student?: string }> }) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+  const { student, household } = await requireSelectedStudent(query.student);
   const institution = await getInstitutionBySlug(slug);
   if (!institution) notFound();
 
@@ -42,7 +42,7 @@ export default async function SchoolTrackerPage({ params }: { params: Promise<{ 
 
   return (
     <main className="flex flex-col gap-8">
-      <Link href="/" className="text-sm text-ink/50 hover:underline">
+      <Link href={`/dashboard?student=${student.id}`} className="text-sm text-ink/50 hover:underline">
         ← Back to household dashboard
       </Link>
 

@@ -194,6 +194,32 @@ CREATE INDEX IF NOT EXISTS idx_action_events_action ON action_events(action_id);
 CREATE INDEX IF NOT EXISTS idx_sources_institution ON sources(institution_id);
 
 -- ---------------------------------------------------------------------
+-- Multi-student household safety (protected-review, not-live). A household
+-- can have multiple independent student profiles. Attestation is a recorded
+-- purchaser acknowledgement, not identity or relationship proof; surnames
+-- and protected traits are deliberately absent. Review flags are a human
+-- workflow hook only and never automatically deny or suspend a household.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS household_purchaser_attestations (
+  household_id TEXT PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
+  statement_version TEXT NOT NULL,
+  attested_by TEXT NOT NULL,
+  attested_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS household_review_flags (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  signal_code TEXT NOT NULL,
+  review_state TEXT NOT NULL DEFAULT 'pending' CHECK (review_state IN ('pending','cleared','no_action')),
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  reviewed_by TEXT,
+  note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_household_review_flags_queue ON household_review_flags(review_state, created_at);
+
+-- ---------------------------------------------------------------------
 -- Accounts (added 2026-09-19, workstream W1: real sign-in).
 -- auth_links ties one signed-in identity (a Supabase Auth user id, or a
 -- local dev id) to exactly one household. Every household-scoped read in

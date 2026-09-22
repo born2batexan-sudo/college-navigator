@@ -14,6 +14,9 @@ export const supabaseConfigured = !!SUPABASE_URL && !!SUPABASE_KEY;
 export const devLoginEnabled = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_LOGIN === "1";
 export const DEV_COOKIE = "cn_dev_user";
 
+/** Server-only switch for the protected, fictional owner-review interface. */
+export const reviewLabEnabled = process.env.CAMPUSPASSAGE_REVIEW_LAB_ENABLED === "true";
+
 /**
  * How the email sign-in works. Supabase's built-in mail cannot change the
  * email text, so its message holds only a link (opens on the same browser

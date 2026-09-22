@@ -14,7 +14,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { exec, queryOne, queryRows, newId, nowIso, usingPostgres, withTransaction } from "./client";
-import { upsertStudent } from "./repo";
+import { listStudentsForHousehold, upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
 import { EMAIL_VALIDATION_DDL, EMAIL_VALIDATION_TABLES } from "./email-validation";
@@ -49,6 +49,23 @@ export type HouseholdContext = {
 // they stay identical). All TEXT columns, so they run unchanged on both
 // SQLite and Postgres.
 export const ACCOUNT_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS household_purchaser_attestations (
+  household_id TEXT PRIMARY KEY REFERENCES households(id) ON DELETE CASCADE,
+  statement_version TEXT NOT NULL,
+  attested_by TEXT NOT NULL,
+  attested_at TEXT NOT NULL
+)`,
+  `CREATE TABLE IF NOT EXISTS household_review_flags (
+  id TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  signal_code TEXT NOT NULL,
+  review_state TEXT NOT NULL DEFAULT 'pending' CHECK (review_state IN ('pending','cleared','no_action')),
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT,
+  reviewed_by TEXT,
+  note TEXT
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_household_review_flags_queue ON household_review_flags(review_state, created_at)`,
   `CREATE TABLE IF NOT EXISTS auth_links (
   id TEXT PRIMARY KEY,
   auth_user_id TEXT NOT NULL UNIQUE,
@@ -113,6 +130,8 @@ export const ALL_TABLES = [
   "action_instances",
   "action_events",
   "change_events",
+  "household_purchaser_attestations",
+  "household_review_flags",
   "auth_links",
   "household_invites",
   "demo_invites",
@@ -287,35 +306,84 @@ export async function requireWritableOnboardedHousehold(ctx: HouseholdContext): 
   return ctx as HouseholdContext & { student: Student };
 }
 
+export type StudentSetup = { name: string; enteringTerm?: string };
+export type PurchaserAttestation = { statementVersion: string; attestedBy: string; attestedAt: string };
+const ATTESTATION_VERSION = "multi-student-protected-review-v1";
+
+/** Recorded authorization to manage a household plan; it is not identity proof. */
+export async function recordPurchaserAttestation(ctx: HouseholdContext): Promise<void> {
+  await requireWritableHousehold(ctx);
+  await exec(`INSERT INTO household_purchaser_attestations(household_id,statement_version,attested_by,attested_at)
+    VALUES($1,$2,$3,$4) ON CONFLICT(household_id) DO UPDATE SET statement_version=$2,attested_by=$3,attested_at=$4`,
+    [ctx.household.id, ATTESTATION_VERSION, ctx.authUserId, nowIso()]);
+}
+
+export async function getPurchaserAttestation(householdId: string): Promise<PurchaserAttestation | null> {
+  const row = await queryOne<any>("SELECT statement_version,attested_by,attested_at FROM household_purchaser_attestations WHERE household_id=$1", [householdId]);
+  return row ? { statementVersion: row.statement_version, attestedBy: row.attested_by, attestedAt: row.attested_at } : null;
+}
+
+/**
+ * Design hook for an internal human review queue. It intentionally does not
+ * alter access, subscription state, or any student plan. Callers must never
+ * derive signal_code from a surname, address, race, disability, or other
+ * protected characteristic.
+ */
+export async function recordHouseholdReviewFlag(input: { householdId: string; signalCode: string }): Promise<void> {
+  const code = input.signalCode.trim().slice(0, 80);
+  if (!code) throw new Error("A neutral review signal is required");
+  await exec("INSERT INTO household_review_flags(id,household_id,signal_code,review_state,created_at) VALUES($1,$2,$3,'pending',$4)", [newId("hhreview"), input.householdId, code, nowIso()]);
+}
+
+/** Resolves a browser-supplied selection only after checking its household. */
+export async function getStudentForHousehold(householdId: string, studentId: string): Promise<Student | null> {
+  const row = await queryOne<any>("SELECT * FROM students WHERE id=$1 AND household_id=$2", [studentId, householdId]);
+  return row ? toStudent(row) : null;
+}
+
 export async function completeOnboarding(
   ctx: HouseholdContext,
-  input: { studentName: string; role: "parent" | "student"; enteringTerm?: string }
+  input: { studentName?: string; role: "parent" | "student"; enteringTerm?: string; students?: StudentSetup[]; purchaserAttested?: boolean }
 ): Promise<Student> {
   await requireWritableHousehold(ctx);
-  const name = input.studentName.trim().slice(0, 60);
-  if (!name) throw new Error("Student name is required");
+  const requested = input.students ?? [{ name: input.studentName ?? "", enteringTerm: input.enteringTerm }];
+  if (!requested.length || requested.length > 6) throw new Error("Choose between one and six students");
+  const students = requested.map((item) => ({ name: item.name.trim().slice(0, 60), enteringTerm: item.enteringTerm }));
+  if (students.some((item) => !item.name)) throw new Error("Student name is required");
 
-  // One student per household for now; onboarding is idempotent.
-  if (ctx.student) return ctx.student;
-
-  const student = await upsertStudent({
-    id: `student_${safeId(ctx.household.id)}`,
-    householdId: ctx.household.id,
-    name,
-    gradYear: ENTERING_CLASS_YEAR,
-    applicantType: "freshman",
-    residency: "unknown",
-    attributes: input.enteringTerm ? { enteringTerm: input.enteringTerm } : {},
+  return withTransaction(async () => {
+    // Onboarding remains idempotent, including races from two first requests.
+    const existing = await listStudentsForHousehold(ctx.household.id);
+    if (existing.length) return existing[0];
+    const created: Student[] = [];
+    for (const item of students) {
+      created.push(await upsertStudent({
+        householdId: ctx.household.id,
+        name: item.name,
+        gradYear: ENTERING_CLASS_YEAR,
+        applicantType: "freshman",
+        residency: "unknown",
+        attributes: item.enteringTerm ? { enteringTerm: item.enteringTerm } : {},
+      }));
+    }
+    await exec("UPDATE households SET name = $1 WHERE id = $2", [`${created[0].name}'s family`, ctx.household.id]);
+    if (ctx.person) await exec("UPDATE people SET role = $1, name = $2 WHERE id = $3", [input.role, input.role === "student" ? created[0].name : ctx.person.name, ctx.person.id]);
+    // Legacy/internal callers may omit this field. The browser onboarding
+    // action requires it; retaining this compatibility avoids silently
+    // changing trusted server-side setup callers.
+    if (input.purchaserAttested) await recordPurchaserAttestation(ctx);
+    return created[0];
   });
-  await exec("UPDATE households SET name = $1 WHERE id = $2", [`${name}'s family`, ctx.household.id]);
-  if (ctx.person) {
-    await exec("UPDATE people SET role = $1, name = $2 WHERE id = $3", [
-      input.role,
-      input.role === "student" ? name : ctx.person.name,
-      ctx.person.id,
-    ]);
-  }
-  return student;
+}
+
+/** Adds a distinct profile under this household; it does not infer family relationship from a name. */
+export async function addStudentProfile(ctx: HouseholdContext, input: StudentSetup & { purchaserAttested?: boolean }): Promise<Student> {
+  await requireWritableHousehold(ctx);
+  const name = input.name.trim().slice(0, 60);
+  if (!name) throw new Error("Student name is required");
+  if (input.purchaserAttested) await recordPurchaserAttestation(ctx);
+  if (!(await getPurchaserAttestation(ctx.household.id))) throw new Error("Confirm authorization to manage this household plan before adding a student.");
+  return upsertStudent({ householdId: ctx.household.id, name, gradYear: ENTERING_CLASS_YEAR, applicantType: "freshman", residency: "unknown", attributes: input.enteringTerm ? { enteringTerm: input.enteringTerm } : {} });
 }
 
 /** Updates the student's household-scoped preferences without accepting a student id from the browser. */
@@ -576,21 +644,28 @@ export async function acceptDemoInvite(ctx: HouseholdContext, token: string): Pr
       return { ok: false, reason: "populated" };
     }
 
-    const sourceStudent = await queryOne<any>("SELECT * FROM students WHERE household_id=$1 ORDER BY created_at,id LIMIT 1", [invite.template_household_id]);
-    if (!sourceStudent) return { ok: false, reason: "invalid" };
+    const sourceStudents = await queryRows<any>("SELECT * FROM students WHERE household_id=$1 ORDER BY created_at,id", [invite.template_household_id]);
+    if (!sourceStudents.length) return { ok: false, reason: "invalid" };
     const now = nowIso();
-    const studentId = newId("student");
     await exec("UPDATE households SET name=$1 WHERE id=$2", ["Private Preview household", householdId]);
     if (current.person_id) await exec("UPDATE people SET name=$1,role='parent',consent_state='pending' WHERE id=$2 AND household_id=$3", ["Preview Member", current.person_id, householdId]);
-    await exec(`INSERT INTO students(id,household_id,name,grad_year,applicant_type,residency,attributes,created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [studentId, householdId, "Sample Student", sourceStudent.grad_year, sourceStudent.applicant_type, sourceStudent.residency, sanitizedAttributes(sourceStudent.attributes), now]);
 
-    const sourceRelationships = await queryRows<any>("SELECT * FROM institution_relationships WHERE student_id=$1", [sourceStudent.id]);
+    // Clone every profile with newly generated ids. Preferences and trackers
+    // stay distinct by student, while the clone remains read-only afterward.
+    const studentIds = new Map<string, string>();
+    for (const [index, sourceStudent] of sourceStudents.entries()) {
+      const studentId = newId("student"); studentIds.set(sourceStudent.id, studentId);
+      await exec(`INSERT INTO students(id,household_id,name,grad_year,applicant_type,residency,attributes,created_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [studentId, householdId, index === 0 ? "Sample Student" : `Sample Student ${index + 1}`, sourceStudent.grad_year, sourceStudent.applicant_type, sourceStudent.residency, sanitizedAttributes(sourceStudent.attributes), now]);
+    }
     const relIds = new Map<string, string>();
-    for (const rel of sourceRelationships) {
-      const id = newId("rel"); relIds.set(rel.id, id);
-      await exec(`INSERT INTO institution_relationships(id,student_id,institution_id,lifecycle_state,decision_date,commit_date,attributes,active,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id, studentId, rel.institution_id, rel.lifecycle_state, rel.decision_date, rel.commit_date, sanitizedRelationshipAttributes(rel.attributes), rel.active, now]);
+    for (const [sourceStudentId, studentId] of studentIds) {
+      const sourceRelationships = await queryRows<any>("SELECT * FROM institution_relationships WHERE student_id=$1", [sourceStudentId]);
+      for (const rel of sourceRelationships) {
+        const id = newId("rel"); relIds.set(rel.id, id);
+        await exec(`INSERT INTO institution_relationships(id,student_id,institution_id,lifecycle_state,decision_date,commit_date,attributes,active,created_at)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id, studentId, rel.institution_id, rel.lifecycle_state, rel.decision_date, rel.commit_date, sanitizedRelationshipAttributes(rel.attributes), rel.active, now]);
+      }
     }
     const actionIds = new Map<string, string>();
     for (const [oldRelId, newRelId] of relIds) {

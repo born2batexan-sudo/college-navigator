@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createHash } from "node:crypto";
 import { createSupabaseServerClient } from "./supabase-server";
 import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "./env";
-import { ensureAccountSchema, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
+import { ensureAccountSchema, getStudentForHousehold, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
 import type { Student } from "@/lib/db/types";
 
 export type SessionUser = { id: string; email: string | null };
@@ -63,6 +63,26 @@ export async function requireWritableHousehold(opts?: { next?: string }): Promis
 export async function requireWritableOnboardedHousehold(): Promise<HouseholdContext & { student: Student }> {
   const ctx = await requireOnboardedHousehold();
   return assertWritableOnboardedHousehold(ctx);
+}
+
+/**
+ * Selects one profile only after confirming it belongs to the signed-in
+ * household. `studentId` can come from a URL/form, but never grants access.
+ */
+export async function requireSelectedStudent(studentId?: string | null): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireOnboardedHousehold();
+  if (!studentId) return ctx;
+  const student = await getStudentForHousehold(ctx.household.id, studentId);
+  if (!student) notFound();
+  return { ...ctx, student };
+}
+
+export async function requireWritableSelectedStudent(studentId?: string | null): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireWritableOnboardedHousehold();
+  if (!studentId) return ctx;
+  const student = await getStudentForHousehold(ctx.household.id, studentId);
+  if (!student) throw new Error("Student profile not found");
+  return { ...ctx, student };
 }
 
 /** Private-preview administration is intentionally fail-closed. */
