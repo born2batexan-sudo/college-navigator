@@ -87,6 +87,35 @@ describe("accounts and household isolation", () => {
     assert.equal(second.name, "Alex");
   });
 
+  it("keeps multiple student profiles, school preferences, and review hooks separate within one household", async () => {
+    const ctx = await A.provisionAccount({ authUserId: "multi-student", email: "multi@example.com" });
+    await A.completeOnboarding(ctx, {
+      role: "parent",
+      students: [
+        { name: "Jordan", enteringTerm: "Fall 2027" },
+        { name: "Casey", enteringTerm: "Fall 2028" },
+      ],
+      purchaserAttested: true,
+    });
+    const profiles = await R.listStudentsForHousehold(ctx.household.id);
+    assert.equal(profiles.length, 2);
+    const jordan = profiles.find((profile) => profile.name === "Jordan")!;
+    const casey = profiles.find((profile) => profile.name === "Casey")!;
+    assert.ok(jordan && casey);
+    assert.ok(await A.getPurchaserAttestation(ctx.household.id));
+    assert.equal((await A.getStudentForHousehold(ctx.household.id, casey.id))?.name, "Casey");
+    assert.equal(await A.getStudentForHousehold(famB.household.id, casey.id), null, "a guessed profile id is denied outside its household");
+
+    const [jordanRel, caseyRel] = await Promise.all([R.upsertRelationship({ studentId: jordan.id, institutionId: inst.id }), R.upsertRelationship({ studentId: casey.id, institutionId: inst.id })]);
+    await R.updateRelationshipAttributes(jordanRel.id, { housingPlan: "on_campus" });
+    await R.updateRelationshipAttributes(caseyRel.id, { housingPlan: "commuter" });
+    assert.equal((await R.findRelationship(jordan.id, inst.id))?.attributes, JSON.stringify({ housingPlan: "on_campus" }));
+    assert.equal((await R.findRelationship(casey.id, inst.id))?.attributes, JSON.stringify({ housingPlan: "commuter" }));
+
+    await A.recordHouseholdReviewFlag({ householdId: ctx.household.id, signalCode: "duplicate_payment_attempt" });
+    assert.ok(await A.getContextForUser("multi-student"), "a review hook never denies access automatically");
+  });
+
   it("a family passes ownership checks for its own data only", async () => {
     for (const [mine, theirs, fam, other] of [
       ["a", "b", famA, famB],

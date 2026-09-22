@@ -21,7 +21,7 @@ const rel = (p: string) => path.relative(ROOT, p).split(path.sep).join("/");
 const files = walk(APP);
 const read = (p: string) => readFileSync(p, "utf-8");
 
-const GUARD = /require(?:Writable(?:Onboarded)?Household|OnboardedHousehold|Household|User|DemoOwner)\(/;
+const GUARD = /require(?:Writable(?:Onboarded)?Household|WritableSelectedStudent|SelectedStudent|OnboardedHousehold|Household|User|DemoOwner)\(/;
 
 // Pages that are allowed without sign-in.
 const PUBLIC_PAGES = new Set(["app/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // homepage and generic demo request page are public; the debug page is an inert 404 stub
