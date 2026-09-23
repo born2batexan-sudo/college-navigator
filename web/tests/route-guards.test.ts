@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
+import { isPublicPath } from "../lib/auth/env";
 
 const ROOT = process.cwd();
 const APP = path.join(ROOT, "app");
@@ -21,14 +22,15 @@ const rel = (p: string) => path.relative(ROOT, p).split(path.sep).join("/");
 const files = walk(APP);
 const read = (p: string) => readFileSync(p, "utf-8");
 
-const GUARD = /require(?:Writable(?:Onboarded)?Household|WritableSelectedStudent|SelectedStudent|OnboardedHousehold|Household|User|DemoOwner)\(/;
+const GUARD = /(?:require(?:Writable(?:Onboarded)?Household|WritableSelectedStudent|SelectedStudent|OnboardedHousehold|InvitationHousehold|Household|User|DemoOwner)|authorizedApiHousehold)\(/;
 
 // Pages that are allowed without sign-in.
-const PUBLIC_PAGES = new Set(["app/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // homepage and generic demo request page are public; the debug page is an inert 404 stub
+const PUBLIC_PAGES = new Set(["app/page.tsx", "app/sample-plan/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // overview, fixed fictional sample, and generic access request are public; debug is an inert 404 stub
 // Server-action files whose functions may run without sign-in (signing in itself or submitting a generic demo request).
 const PUBLIC_ACTIONS = new Set(["app/login/actions.ts", "app/request-access/actions.ts"]);
 // Route handlers that authenticate some other way.
-const PUBLIC_ROUTES = new Set(["app/auth/callback/route.ts"]);
+const PUBLIC_ROUTES = new Set(["app/auth/callback/route.ts", "app/api/stripe/webhook/route.ts", "app/api/mail/maintenance/route.ts"]); // Stripe route verifies raw signed body and is disabled by default
+const GUARDED_ROUTES = new Set(["app/api/ask/route.ts", "app/api/mail/callback/[provider]/route.ts"]);
 
 describe("route guards", () => {
   it("every page requires a signed-in family unless it is on the public list", () => {
@@ -63,7 +65,8 @@ describe("route guards", () => {
     assert.match(actions, /actionBelongsToHousehold\(/);
   });
 
-  it("agent routes check the agent key", () => {
+  it("agent routes check the agent key and are disabled in production", () => {
+    assert.match(read(path.join(ROOT, "app/api/agent/_auth.ts")), /NODE_ENV === "production"/);
     const routes = files.filter((f) => rel(f).startsWith("app/api/agent/") && f.endsWith("/route.ts"));
     assert.ok(routes.length >= 6);
     for (const f of routes) assert.match(read(f), /requireAgentAuth\(/, `${rel(f)} must call requireAgentAuth`);
@@ -76,7 +79,9 @@ describe("route guards", () => {
         r.startsWith("app/api/agent/") ||
         r.startsWith("app/api/companion/") ||
         r.startsWith("app/api/debug/") ||
-        PUBLIC_ROUTES.has(r);
+        PUBLIC_ROUTES.has(r) ||
+        GUARDED_ROUTES.has(r);
+      if (GUARDED_ROUTES.has(r) || r.startsWith("app/api/companion/")) assert.match(read(path.join(ROOT,r)), /authorizedApiHousehold\(/);
       assert.ok(ok, `${r} is a new route handler: add sign-in checks, then list it here`);
     }
   });
@@ -105,9 +110,22 @@ describe("route guards", () => {
     const env = read(path.join(ROOT, "lib", "auth", "env.ts"));
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/debug/", "/auth/", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
+    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/stripe/webhook", "/auth/callback", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
     assert.match(env, /pathname === "\/"/);
+    assert.match(env, /pathname === "\/sample-plan"/);
+    assert.doesNotMatch(block, /"\/sample-plan"/, "the sample page must be an exact-match exception, not a public prefix");
     assert.match(read(path.join(ROOT, "proxy.ts")), /!isPublicPath\(pathname\)/);
+  });
+
+  it("opens only the exact fictional sample path, not adjacent private routes", () => {
+    assert.equal(isPublicPath("/sample-plan"), true);
+    assert.equal(isPublicPath("/sample-plan/private"), false);
+    assert.equal(isPublicPath("/sample-plan-other"), false);
+    assert.equal(isPublicPath('/api/stripe/webhook'),true);
+    assert.equal(isPublicPath('/api/stripe/webhook-other'),false);
+    assert.equal(isPublicPath('/auth/callback'),true);
+    assert.equal(isPublicPath('/auth/callback/other'),false);
+    assert.equal(isPublicPath('/api/debug/unknown'),false);
   });
 
   it("dev sign-in cannot be enabled in a production build", () => {

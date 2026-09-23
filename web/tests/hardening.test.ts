@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 const dir=mkdtempSync(path.join(tmpdir(),"cn-hardening-"));
-process.env.DB_PATH=path.join(dir,"hardening.sqlite3");delete process.env.DATABASE_URL;process.env.REQUEST_QUEUE_ENABLED="1";process.env.REQUEST_MONTHLY_BUDGET_CENTS="5000";process.env.REQUEST_JOB_ESTIMATE_CENTS="800";
+process.env.DB_PATH=path.join(dir,"hardening.sqlite3");delete process.env.DATABASE_URL;process.env.REQUEST_QUEUE_ENABLED="1";process.env.REQUEST_PIPELINE_ENABLED="1";process.env.REQUEST_MONTHLY_BUDGET_CENTS="5000";process.env.REQUEST_JOB_ESTIMATE_CENTS="800";
 let R:typeof import("../lib/db/repo"),Q:typeof import("../lib/db/requests"),A:typeof import("../lib/db/accounts"),D:typeof import("../lib/db/client"),C:typeof import("../lib/coverage"),M:typeof import("../lib/materialize");
 describe("secure research and queue invariants",()=>{
  before(async()=>{R=await import("../lib/db/repo");Q=await import("../lib/db/requests");A=await import("../lib/db/accounts");D=await import("../lib/db/client");C=await import("../lib/coverage");M=await import("../lib/materialize");});
@@ -63,7 +63,7 @@ describe("secure research and queue invariants",()=>{
   assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Fall 2027"),false);
   await D.exec("INSERT INTO research_versions(institution_id,research_term,coverage_status,coverage_pct,critical_gaps,certified_at,updated_at) VALUES($1,'Fall 2027','certified',100,0,$2,$3) ON CONFLICT(institution_id,research_term) DO UPDATE SET coverage_status='certified',coverage_pct=100,critical_gaps=0",[inst.id,D.nowIso(),D.nowIso()]);
   await D.exec("UPDATE school_research_jobs SET status='ready' WHERE unitid='890' AND term='Fall 2027'");
-  assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Fall 2027"),true);
+  assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Fall 2027"),false,"legacy percentage and ready row cannot bypass reviewed publish gate");
   assert.equal(await Q.canHouseholdViewInstitution(other.household.id,inst.id,"Fall 2027"),false);
   assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Winter 2028"),false);
  });

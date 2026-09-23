@@ -8,6 +8,7 @@ const dir = mkdtempSync(path.join(tmpdir(), "cn-queue-"));
 process.env.DB_PATH = path.join(dir, "queue.sqlite3");
 delete process.env.DATABASE_URL;
 process.env.REQUEST_QUEUE_ENABLED = "1";
+process.env.REQUEST_PIPELINE_ENABLED = "1";
 process.env.REQUEST_MONTHLY_BUDGET_CENTS = "1600";
 
 let A: typeof import("../lib/db/accounts");
