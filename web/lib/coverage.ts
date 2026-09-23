@@ -13,12 +13,14 @@ export async function recomputeCoverage(institutionId: string, researchTerm = "F
     !(r.applicability === "not_yet_published" && evidenceValid(r))).length;
   const pct = Math.round((verified.length / ALL_CHECKPOINTS.length) * 1000) / 10;
   let status: CoverageResult["status"];
-  if (pct >= 90 && criticalGaps === 0) status = "certified";
-  else if (pct >= 75) status = "beta";
+  // A percentage is not certification: all-subject state, contradictory evidence,
+  // independent review and live-school benchmarking are required. Quarantine
+  // the old 90% gate until a separately reviewed certification protocol exists.
+  if (pct >= 75) status = "beta";
   else if (pct >= 50) status = "research";
   else status = "unsupported";
   const now = nowIso();
-  const certifiedAt = status === "certified" ? now : null;
+  const certifiedAt = null; // No percentage-based automated certification.
   await exec(`INSERT INTO research_versions (institution_id,research_term,coverage_status,coverage_pct,critical_gaps,certified_at,updated_at)
     VALUES ($1,$2,$3,$4,$5,$6,$7)
     ON CONFLICT (institution_id,research_term) DO UPDATE SET coverage_status=$8,coverage_pct=$9,critical_gaps=$10,certified_at=$11,updated_at=$12`,

@@ -1,4 +1,4 @@
-// Private CampusPassage demo access workflow. This module is server-only.
+// Private Campus Passage demo access workflow. This module is server-only.
 // It deliberately does not send mail: the adapter persists a safe queue row
 // and marks it as waiting for a configured provider. Invitation bearer tokens
 // remain transient and hash-only in the database.
@@ -6,6 +6,7 @@ import { createHash, createHmac } from "node:crypto";
 import { createDemoInvite, revokeDemoInvite } from "./accounts";
 import { exec, newId, nowIso, queryOne, queryRows, usingPostgres, withTransaction } from "./client";
 import { resendConfigured, sendTransactionalEmail } from "@/lib/email/resend";
+import { appOrigin } from "@/lib/auth/origin";
 
 export const ACCESS_CONSENT_VERSION = "demo-access-2026-09-24-v1";
 const MAX_NAME = 100;
@@ -88,16 +89,6 @@ function escapeHtml(value: string): string {
   })[character] ?? character);
 }
 
-function cleanOrigin(value: string): string {
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error("invalid protocol");
-    return url.origin;
-  } catch {
-    return "https://www.campuspassage.com";
-  }
-}
-
 /**
  * Delivers one already-queued message after commit. Invitation tokens are
  * accepted transiently for the approval email and are never written to the
@@ -106,7 +97,6 @@ function cleanOrigin(value: string): string {
 export async function deliverDemoNotification(input: {
   requestId: string;
   kind: "request_received" | "approved" | "declined" | "revoked";
-  origin: string;
   inviteToken?: string;
   expiresAt?: string;
 }): Promise<boolean> {
@@ -116,7 +106,7 @@ export async function deliverDemoNotification(input: {
   if (!row || row.delivery_state === "sent") return Boolean(row);
   if (!resendConfigured()) return false;
 
-  const origin = cleanOrigin(input.origin);
+  const origin = appOrigin();
   const name = String(row.requester_name);
   const email = String(row.requester_email);
   let subject = "Campus Passage private preview update";
@@ -141,8 +131,8 @@ export async function deliverDemoNotification(input: {
     html = `<p>Hello ${escapeHtml(name)},</p><p>Thank you for your interest in Campus Passage. We are not able to issue a private preview invitation for this request at this time.</p>`;
   } else {
     subject = "Campus Passage private preview access revoked";
-    text = `Hello ${name},\n\nYour unused Campus Passage private preview invitation has been revoked and will no longer open the preview.`;
-    html = `<p>Hello ${escapeHtml(name)},</p><p>Your unused Campus Passage private preview invitation has been revoked and will no longer open the preview.</p>`;
+    text = `Hello ${name},\n\nYour Campus Passage private preview access has been revoked and will no longer open the preview.`;
+    html = `<p>Hello ${escapeHtml(name)},</p><p>Your Campus Passage private preview access has been revoked and will no longer open the preview.</p>`;
   }
 
   await exec("UPDATE demo_access_notifications SET delivery_state='queued',attempts=attempts+1,last_error=NULL WHERE id=$1 AND delivery_state<>'sent'", [row.id]);
@@ -176,7 +166,6 @@ export async function submitDemoAccessRequest(input: {
   email: string;
   ipAddress?: string | null;
   honeypot?: string | null;
-  origin?: string;
 }): Promise<AccessRequestResult> {
   requireHashSecretForProduction();
   const name = normalizedName(input.name);
@@ -230,7 +219,7 @@ export async function submitDemoAccessRequest(input: {
     return id;
   });
   if (createdRequestId) {
-    await deliverDemoNotification({ requestId: createdRequestId, kind: "request_received", origin: input.origin ?? "https://www.campuspassage.com" });
+    await deliverDemoNotification({ requestId: createdRequestId, kind: "request_received" });
   }
   return { accepted: true };
 }
@@ -270,7 +259,6 @@ export type AccessDecision =
 export async function approveDemoAccessRequest(input: {
   requestId: string;
   actor: { id: string; email: string };
-  origin?: string;
 }): Promise<AccessDecision> {
   const decision = await withTransaction(async (): Promise<AccessDecision> => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
@@ -289,14 +277,14 @@ export async function approveDemoAccessRequest(input: {
   });
   if (decision.ok) {
     await deliverDemoNotification({
-      requestId: input.requestId, kind: "approved", origin: input.origin ?? "https://www.campuspassage.com",
+      requestId: input.requestId, kind: "approved",
       inviteToken: decision.token, expiresAt: decision.expiresAt,
     });
   }
   return decision;
 }
 
-export async function declineDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string }; origin?: string }): Promise<boolean> {
+export async function declineDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string } }): Promise<boolean> {
   const decided = await withTransaction(async () => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
     const request = await queryOne<any>(`SELECT * FROM demo_access_requests WHERE id=$1${lock}`, [input.requestId]);
@@ -307,17 +295,17 @@ export async function declineDemoAccessRequest(input: { requestId: string; actor
     await queuedNotificationAdapter.enqueue({ requestId: request.id, kind: "declined", recipientEmail: request.requester_email, payload: { type: "private_preview_decision", decision: "declined" } });
     return true;
   });
-  if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "declined", origin: input.origin ?? "https://www.campuspassage.com" });
+  if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "declined" });
   return decided;
 }
 
-export async function revokeDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string }; origin?: string }): Promise<boolean> {
+export async function revokeDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string } }): Promise<boolean> {
   const decided = await withTransaction(async () => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
     const request = await queryOne<any>(`SELECT * FROM demo_access_requests WHERE id=$1${lock}`, [input.requestId]);
     if (!request || request.status !== "approved" || !request.invite_id) return false;
-    const invite = await queryOne<any>(`SELECT id,accepted_at FROM demo_invites WHERE id=$1${lock}`, [request.invite_id]);
-    if (!invite || invite.accepted_at) return false;
+    const invite = await queryOne<any>(`SELECT id FROM demo_invites WHERE id=$1${lock}`, [request.invite_id]);
+    if (!invite) return false;
     const revoked = await revokeDemoInvite(request.invite_id, { id: input.actor.id, email: input.actor.email });
     if (!revoked) return false;
     const now = nowIso();
@@ -326,6 +314,6 @@ export async function revokeDemoAccessRequest(input: { requestId: string; actor:
     await queuedNotificationAdapter.enqueue({ requestId: request.id, inviteId: request.invite_id, kind: "revoked", recipientEmail: request.requester_email, payload: { type: "private_preview_decision", decision: "revoked" } });
     return true;
   });
-  if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "revoked", origin: input.origin ?? "https://www.campuspassage.com" });
+  if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "revoked" });
   return decided;
 }

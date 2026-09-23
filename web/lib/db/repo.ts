@@ -391,6 +391,7 @@ export type RuleInput = {
 export async function upsertRule(input: RuleInput): Promise<Rule> {
   const researchTerm = String(input.researchTerm ?? "Fall 2027").trim();
   if (!researchTerm) throw new Error("researchTerm is required");
+  if (input.checkpointCode.startsWith("CAR-") && input.population === "bringing_car") throw new Error("Career checkpoints cannot use vehicle applicability");
   const status = input.status ?? "unverified";
   const applicability = input.applicability ?? "applies";
   const cycleState = input.cycleState ?? "undated";
@@ -439,6 +440,7 @@ export async function listRulesForInstitution(institutionId: string, researchTer
   return (await queryRows<any>(`SELECT * FROM rules
     WHERE institution_id=$1 AND research_term=$2
       AND status='verified' AND confidence IN ('high','medium')
+      AND NOT (checkpoint_code LIKE 'CAR-%' AND population='bringing_car')
     ORDER BY checkpoint_code`, [institutionId, researchTerm])).map(toRule);
 }
 

@@ -1,10 +1,12 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { createHash } from "node:crypto";
 import { createSupabaseServerClient } from "./supabase-server";
 import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "./env";
 import { ensureAccountSchema, getStudentForHousehold, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
 import type { Student } from "@/lib/db/types";
+import { hasProductAccess } from "./product-access";
+import { appOrigin } from "./origin";
 
 export type SessionUser = { id: string; email: string | null };
 
@@ -36,15 +38,30 @@ export async function requireUser(opts?: { next?: string }): Promise<SessionUser
   return user;
 }
 
-/**
- * The starting point for every signed-in page and action: who is signed in,
- * and which household they belong to (created empty on first sign-in).
- * Never look up a household any other way.
- */
+/** Only invitation acceptance may provision an unapproved account. Never use for product reads or writes. */
+export async function requireInvitationHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
+  const user = await requireUser(opts);
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  return { ...ctx, email: user.email };
+}
+
+/** All product pages and mutations must pass this live authorization check. */
 export async function requireHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
   const user = await requireUser(opts);
   await ensureAccountSchema();
-  return provisionAccount({ authUserId: user.id, email: user.email });
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  if (!await hasProductAccess(user, ctx.household.id)) redirect("/request-access");
+  return ctx;
+}
+
+/** JSON endpoints must respond 403, not follow a page redirect. */
+export async function authorizedApiHousehold(): Promise<HouseholdContext | null> {
+  const user = await getSessionUser();
+  if (!user) return null;
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  return await hasProductAccess(user, ctx.household.id) ? ctx : null;
 }
 
 /** Like requireHousehold, but sends brand-new accounts to finish setup first. */
@@ -93,10 +110,7 @@ export async function requireDemoOwner(): Promise<SessionUser> {
   return user;
 }
 
-/** The address the browser used to reach us (works on preview and production URLs alike). */
+/** Kept for existing callers; all outbound URLs use the configured origin. */
 export async function requestOrigin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+  return appOrigin();
 }

@@ -140,6 +140,9 @@ export const ALL_TABLES = [
   ...REQUEST_TABLES,
   ...EMAIL_VALIDATION_TABLES,
   ...REMINDER_TABLES,
+  'cycle_orders', 'cycle_entitlements', 'complimentary_invites', 'cycle_accounting_events',
+  'cycle_audit_events', 'stripe_webhook_events', 'mail_oauth_attempts', 'mail_connections', 'mail_sync_events',
+  'mail_control_audit', 'verified_mail_senders', 'connected_mail_evidence', 'assistant_usage',
 ];
 
 /** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */
@@ -589,15 +592,18 @@ export async function listDemoInvites(): Promise<DemoInvite[]> {
 
 export async function revokeDemoInvite(id: string, actor: { id: string; email: string }): Promise<boolean> {
   const changed = await queryOne<any>(`UPDATE demo_invites SET revoked_at=$1,revoked_by=$2,revoked_email=$3
-    WHERE id=$4 AND accepted_at IS NULL AND revoked_at IS NULL RETURNING id`, [nowIso(), actor.id, actor.email.trim().toLowerCase(), id]);
+    WHERE id=$4 AND revoked_at IS NULL RETURNING id`, [nowIso(), actor.id, actor.email.trim().toLowerCase(), id]);
   return !!changed;
 }
 
-export async function previewDemoInvite(token: string): Promise<DemoPreview | null> {
+export async function previewDemoInvite(token: string, signedInEmail?: string | null): Promise<DemoPreview | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const row = await queryOne<any>(`SELECT expires_at FROM demo_invites
-    WHERE token_hash=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > $2`, [hashToken(token), nowIso()]);
-  return row ? { expiresAt: row.expires_at } : null;
+  const row = await queryOne<any>(`SELECT i.id,i.expires_at,i.access_request_id,r.requester_email,r.status,r.invite_id
+    FROM demo_invites i LEFT JOIN demo_access_requests r ON r.id=i.access_request_id
+    WHERE i.token_hash=$1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > $2`, [hashToken(token), nowIso()]);
+  if (!row || (row.access_request_id && (!signedInEmail || row.status !== "approved" || row.invite_id !== row.id ||
+    row.requester_email !== signedInEmail.trim().toLowerCase()))) return null;
+  return { expiresAt: row.expires_at };
 }
 
 function sanitizedAttributes(raw: string | null | undefined): string {
@@ -641,6 +647,12 @@ export async function acceptDemoInvite(ctx: HouseholdContext, token: string): Pr
     // an owner rotate the active template without invalidating open links.
     if (!invite || !(await queryOne("SELECT 1 AS ok FROM households WHERE id=$1", [invite.template_household_id]))) {
       return { ok: false, reason: "invalid" };
+    }
+    if (invite.access_request_id) {
+      const approved = await queryOne<any>(`SELECT requester_email,status,invite_id FROM demo_access_requests
+        WHERE id=$1`, [invite.access_request_id]);
+      if (!ctx.email || !approved || approved.status !== "approved" || approved.invite_id !== invite.id ||
+        approved.requester_email !== ctx.email.trim().toLowerCase()) return { ok: false, reason: "invalid" };
     }
 
     const householdId = current.household_id as string;
