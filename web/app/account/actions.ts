@@ -8,6 +8,8 @@ import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 import { DEV_COOKIE, SUPABASE_URL, devLoginEnabled, supabaseConfigured } from "@/lib/auth/env";
 import { addStudentProfile, createInvite, deleteHousehold, getPurchaserAttestation, removeMember } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
+import { mailEnabled } from '@/lib/mail/provider';
+import { deleteMailData, mailStatus } from '@/lib/mail/service';
 
 async function endSession() {
   if (devLoginEnabled) (await cookies()).delete(DEV_COOKIE);
@@ -71,7 +73,11 @@ export async function deleteAccount(formData: FormData): Promise<void> {
   if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
     redirect("/account?error=" + encodeURIComponent("Type DELETE to confirm."));
   }
-  if (ctx.isOwner) await deleteHousehold(ctx.household.id);
+  if (ctx.isOwner) {
+    if (mailEnabled() || (await mailStatus({id:ctx.authUserId,email:ctx.email},ctx.household.id)).some(c=>c.status!=='revoked'))
+      await deleteMailData({id:ctx.authUserId,email:ctx.email},ctx.household.id);
+    await deleteHousehold(ctx.household.id);
+  }
   else await removeMember(ctx);
   await endSession();
   await deleteSignInRecords([ctx.authUserId]);

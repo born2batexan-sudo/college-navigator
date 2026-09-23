@@ -5,14 +5,20 @@ import { listStudentsForHousehold } from "@/lib/db/repo";
 import { START_TERMS } from "@/lib/terms";
 import { StudentDot } from "@/components/StudentSwitcher";
 import { addStudent, deleteAccount, makeInvite, signOut } from "./actions";
+import { claimAccess, startCheckout } from './access-actions';
+import { stripeReady } from '@/lib/db/stripe-review';
+import { configured, mailEnabled } from '@/lib/mail/provider';
+import { mailStatus } from '@/lib/mail/service';
+import { connectMail, syncMail, disconnectMailAction, deleteMailAction } from './mail-actions';
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ invite?: string; error?: string }> }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ invite?: string; error?: string; mail?: string }> }) {
   const query = await searchParams;
   const ctx = await requireHousehold();
   const [members, students, attestation] = await Promise.all([listMembers(ctx.household.id), listStudentsForHousehold(ctx.household.id), getPurchaserAttestation(ctx.household.id)]);
   const inviteUrl = query.invite ? `${await requestOrigin()}/invite/${query.invite}` : null;
+  const connections = !ctx.isDemo && ctx.isOwner ? await mailStatus({id:ctx.authUserId,email:ctx.email},ctx.household.id) : [];
 
   return (
     <main className="flex max-w-2xl flex-col gap-7">
@@ -33,8 +39,33 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
         </p>
       )}
 
+      {query.mail && <p role="status" className="rounded-xl border border-line p-3 text-sm">{query.mail}</p>}
       {ctx.isDemo && <p className="rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="font-semibold text-accent">Private Preview</strong> · This sample household is read-only. Changes are disabled.</p>}
 
+      {!ctx.isDemo && ctx.isOwner && <section className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6"><h2 className="font-display text-xl font-semibold">Household-cycle access · built—not live</h2><p className="mt-2 text-sm text-ink/60">Sign-in is separate from purchase. A complimentary invitation is for this household only, expires, and works once. Returning from checkout never grants access; only a verified payment event can do that.</p><form action={claimAccess} className="mt-3 flex gap-2"><input name="token" required placeholder="One-time invitation token" className="min-w-0 flex-1 rounded border border-line p-2 text-sm"/><button className="rounded bg-accent px-3 py-2 text-sm text-white">Claim</button></form>{stripeReady() ? <form action={startCheckout} className="mt-3"><button className="rounded bg-accent px-3 py-2 text-sm text-white">Continue to hosted checkout</button></form> : <p className="mt-3 text-xs text-ink/55">Checkout not enabled. No payment methods are connected.</p>}</section>}
+      {!ctx.isDemo && ctx.isOwner && <section className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
+        <h2 className="font-display text-xl font-semibold">Connected mail</h2>
+        <p className="mt-2 text-sm"><Link className="underline" href="/account/mail-privacy">Mail privacy controls remain available after access expires</Link></p>
+        <p className="mt-2 text-sm text-ink/65">Optional, off unless explicitly enabled. Each provider needs separate consent. We query only curated, currently approved official school/vendor sender domains, collect limited sender/time evidence, never attachments or message bodies, and never certify school research or complete tasks from mail. Evidence is purged after 30 days. Disconnect or delete at any time.</p>
+        {!mailEnabled() && <p className="mt-3 text-sm">Not enabled. New connections and syncing are unavailable; existing grants can still be removed.</p>}
+        {mailEnabled() && <>
+          {(['gmail','microsoft'] as const).map(p => configured(p) && <form key={p} action={connectMail} className="mt-4 rounded-lg border border-line p-3 text-sm">
+            <input type="hidden" name="provider" value={p}/>
+            <p className="font-medium">{p==='gmail'?'Google Gmail':'Microsoft 365 Outlook'}</p>
+            <p className="mt-1 text-ink/60">{p==='gmail'?'Google gmail.readonly is needed for sender-scoped search; this is a restricted Google scope.':'Microsoft Mail.ReadBasic plus User.Read; the provider omits bodies, previews, and attachments.'} Account identity is verified by the provider; access can be revoked in provider settings.</p>
+            <label className="mt-2 flex gap-2"><input type="checkbox" name="consent" value="yes" required/> I consent to this provider&apos;s limited mail access and 30-day evidence retention.</label>
+            <button className="mt-2 rounded bg-accent px-3 py-2 text-white">Connect {p==='gmail'?'Gmail':'Microsoft 365'}</button>
+          </form>)}
+        </>}
+          {connections.map(c=><div key={c.id} className="mt-4 rounded-lg border border-line p-3 text-sm">
+            <p><strong>{c.provider==='gmail'?'Gmail':'Microsoft 365'}</strong> · {c.status} · consented {new Date(c.consented_at).toLocaleDateString()}</p>
+            <p className="text-ink/60">Last sync: {c.last_sync_at?new Date(c.last_sync_at).toLocaleString():'never'}{c.retry_after?` · Retry after ${new Date(c.retry_after).toLocaleString()}`:''}</p>
+            {mailEnabled() && c.status==='active'&&<form action={syncMail} className="inline-block mr-2"><input type="hidden" name="id" value={c.id}/><button className="underline">Sync approved senders</button></form>}
+            {c.status!=='revoked'&&<form action={disconnectMailAction} className="inline-block"><input type="hidden" name="id" value={c.id}/><button className="underline">Disconnect and erase evidence</button></form>}
+          </div>)}
+          <p className="mt-3 text-xs text-ink/60">Microsoft does not provide per-app OAuth revocation under these least-privilege scopes. After disconnect, remove Campus Passage in <a className="underline" href="https://myapps.microsoft.com/">Microsoft My Apps</a>. If Google revocation fails, remove access in your Google account security settings. Local tokens and evidence are erased regardless.</p>
+          <form action={deleteMailAction} className="mt-3 flex gap-2 text-sm"><input name="confirm" placeholder="Type DELETE" aria-label="Type DELETE to erase connected mail" className="rounded border border-line px-2"/><button className="rounded border border-urgent/40 px-3 py-2 text-urgent">Delete all connected-mail data</button></form>
+      </section>}
       <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
         <h2 className="font-display text-xl font-semibold text-ink">Student profiles</h2>
         <p className="text-sm text-ink/60">Every profile has separate schools, preferences, and action statuses. We never ask for a last name or use one as proof of a household relationship.</p>

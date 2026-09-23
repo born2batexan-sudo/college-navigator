@@ -8,7 +8,7 @@ const initialState: ApproveAccessState = { inviteUrl: null, error: null };
 
 type Props = { id: string; status: string; inviteAccepted: boolean };
 
-export function AccessRequestActions({ id, status, inviteAccepted }: Props) {
+export function AccessRequestActions({ id, status }: Props) {
   const [state, approve, pending] = useActionState(approveAccessRequest, initialState);
   const router = useRouter();
   const refresh = () => setTimeout(() => router.refresh(), 0);
@@ -26,7 +26,7 @@ export function AccessRequestActions({ id, status, inviteAccepted }: Props) {
           </form>
         </div>
       )}
-      {status === "approved" && !inviteAccepted && (
+      {status === "approved" && (
         <form action={async (formData) => { await revokeAccessRequest(formData); refresh(); }}>
           <input type="hidden" name="requestId" value={id} />
           <button className="text-sm font-semibold text-urgent underline" type="submit">Revoke</button>

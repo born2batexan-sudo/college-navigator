@@ -21,7 +21,7 @@ jobs:
     environment: production-research
     if: inputs.task == 'process the next requested school'
     runs-on: ubuntu-latest
-    timeout-minutes: 160
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -32,17 +32,23 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           QUEUE_AGENT_API_KEY: ${{ secrets.QUEUE_AGENT_API_KEY }}
-          RESEARCH_WRITER_API_KEY: ${{ secrets.RESEARCH_WRITER_API_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-        run: python -u process_requests.py | tee process.log
+          REQUEST_PIPELINE_ENABLED: ${{ vars.REQUEST_PIPELINE_ENABLED || '0' }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+          REQUEST_RESEARCH_MODEL: ${{ vars.REQUEST_RESEARCH_MODEL }}
+          REQUEST_SEARCH_COST_CENTS: ${{ vars.REQUEST_SEARCH_COST_CENTS }}
+          REQUEST_LANE_RESERVATION_CENTS: ${{ vars.REQUEST_LANE_RESERVATION_CENTS }}
+          REQUEST_INPUT_CENTS_PER_MILLION: ${{ vars.REQUEST_INPUT_CENTS_PER_MILLION }}
+          REQUEST_OUTPUT_CENTS_PER_MILLION: ${{ vars.REQUEST_OUTPUT_CENTS_PER_MILLION }}
+          REQUEST_ATTEMPT_CEILING_CENTS: ${{ vars.REQUEST_ATTEMPT_CEILING_CENTS || '800' }}
+        shell: bash
+        run: set -o pipefail; python -u process_requests.py | tee process.log
       - name: Save reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: request-run-reports
-          path: |
-            agents/run-report.json
-            agents/run-report-recheck.json
+          name: request-run-status
+          path: agents/process.log
           if-no-files-found: ignore
   directory:
     environment: production-directory

@@ -113,16 +113,57 @@ provides pause, revoke, rotation, deletion, and dry-run normalized-ingestion
 controls. Raw message material and sender local-parts are deliberately not
 part of the schema.
 
-## Private demo access requests (staging only)
+## Public marketing and approved access (not deployed)
 
-`/request-access` accepts a name, email, and explicit consent, then returns a
-generic acknowledgement for valid, duplicate, and throttled submissions. Email
-and IP digests, a cooldown, a per-IP rate limit, a honeypot, a single-use
-approval invitation, an append-only audit trail, and owner-only approval,
-decline, and revocation controls are implemented in the reviewed demo-access
-migration. The notification adapter persists a redacted queue record with
-`queued_no_provider`; it does not send mail and never stores a bearer token.
-The owner must copy the one-time link shown after approval until a reviewed
-email provider adapter is configured. This workflow is not production-ready
-until the migration, RLS/grants, secret, and provider/queue worker are reviewed
-and tested on staging.
+`/`, `/sample-plan`, `/login`, and `/request-access` stay public, including for
+signed-in users. `/request-access` accepts a name, email, and explicit consent
+and returns a generic acknowledgement for valid, duplicate, and throttled
+submissions. Every product page and server action checks fresh server-side
+access: the authenticated `DEMO_OWNER_EMAIL`, an unexpired and unrevoked
+household `cycle_entitlements` row, or an accepted, still-approved private
+preview invitation claimed by the exact request email and auth user. A signed-in
+user without access is sent to `/request-access`; JSON product endpoints return
+403. Invitation acceptance is a narrow exception so an unapproved user can
+claim an approved invitation. The seven-day private-preview invitation expiry
+also ends that preview's product access, even after claim; owner revocation
+ends it immediately. Complimentary grants retain their own expiration and
+revocation; no payment, inbox capture, Ask model, or research integration is
+enabled by this access gate. Agent routes use independent machine keys and normally return 404 in
+production. Only scoped queue routes can be enabled by all three reviewed
+server flags (`REQUEST_QUEUE_ENABLED`, `REQUEST_PIPELINE_ENABLED`,
+`RESEARCH_API_ENABLED`); other research routes remain unavailable.
+
+Required for the production access boundary: `DATABASE_URL` (server-only
+PostgreSQL connection), `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase auth), `APP_ORIGIN` (exact canonical
+HTTPS origin with no trailing slash, registered in Supabase redirect allowlist),
+`DEMO_OWNER_EMAIL` (the owner's verified sign-in email),
+`DEMO_TEMPLATE_HOUSEHOLD_ID` (existing immutable, onboarded template
+household), and `REQUEST_ACCESS_HASH_SECRET` (unique random secret, at least
+32 bytes). Set `ACCESS_CYCLE="Fall 2027"` when using the owner-only
+complimentary grant controls; each student's `enteringTerm` must match.
+Local-only `AUTH_DEV_LOGIN=1` cannot be used in production. For reviewed
+outbound mail, set both `RESEND_API_KEY` and `DEMO_EMAIL_FROM` to a verified
+sender; optionally set `DEMO_EMAIL_REPLY_TO`. Without both, messages remain
+`queued_no_provider`; the owner must securely share the one-time invitation
+URL shown at approval. Approval tokens are never stored in the outbox, so a
+failed delivery cannot be retried from the queue without a new issuance flow.
+All generated callback, invitation and notification URLs use `APP_ORIGIN`,
+never forwarded Host headers. Configure production secrets in the deployment
+secret manager, not in source control.
+
+Apply the reviewed `20260924-multi-student-safety.sql` and
+`20260924-owner-foundations.sql` migrations after the earlier numbered
+migrations, then verify Postgres RLS/grants and auth/entitlement behavior on
+staging before any traffic. The local SQLite schema already contains the
+required tables; this slice adds no migration. Do not switch on
+`STRIPE_REVIEW_ENABLED`, `ASSISTANT_MODEL_ENABLED`, inbound mail adapters, or
+research workers as part of this release.
+
+## Net-new request research (subsequent review-only work)
+
+See [REQUEST_PIPELINE.md](REQUEST_PIPELINE.md) for the default-off 12-lane
+first-view design, exact-term evidence states, separate
+`20260926-request-pipeline.sql` migration, security/cost controls, and the
+unperformed 60-school live-provider benchmark. The new partial view is not
+certification; no migrations or enablement were performed here.
