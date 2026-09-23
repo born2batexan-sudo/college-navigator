@@ -23,7 +23,7 @@ describe("public copy boundaries", () => {
     assert.match(sample, /<dt>What&apos;s at stake<\/dt>/);
   });
   it("groups capability claims by truth state without claiming operation", () => {
-    const labels = ["In the private preview", "In development", "Planned"];
+    const labels = ["In the public sample", "In development", "Planned"];
     const positions = labels.map((label) => overview.indexOf(`<h3>${label}</h3>`));
     assert.ok(positions.every((idx) => idx >= 0));
     assert.ok(positions[0] < positions[1] && positions[1] < positions[2]);

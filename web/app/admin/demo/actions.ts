@@ -16,11 +16,11 @@ export async function approveAccessRequest(_previous: ApproveAccessState, formDa
   try {
     const origin = await requestOrigin();
     const result = await approveDemoAccessRequest({ requestId, actor: { id: owner.id, email: owner.email! } });
-    if (!result.ok) return { inviteUrl: null, error: result.reason === "not_pending" ? "That request is no longer pending." : "The private-preview template is unavailable." };
+    if (!result.ok) return { inviteUrl: null, error: result.reason === "not_pending" ? "That request is no longer pending." : "The complimentary-access capacity is unavailable." };
     revalidatePath("/admin/demo");
-    return { inviteUrl: `${origin}/demo/${result.token}`, error: null };
+    return { inviteUrl: `${origin}/access/${result.token}`, error: null };
   } catch {
-    return { inviteUrl: null, error: "The request could not be approved. Check the private-preview configuration." };
+    return { inviteUrl: null, error: "The request could not be approved. Check the access cycle and complimentary capacity." };
   }
 }
 

@@ -17,8 +17,9 @@ const MAX_STUDENTS = 6;
  * glance — this is presentational grouping of one real submission, not a
  * separately saved wizard step.
  */
-export function OnboardingForm() {
+export function OnboardingForm({ betaCycle }: { betaCycle?: string }) {
   const [count, setCount] = useState(1);
+  const terms = betaCycle ? START_TERMS.filter(term => term === betaCycle) : START_TERMS;
   return (
     <form action={saveOnboarding} className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-2 border-b border-line pb-6">
@@ -35,8 +36,8 @@ export function OnboardingForm() {
         <legend className="flex items-center gap-2 font-display text-lg font-semibold text-ink"><StageNumber n={2} />One admissions cycle, a profile for each student</legend>
         <label className="flex max-w-xs flex-col gap-1 text-sm text-ink/70" htmlFor="enteringTerm">
           Shared high-school graduation year / admissions cycle
-          <select id="enteringTerm" name="enteringTerm" required defaultValue="Fall 2027" className="rounded-md border border-line bg-white px-3 py-2 text-ink">
-            {START_TERMS.map((term) => <option key={term} value={term}>{term}</option>)}
+          <select id="enteringTerm" name="enteringTerm" required defaultValue={betaCycle ?? "Fall 2027"} className="rounded-md border border-line bg-white px-3 py-2 text-ink">
+            {terms.map((term) => <option key={term} value={term}>{term}</option>)}
           </select>
         </label>
         <p className="-mt-1 text-xs text-ink/50">Every qualifying student under the purchaser&apos;s genuine caregiving responsibility in this plan shares that cycle. Each student still gets a separate school list, priorities, preferences, and action status. Use a first or preferred name only.</p>

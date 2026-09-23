@@ -17,7 +17,7 @@ export function RouteMark() {
 export default function MarketingHeader({ current }: { current: "overview" | "sample" }) {
   return (
     <header className="site-header">
-      <div className="utility-bar"><strong>Coming Soon · Interactive Preview</strong> — Fictional data only. This sandbox is not enrollment in a live service.</div>
+      <div className="utility-bar"><strong>Coming Soon</strong> — Public sample uses fictional data. Approved founding families can set up a real plan at no charge.</div>
       <div className="site-shell topbar">
         <Link className="brand" href="/" aria-label="Campus Passage home"><RouteMark />Campus Passage</Link>
         <nav className="navlinks" aria-label="Primary navigation">

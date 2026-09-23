@@ -17,6 +17,7 @@ let C: typeof import("../lib/db/client");
 let D: typeof import("../lib/db/demo-access");
 let G: typeof import("../lib/db/cycle-access");
 let hasProductAccess: typeof import("../lib/auth/product-access")["hasProductAccess"];
+let B: typeof import("../lib/db/beta-access");
 let owner: Awaited<ReturnType<typeof A.provisionAccount>>;
 const actor = { id: "owner-auth", email: "owner@example.com" };
 
@@ -30,6 +31,7 @@ describe("production product authorization", () => {
     A = await import("../lib/db/accounts");
     C = await import("../lib/db/client");
     D = await import("../lib/db/demo-access");
+    B = await import("../lib/db/beta-access");
     G = await import("../lib/db/cycle-access");
     ({ hasProductAccess } = await import("../lib/auth/product-access"));
     owner = await A.provisionAccount({ authUserId: actor.id, email: actor.email });
@@ -57,7 +59,7 @@ describe("production product authorization", () => {
     assert.equal(await hasProductAccess(identity, ctx.household.id), false);
   });
 
-  it("binds approval to requested address, then enforces preview expiry and post-claim revocation", async () => {
+  it("binds the single-use link to email; only same-cycle successful onboarding creates access and ledger", async () => {
     await D.submitDemoAccessRequest({ name: "Requested Person", email: "approved@example.com" });
     const request = await C.queryOne<{ id: string }>("SELECT id FROM demo_access_requests WHERE requester_email=$1", ["approved@example.com"]);
     assert.ok(request);
@@ -65,20 +67,30 @@ describe("production product authorization", () => {
     assert.equal(decision.ok, true);
     if (!decision.ok) return;
     const other = await createUser("wrong-auth", "wrong@example.com");
-    assert.equal(await A.previewDemoInvite(decision.token, other.identity.email), null);
-    assert.deepEqual(await A.acceptDemoInvite(other.ctx, decision.token), { ok: false, reason: "invalid" });
-    assert.equal(await hasProductAccess(other.identity, other.ctx.household.id), false);
-
+    assert.equal(await B.previewBetaInvite(decision.token, other.identity.email), null);
+    assert.equal(await B.acceptBetaInvite(other.ctx, decision.token), "invalid");
     const matching = await createUser("approved-auth", "approved@example.com");
-    assert.ok(await A.previewDemoInvite(decision.token, matching.identity.email));
-    assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), false, "approval alone is not a grant before claim");
-    assert.equal((await A.acceptDemoInvite(matching.ctx, decision.token)).ok, true);
-    assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), true);
-    assert.equal(await hasProductAccess({ id: matching.identity.id, email: "changed@example.com" }, matching.ctx.household.id), false);
-    await C.exec("UPDATE demo_invites SET expires_at=$1 WHERE access_request_id=$2", ["2000-01-01T00:00:00.000Z", request.id]);
+    assert.ok(await B.previewBetaInvite(decision.token, matching.identity.email));
     assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), false);
-    await C.exec("UPDATE demo_invites SET expires_at=$1 WHERE access_request_id=$2", ["2099-01-01T00:00:00.000Z", request.id]);
+    assert.equal(await B.acceptBetaInvite(matching.ctx, decision.token), "accepted");
+    assert.equal(await B.acceptBetaInvite(matching.ctx, decision.token), "invalid");
+    assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), false);
+    assert.equal(await B.hasBetaOnboardingAccess(matching.identity, matching.ctx.household.id), true);
+    assert.equal(await B.hasBetaOnboardingAccess({ id: matching.identity.id, email: "changed@example.com" }, matching.ctx.household.id), false);
+    const details = { role: "parent" as const, students: [{ name: "Real Student", enteringTerm: "Fall 2027" }], purchaserAttested: true };
+    await assert.rejects(() => B.completeBetaOnboarding(matching.ctx, matching.identity.email, { ...details, students: [{ name: "Wrong", enteringTerm: "Fall 2028" }] }), /cycle/);
+    assert.equal(await C.queryOne("SELECT 1 AS ok FROM students WHERE household_id=$1", [matching.ctx.household.id]), null);
+    assert.equal(await C.queryOne("SELECT 1 AS ok FROM cycle_orders WHERE household_id=$1", [matching.ctx.household.id]), null);
+    const order = await B.completeBetaOnboarding(matching.ctx, matching.identity.email, details);
+    assert.equal(await B.completeBetaOnboarding(matching.ctx, matching.identity.email, details), order);
+    assert.equal((await A.getContextForUser(matching.identity.id))?.student?.name, "Real Student");
+    assert.equal((await A.getContextForUser(matching.identity.id))?.isDemo, false);
     assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), true);
+    assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_orders WHERE household_id=$1 AND amount_cents=0", [matching.ctx.household.id]))?.n), 1);
+    assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_accounting_events WHERE order_id=$1 AND kind='complimentary'", [order]))?.n), 1);
+    assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_audit_events WHERE order_id=$1 AND event_type='complimentary_granted'", [order]))?.n), 1);
+    await C.exec("UPDATE beta_access_invites SET expires_at=$1 WHERE request_id=$2", ["2000-01-01T00:00:00.000Z", request.id]);
+    assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), true, "invitation expiry does not terminate entitlement");
     assert.equal(await D.revokeDemoAccessRequest({ requestId: request.id, actor }), true);
     assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), false);
   });
