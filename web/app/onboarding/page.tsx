@@ -1,14 +1,17 @@
 import { redirect } from "next/navigation";
-import { requireHousehold } from "@/lib/auth/session";
+import { requireOnboardingHousehold } from "@/lib/auth/session";
 import { ENTERING_CLASS_YEAR } from "@/lib/db/accounts";
 import { OnboardingForm } from "@/components/OnboardingForm";
+import { hasBetaOnboardingAccess } from "@/lib/db/beta-access";
+import { currentAccessCycle } from "@/lib/db/cycle-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const query = await searchParams;
-  const ctx = await requireHousehold();
+  const ctx = await requireOnboardingHousehold();
   if (ctx.student) redirect("/");
+  const betaCycle = await hasBetaOnboardingAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id) ? currentAccessCycle() : undefined;
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-7 pt-10">
@@ -21,7 +24,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       {query.error && <p role="alert" className="rounded-2xl border border-urgent/30 bg-urgent/10 p-4 text-sm font-medium text-urgent shadow-card">{query.error}</p>}
 
       <div className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
-        <OnboardingForm />
+        <OnboardingForm betaCycle={betaCycle} />
       </div>
     </main>
   );

@@ -5,9 +5,25 @@ export const DEMO_ACCESS_TABLES = [
   "demo_access_requests",
   "demo_access_audit_events",
   "demo_access_notifications",
+  "beta_access_invites",
 ] as const;
 
 export const DEMO_ACCESS_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS beta_access_invites (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL UNIQUE REFERENCES demo_access_requests(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  cycle TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('complimentary','founding_family')),
+  authorized_by TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  accepted_by TEXT,
+  accepted_email TEXT,
+  accepted_household_id TEXT REFERENCES households(id) ON DELETE SET NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL
+)`,
   `CREATE TABLE IF NOT EXISTS demo_access_requests (
   id TEXT PRIMARY KEY,
   requester_name TEXT NOT NULL,

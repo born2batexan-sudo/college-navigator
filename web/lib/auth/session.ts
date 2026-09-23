@@ -6,6 +6,7 @@ import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "./env";
 import { ensureAccountSchema, getStudentForHousehold, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
 import type { Student } from "@/lib/db/types";
 import { hasProductAccess } from "./product-access";
+import { hasBetaOnboardingAccess } from "@/lib/db/beta-access";
 import { appOrigin } from "./origin";
 
 export type SessionUser = { id: string; email: string | null };
@@ -53,6 +54,16 @@ export async function requireHousehold(opts?: { next?: string }): Promise<Househ
   const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
   if (!await hasProductAccess(user, ctx.household.id)) redirect("/request-access");
   return ctx;
+}
+
+/** Narrow accepted-approval gate for the onboarding page/action, not product routes. */
+export async function requireOnboardingHousehold(): Promise<HouseholdContext> {
+  const user = await requireUser({ next: "/onboarding" });
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  if (!await hasProductAccess(user, ctx.household.id) &&
+      !await hasBetaOnboardingAccess(user, ctx.household.id)) redirect("/request-access");
+  return { ...ctx, email: user.email };
 }
 
 /** JSON endpoints must respond 403, not follow a page redirect. */

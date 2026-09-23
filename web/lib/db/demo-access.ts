@@ -2,13 +2,15 @@
 // It deliberately does not send mail: the adapter persists a safe queue row
 // and marks it as waiting for a configured provider. Invitation bearer tokens
 // remain transient and hash-only in the database.
-import { createHash, createHmac } from "node:crypto";
-import { createDemoInvite, revokeDemoInvite } from "./accounts";
+import { createHmac } from "node:crypto";
+import { issueBetaInvite, revokeBetaInvite } from "./beta-access";
+import { isDemoOwnerEmail, revokeDemoInvite } from "./accounts";
+import { capLock } from "./cycle-access";
 import { exec, newId, nowIso, queryOne, queryRows, usingPostgres, withTransaction } from "./client";
 import { resendConfigured, sendTransactionalEmail } from "@/lib/email/resend";
 import { appOrigin } from "@/lib/auth/origin";
 
-export const ACCESS_CONSENT_VERSION = "demo-access-2026-09-24-v1";
+export const ACCESS_CONSENT_VERSION = "founding-beta-2026-09-27-v1";
 const MAX_NAME = 100;
 const MAX_EMAIL = 254;
 const IP_WINDOW_MS = 60 * 60 * 1000;
@@ -24,9 +26,6 @@ function hashSecret(): string {
 }
 function digest(value: string): string {
   return createHmac("sha256", hashSecret()).update(value).digest("hex");
-}
-function hashToken(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 function normalizedEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -109,30 +108,30 @@ export async function deliverDemoNotification(input: {
   const origin = appOrigin();
   const name = String(row.requester_name);
   const email = String(row.requester_email);
-  let subject = "Campus Passage private preview update";
+  let subject = "Campus Passage founding-family beta access update";
   let text = "";
   let html = "";
 
   if (input.kind === "request_received") {
     const adminUrl = `${origin}/admin/demo`;
-    subject = "New Campus Passage private preview request";
-    text = `A new private preview request is waiting for review.\n\nName: ${name}\nEmail: ${email}\n\nReview request: ${adminUrl}`;
-    html = `<p>A new private preview request is waiting for review.</p><p><strong>Name:</strong> ${escapeHtml(name)}<br><strong>Email:</strong> ${escapeHtml(email)}</p><p><a href="${escapeHtml(adminUrl)}">Review request</a></p>`;
+    subject = "New Campus Passage founding-family beta access request";
+    text = `A new founding-family beta access request is waiting for review.\n\nName: ${name}\nEmail: ${email}\n\nReview request: ${adminUrl}`;
+    html = `<p>A new founding-family beta access request is waiting for review.</p><p><strong>Name:</strong> ${escapeHtml(name)}<br><strong>Email:</strong> ${escapeHtml(email)}</p><p><a href="${escapeHtml(adminUrl)}">Review request</a></p>`;
   } else if (input.kind === "approved") {
     if (!input.inviteToken || !input.expiresAt) return false;
-    const inviteUrl = `${origin}/demo/${encodeURIComponent(input.inviteToken)}`;
+    const inviteUrl = `${origin}/access/${encodeURIComponent(input.inviteToken)}`;
     const expiry = new Date(input.expiresAt).toLocaleString("en-US", { timeZone: "America/Chicago", dateStyle: "long", timeStyle: "short" });
-    subject = "Your Campus Passage private preview invitation";
-    text = `Hello ${name},\n\nYour request to explore the Campus Passage private preview has been approved. This personal, single-use invitation expires ${expiry} Central Time.\n\nOpen private preview: ${inviteUrl}\n\nPlease do not forward this link.`;
-    html = `<p>Hello ${escapeHtml(name)},</p><p>Your request to explore the Campus Passage private preview has been approved.</p><p><a href="${escapeHtml(inviteUrl)}">Open your private preview</a></p><p>This personal, single-use invitation expires ${escapeHtml(expiry)} Central Time. Please do not forward it.</p>`;
+    subject = "Your Campus Passage founding-family beta access invitation";
+    text = `Hello ${name},\n\nYour request to explore the Campus Passage founding-family beta access has been approved. This personal, single-use invitation is bound to ${email} and expires ${expiry} Central Time. Finish onboarding before expiry to activate your no-cost family plan.\n\nAccept invitation: ${inviteUrl}\n\nPlease do not forward this link.`;
+    html = `<p>Hello ${escapeHtml(name)},</p><p>Your request to explore the Campus Passage founding-family beta access has been approved.</p><p><a href="${escapeHtml(inviteUrl)}">Accept your invitation</a></p><p>This personal, single-use invitation expires ${escapeHtml(expiry)} Central Time. Please do not forward it.</p>`;
   } else if (input.kind === "declined") {
-    subject = "Campus Passage private preview request";
-    text = `Hello ${name},\n\nThank you for your interest in Campus Passage. We are not able to issue a private preview invitation for this request at this time.`;
-    html = `<p>Hello ${escapeHtml(name)},</p><p>Thank you for your interest in Campus Passage. We are not able to issue a private preview invitation for this request at this time.</p>`;
+    subject = "Campus Passage founding-family beta access request";
+    text = `Hello ${name},\n\nThank you for your interest in Campus Passage. We are not able to issue a founding-family beta access invitation for this request at this time.`;
+    html = `<p>Hello ${escapeHtml(name)},</p><p>Thank you for your interest in Campus Passage. We are not able to issue a founding-family beta access invitation for this request at this time.</p>`;
   } else {
-    subject = "Campus Passage private preview access revoked";
-    text = `Hello ${name},\n\nYour Campus Passage private preview access has been revoked and will no longer open the preview.`;
-    html = `<p>Hello ${escapeHtml(name)},</p><p>Your Campus Passage private preview access has been revoked and will no longer open the preview.</p>`;
+    subject = "Campus Passage founding-family beta access revoked";
+    text = `Hello ${name},\n\nYour Campus Passage founding-family beta access has been revoked and can no longer be used.`;
+    html = `<p>Hello ${escapeHtml(name)},</p><p>Your Campus Passage founding-family beta access has been revoked and can no longer be used.</p>`;
   }
 
   await exec("UPDATE demo_access_notifications SET delivery_state='queued',attempts=attempts+1,last_error=NULL WHERE id=$1 AND delivery_state<>'sent'", [row.id]);
@@ -213,7 +212,7 @@ export async function submitDemoAccessRequest(input: {
     if (validEmail(ownerEmail)) {
       await queuedNotificationAdapter.enqueue({
         requestId: id, kind: "request_received", recipientEmail: ownerEmail,
-        payload: { type: "private_preview_request", requesterName: name },
+        payload: { type: "founding_beta_request", requesterName: name },
       });
     }
     return id;
@@ -245,11 +244,15 @@ function toAccessRequest(row: any): DemoAccessRequest {
 }
 
 export async function listDemoAccessRequests(): Promise<DemoAccessRequest[]> {
-  const rows = await queryRows<any>(`SELECT r.id,r.requester_name,r.requester_email,r.status,r.invite_id,
+  const rows = await queryRows<any>(`SELECT r.id,r.requester_name,r.requester_email,r.status,i.id AS invite_id,
     r.created_at,r.decided_at, i.accepted_at IS NOT NULL AS invite_accepted, i.expires_at AS invite_expires_at
-    FROM demo_access_requests r LEFT JOIN demo_invites i ON i.id=r.invite_id
+    FROM demo_access_requests r LEFT JOIN beta_access_invites i ON i.request_id=r.id
     ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC`);
   return rows.map(toAccessRequest);
+}
+
+async function assertOwner(actor: { id: string; email: string }) {
+  if (!isDemoOwnerEmail(actor.email) || !await queryOne("SELECT 1 AS ok FROM auth_links WHERE auth_user_id=$1 AND role='owner'", [actor.id])) throw new Error("Owner authorization required");
 }
 
 export type AccessDecision =
@@ -260,19 +263,18 @@ export async function approveDemoAccessRequest(input: {
   requestId: string;
   actor: { id: string; email: string };
 }): Promise<AccessDecision> {
+  await assertOwner(input.actor);
   const decision = await withTransaction(async (): Promise<AccessDecision> => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
     const request = await queryOne<any>(`SELECT * FROM demo_access_requests WHERE id=$1${lock}`, [input.requestId]);
     if (!request || request.status !== "pending") return { ok: false, reason: "not_pending" };
-    const made = await createDemoInvite({ createdBy: input.actor.id, createdEmail: input.actor.email });
-    const invite = await queryOne<any>("SELECT id FROM demo_invites WHERE token_hash=$1", [hashToken(made.token)]);
-    if (!invite) return { ok: false, reason: "missing_template" };
+    await capLock();
+    const made = await issueBetaInvite(request, input.actor);
     const now = nowIso();
-    await exec("UPDATE demo_invites SET access_request_id=$1 WHERE id=$2", [request.id, invite.id]);
-    await exec(`UPDATE demo_access_requests SET status='approved',invite_id=$1,decided_at=$2,decided_by=$3,decided_email=$4,updated_at=$5 WHERE id=$6`,
-      [invite.id, now, input.actor.id, normalizedEmail(input.actor.email), now, request.id]);
+    await exec(`UPDATE demo_access_requests SET status='approved',decided_at=$1,decided_by=$2,decided_email=$3,updated_at=$4 WHERE id=$5`,
+      [now, input.actor.id, normalizedEmail(input.actor.email), now, request.id]);
     await audit({ requestId: request.id, eventType: "request_decided", detailCode: "approved", actorId: input.actor.id, actorEmail: normalizedEmail(input.actor.email), emailHash: request.requester_email_hash });
-    await queuedNotificationAdapter.enqueue({ requestId: request.id, inviteId: invite.id, kind: "approved", recipientEmail: request.requester_email, payload: { type: "private_preview_invitation", expiresAt: made.expiresAt } });
+    await queuedNotificationAdapter.enqueue({ requestId: request.id, kind: "approved", recipientEmail: request.requester_email, payload: { type: "founding_family_invitation", expiresAt: made.expiresAt } });
     return { ok: true, token: made.token, expiresAt: made.expiresAt };
   });
   if (decision.ok) {
@@ -285,6 +287,7 @@ export async function approveDemoAccessRequest(input: {
 }
 
 export async function declineDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string } }): Promise<boolean> {
+  await assertOwner(input.actor);
   const decided = await withTransaction(async () => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
     const request = await queryOne<any>(`SELECT * FROM demo_access_requests WHERE id=$1${lock}`, [input.requestId]);
@@ -292,7 +295,7 @@ export async function declineDemoAccessRequest(input: { requestId: string; actor
     const now = nowIso();
     await exec("UPDATE demo_access_requests SET status='declined',decided_at=$1,decided_by=$2,decided_email=$3,updated_at=$4 WHERE id=$5", [now, input.actor.id, normalizedEmail(input.actor.email), now, request.id]);
     await audit({ requestId: request.id, eventType: "request_decided", detailCode: "declined", actorId: input.actor.id, actorEmail: normalizedEmail(input.actor.email), emailHash: request.requester_email_hash });
-    await queuedNotificationAdapter.enqueue({ requestId: request.id, kind: "declined", recipientEmail: request.requester_email, payload: { type: "private_preview_decision", decision: "declined" } });
+    await queuedNotificationAdapter.enqueue({ requestId: request.id, kind: "declined", recipientEmail: request.requester_email, payload: { type: "founding_beta_decision", decision: "declined" } });
     return true;
   });
   if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "declined" });
@@ -300,18 +303,18 @@ export async function declineDemoAccessRequest(input: { requestId: string; actor
 }
 
 export async function revokeDemoAccessRequest(input: { requestId: string; actor: { id: string; email: string } }): Promise<boolean> {
+  await assertOwner(input.actor);
   const decided = await withTransaction(async () => {
     const lock = usingPostgres ? " FOR UPDATE" : "";
     const request = await queryOne<any>(`SELECT * FROM demo_access_requests WHERE id=$1${lock}`, [input.requestId]);
-    if (!request || request.status !== "approved" || !request.invite_id) return false;
-    const invite = await queryOne<any>(`SELECT id FROM demo_invites WHERE id=$1${lock}`, [request.invite_id]);
-    if (!invite) return false;
-    const revoked = await revokeDemoInvite(request.invite_id, { id: input.actor.id, email: input.actor.email });
+    if (!request || request.status !== "approved") return false;
+    const revoked = await revokeBetaInvite(request.id, input.actor) ||
+      (request.invite_id ? await revokeDemoInvite(request.invite_id, input.actor) : false);
     if (!revoked) return false;
     const now = nowIso();
     await exec("UPDATE demo_access_requests SET status='revoked',decided_at=$1,decided_by=$2,decided_email=$3,updated_at=$4 WHERE id=$5", [now, input.actor.id, normalizedEmail(input.actor.email), now, request.id]);
     await audit({ requestId: request.id, eventType: "request_decided", detailCode: "revoked", actorId: input.actor.id, actorEmail: normalizedEmail(input.actor.email), emailHash: request.requester_email_hash });
-    await queuedNotificationAdapter.enqueue({ requestId: request.id, inviteId: request.invite_id, kind: "revoked", recipientEmail: request.requester_email, payload: { type: "private_preview_decision", decision: "revoked" } });
+    await queuedNotificationAdapter.enqueue({ requestId: request.id, kind: "revoked", recipientEmail: request.requester_email, payload: { type: "beta_access_decision", decision: "revoked" } });
     return true;
   });
   if (decided) await deliverDemoNotification({ requestId: input.requestId, kind: "revoked" });

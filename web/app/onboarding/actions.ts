@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireWritableHousehold } from "@/lib/auth/session";
+import { requireOnboardingHousehold } from "@/lib/auth/session";
+import { hasBetaOnboardingAccess, completeBetaOnboarding } from "@/lib/db/beta-access";
+import { hasProductAccess } from "@/lib/auth/product-access";
 import { completeOnboarding } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
 
@@ -13,7 +15,7 @@ const studentSchema = z.object({
 });
 
 export async function saveOnboarding(formData: FormData): Promise<void> {
-  const ctx = await requireWritableHousehold();
+  const ctx = await requireOnboardingHousehold();
   const names = formData.getAll("studentName").map(String);
   const terms = formData.getAll("enteringTerm").map(String);
   const cycles = [...new Set(terms.filter(Boolean))];
@@ -30,13 +32,18 @@ export async function saveOnboarding(formData: FormData): Promise<void> {
   const invalid = students.find((result) => !result.success);
   if (invalid && !invalid.success) redirect(`/onboarding?error=${encodeURIComponent(invalid.error.issues[0]?.message ?? "Please check the student profiles.")}`);
 
-  await completeOnboarding(ctx, {
+  const input = {
     role: parsed.data.role,
     students: students.map((result) => {
       if (!result.success) throw new Error("Student validation unexpectedly failed");
       return result.data;
     }),
     purchaserAttested: true,
-  });
+  };
+  if (await hasBetaOnboardingAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id)) {
+    await completeBetaOnboarding(ctx, ctx.email, input);
+  } else if (await hasProductAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id)) {
+    await completeOnboarding(ctx, input);
+  } else redirect("/request-access");
   redirect("/dashboard");
 }

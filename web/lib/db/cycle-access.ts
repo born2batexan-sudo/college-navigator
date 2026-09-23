@@ -20,14 +20,18 @@ export async function assertHouseholdCycle(id:string, term:string) {
   try { return JSON.parse(s.attributes).enteringTerm===term; } catch { return false; }
  })) throw new Error('Household students must share this admissions cycle');
 }
-async function capLock() {
+export async function capLock() {
  if (usingPostgres) await exec('SELECT pg_advisory_xact_lock(hashtext($1))', ['complimentary-lifetime-cap']);
 }
-async function assertCap(id: string) {
+async function assertCap(id: string, reference = '') {
  const found = await queryOne<{ n: number }>(`SELECT COUNT(*) AS n FROM (
  SELECT 'h:'||household_id AS household_key FROM complimentary_invites
  UNION SELECT CASE WHEN household_id IS NULL THEN 'deleted:'||id ELSE 'h:'||household_id END AS household_key
- FROM cycle_orders WHERE kind='complimentary') households`);
+ FROM cycle_orders WHERE kind='complimentary'
+ UNION SELECT 'beta:'||b.id FROM beta_access_invites b JOIN demo_access_requests r ON r.id=b.request_id
+ WHERE r.status='approved' AND b.revoked_at IS NULL AND b.expires_at>$1 AND 'beta:'||b.id<>$2
+ AND NOT EXISTS(SELECT 1 FROM cycle_orders o WHERE o.idempotency_key='beta:'||b.id)
+ ) households`, [nowIso(),reference]);
  const prior = await queryOne('SELECT 1 AS ok FROM complimentary_invites WHERE household_id=$1 UNION SELECT 1 AS ok FROM cycle_orders WHERE household_id=$2 AND kind=$3', [id,id,'complimentary']);
  if (!prior && Number(found?.n ?? 0) >= 25) throw new Error('Complimentary household cap reached');
 }
@@ -38,10 +42,10 @@ async function entry(orderId: string, kind: string, cents: number, ref: string, 
  if (!Number.isSafeInteger(cents)) throw new Error('Invalid accounting amount');
  await exec('INSERT INTO cycle_accounting_events(id,order_id,kind,cents,reference,actor,reason,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(reference) DO NOTHING', [newId('ledger'),orderId,kind,cents,ref,actor,reason,nowIso()]);
 }
-async function createComplimentary(householdId: string, actor: Actor, reason: string, reference: string) {
+export async function createComplimentary(householdId: string, actor: Actor, reason: string, reference: string) {
  const term = cycle(); const existing = await queryOne<any>('SELECT * FROM cycle_entitlements WHERE household_id=$1 AND cycle=$2', [householdId,term]);
  if (existing) throw new Error('Household-cycle already has access');
- await assertCap(householdId);
+ await assertCap(householdId,reference);
  const now = nowIso(), orderId = newId('order');
  await exec(`INSERT INTO cycle_orders(id,household_id,cycle,kind,price_id,amount_cents,status,idempotency_key,created_at,updated_at) VALUES($1,$2,$3,'complimentary',NULL,0,'complimentary',$4,$5,$6)`, [orderId,householdId,term,reference,now,now]);
  await entry(orderId,'complimentary',0,`consideration:${reference}`,actor.id,reason);

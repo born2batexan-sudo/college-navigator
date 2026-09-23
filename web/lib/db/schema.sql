@@ -573,6 +573,23 @@ CREATE TABLE IF NOT EXISTS reminder_delivery_events (
 );
 CREATE INDEX IF NOT EXISTS idx_reminder_delivery_events_outbox ON reminder_delivery_events(reminder_outbox_id, occurred_at);
 
+-- Public owner-approved beta invitations. Legacy demo_invites remain owner-lab only.
+CREATE TABLE IF NOT EXISTS beta_access_invites (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL UNIQUE REFERENCES demo_access_requests(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  cycle TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('complimentary','founding_family')),
+  authorized_by TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  accepted_by TEXT,
+  accepted_email TEXT,
+  accepted_household_id TEXT REFERENCES households(id) ON DELETE SET NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL
+);
+
 -- Review-only owner foundations. Keep in sync with deploy/20260924-owner-foundations.sql.
 CREATE TABLE IF NOT EXISTS cycle_orders (
  id TEXT PRIMARY KEY, household_id TEXT REFERENCES households(id) ON DELETE SET NULL, cycle TEXT NOT NULL,
