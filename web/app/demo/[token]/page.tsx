@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireHousehold } from "@/lib/auth/session";
+import { requireInvitationHousehold } from "@/lib/auth/session";
 import { previewDemoInvite } from "@/lib/db/accounts";
 import { acceptPrivatePreview } from "./actions";
 
@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function DemoAcceptancePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ problem?: string }> }) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
-  const ctx = await requireHousehold({ next: `/demo/${token}` });
-  const invite = await previewDemoInvite(token);
+  const ctx = await requireInvitationHousehold({ next: `/demo/${token}` });
+  const invite = await previewDemoInvite(token, ctx.email);
   return <main className="mx-auto flex max-w-lg flex-col gap-6 py-8 sm:py-14">
     <header><p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">Campus Passage · Private Preview</p><h1 className="mt-2 font-display text-3xl font-semibold text-ink">Explore a sample household</h1></header>
     {!invite ? <p className="rounded-2xl border border-line bg-white/70 p-4 text-sm text-ink/70">This private-preview link is unavailable. It may have been used, revoked, or expired.</p>

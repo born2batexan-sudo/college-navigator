@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireHousehold } from "@/lib/auth/session";
+import { requireInvitationHousehold } from "@/lib/auth/session";
 import { previewInvite } from "@/lib/db/accounts";
 import { joinFamily } from "./actions";
 
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function InvitePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ problem?: string }> }) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
-  const ctx = await requireHousehold({ next: `/invite/${token}` });
+  const ctx = await requireInvitationHousehold({ next: `/invite/${token}` });
   const invite = await previewInvite(token);
   const alreadyIn = !!invite && invite.householdId === ctx.household.id;
 

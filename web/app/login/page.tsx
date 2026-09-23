@@ -30,7 +30,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               ? emailCodeEnabled
                 ? `We sent a code to ${query.email}. Type it below to open your household plan.`
                 : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
-              : "Sign in to keep every student's plan in one place. Signing in never gives Campus Passage access to your email inbox."}
+              : "Sign in to keep every student's plan in one place. Signing in does not buy access or grant inbox permission. Optional connected mail would require separate explicit consent and is not live."}
           </p>
         </header>
 
