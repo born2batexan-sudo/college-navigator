@@ -46,7 +46,7 @@ describe("public household demo: same-cycle applicant pathways", () => {
       assert.ok(rows.length > 0, `${student.id} should have at least one action`);
       assert.ok(rows.every((row) => row.student === student.id));
       assert.ok(rows.every((row) => row.source.length > 0));
-      assert.ok(rows.every((row) => row.school.length > 0 && row.kind.length > 0));
+      assert.ok(rows.every((row) => row.school.length > 0 && row.kind.length > 0 && row.stake.length > 0));
     }
   });
 

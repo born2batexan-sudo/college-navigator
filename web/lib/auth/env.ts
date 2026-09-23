@@ -60,11 +60,15 @@ export const PUBLIC_PATH_PREFIXES = [
   "/auth/",
   "/api/agent/", // machine callers; each route checks its own bearer key
   "/api/debug/", // retired stub, always 404
+  "/api/stripe/webhook", // signed server-to-server webhook; route verifies raw-body signature
   "/_next/",
   "/favicon.ico",
 ];
 
 export function isPublicPath(pathname: string): boolean {
-  if (pathname === "/") return true;
-  return PUBLIC_PATH_PREFIXES.some((p) => pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
+  // Only this fixed fictional marketing page is public; do not open a prefix.
+  if (pathname === "/" || pathname === "/sample-plan") return true;
+  return PUBLIC_PATH_PREFIXES.some((p) => p === '/api/stripe/webhook'
+    ? pathname === p
+    : pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
 }

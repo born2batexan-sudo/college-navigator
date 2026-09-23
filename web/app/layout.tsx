@@ -4,10 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.campuspassage.com"),
   title: {
-    default: "Campus Passage — protect the college opportunity, reduce the noise",
+    default: "Campus Passage — Protect the opportunity.",
     template: "%s | Campus Passage",
   },
-  description: "Campus Passage inspects official public college and vendor sources, filters out irrelevant noise, and organizes financial aid, scholarship, billing/529, and school-update information into one household plan — before, during, and after applications, across every student and school. A private-preview, read-only concept.",
+  description: "Campus Passage connects what schools, sponsors, and vendors publish to your family's own plan—so the next meaningful step is clear. Explore a fictional, read-only example from interest to move-in.",
   alternates: { canonical: "/" },
   applicationName: "Campus Passage",
   keywords: [
@@ -22,15 +22,20 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "Campus Passage",
-    title: "Protect the college opportunity. Reduce the noise.",
-    description: "One shared household plan for official-source college, financial-aid, scholarship, and billing information — before, during, and after applications.",
+    title: "Protect the opportunity.",
+    description: "A clearer next step for your family's college journey, from interest to move-in. Explore a fictional, read-only sample.",
   },
   twitter: {
     card: "summary",
-    title: "Campus Passage — protect the opportunity, reduce the noise",
-    description: "See official-source college, aid, scholarship, and billing information organized into one calm household plan — across every student, every school.",
+    title: "Campus Passage — Protect the opportunity.",
+    description: "A clearer next step for your family's college journey. Explore a fictional, read-only sample plan.",
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false, noimageindex: true },
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

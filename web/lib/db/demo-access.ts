@@ -1,4 +1,4 @@
-// Private CampusPassage demo access workflow. This module is server-only.
+// Private Campus Passage demo access workflow. This module is server-only.
 // It deliberately does not send mail: the adapter persists a safe queue row
 // and marks it as waiting for a configured provider. Invitation bearer tokens
 // remain transient and hash-only in the database.
