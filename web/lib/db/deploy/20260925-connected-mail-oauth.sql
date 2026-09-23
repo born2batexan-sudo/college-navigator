@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS mail_oauth_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_mail_oauth_expiry ON mail_oauth_attempts(expires_at);
 ALTER TABLE mail_connections ADD COLUMN IF NOT EXISTS retry_after TEXT;
+CREATE INDEX IF NOT EXISTS idx_connected_mail_evidence_observed ON connected_mail_evidence(observed_at);
 ALTER TABLE mail_oauth_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE mail_oauth_attempts FROM anon,authenticated;
 COMMIT;

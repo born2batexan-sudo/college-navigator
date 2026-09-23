@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS beta_access_invites (
   revoked_at TEXT,
   created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_beta_access_household ON beta_access_invites(accepted_household_id);
+CREATE INDEX IF NOT EXISTS idx_beta_access_expiry ON beta_access_invites(expires_at);
 ALTER TABLE beta_access_invites ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE beta_access_invites FROM anon,authenticated;
 COMMIT;
