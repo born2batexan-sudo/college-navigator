@@ -17,6 +17,7 @@ export default function RequestAccessPage() {
         <h1 className="mt-2 font-display text-4xl font-semibold text-ink">Request access</h1>
         <p className="mt-3 leading-7 text-ink/65">Tell us where to send a decision. We review requests before issuing a private, read-only invitation.</p>
       </header>
+      <p className="text-xs text-ink/60">Previously connected an inbox? <Link className="underline" href="/account/mail-privacy">Manage or delete connected-mail data</Link> even if product access has expired.</p>
 
       {state.submitted ? (
         <section className="rounded-2xl border border-ok/30 bg-sky p-5" role="status">

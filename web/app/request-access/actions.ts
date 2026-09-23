@@ -2,7 +2,6 @@
 
 import { headers } from "next/headers";
 import { submitDemoAccessRequest } from "@/lib/db/demo-access";
-import { requestOrigin } from "@/lib/auth/session";
 
 export type RequestAccessState = { submitted: boolean; error: string | null };
 
@@ -17,7 +16,7 @@ export async function requestDemoAccess(_previous: RequestAccessState, formData:
     const h = await headers();
     const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
     const ipAddress = forwarded || h.get("x-real-ip") || null;
-    await submitDemoAccessRequest({ name, email, ipAddress, honeypot, origin: await requestOrigin() });
+    await submitDemoAccessRequest({ name, email, ipAddress, honeypot });
     return { submitted: true, error: null };
   } catch {
     // Do not echo validation, duplicate, rate-limit, or account state details.
