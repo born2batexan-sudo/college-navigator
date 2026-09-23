@@ -1,0 +1,8 @@
+"use client";
+import { useActionState } from 'react';
+import { manageComplimentary, type GrantState } from './grant-actions';
+const initial:GrantState={message:'',token:null};
+export default function GrantPanel() {
+ const [state,action,pending]=useActionState(manageComplimentary,initial);
+ return <section className="rounded-2xl border border-line bg-white/70 p-5"><h2 className="font-display text-xl">Household-cycle access · review only</h2><p className="mt-2 text-sm text-ink/60">Owner-authorized $0 complimentary/Founding Family grants. A household ID and written reason are required. Maximum 25 combined households; invitations expire in seven days and are single-use.</p><form action={action} className="mt-4 grid gap-3"><label className="text-sm">Existing household ID<input name="householdId" required className="mt-1 w-full rounded border p-2"/></label><label className="text-sm">Reason<input name="reason" minLength={4} maxLength={200} required className="mt-1 w-full rounded border p-2"/></label><label className="text-sm">Operation<select name="operation" className="mt-1 w-full rounded border p-2"><option value="grant">Grant directly</option><option value="invite">Issue $0 invitation</option><option value="founding_family">Issue Founding Family invitation</option><option value="revoke">Revoke access/open invitation</option></select></label><button disabled={pending} className="rounded bg-accent px-4 py-2 text-white disabled:opacity-50">Review and record</button></form>{state.message&&<p role="status" className="mt-3 text-sm">{state.message}</p>}{state.token&&<p className="mt-2 break-all text-xs">Copy one-time bearer token securely (not stored): {state.token}</p>}</section>;
+}

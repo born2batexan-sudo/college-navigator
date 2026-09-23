@@ -140,6 +140,9 @@ export const ALL_TABLES = [
   ...REQUEST_TABLES,
   ...EMAIL_VALIDATION_TABLES,
   ...REMINDER_TABLES,
+  'cycle_orders', 'cycle_entitlements', 'complimentary_invites', 'cycle_accounting_events',
+  'cycle_audit_events', 'stripe_webhook_events', 'mail_connections', 'mail_sync_events',
+  'mail_control_audit', 'verified_mail_senders', 'connected_mail_evidence', 'assistant_usage',
 ];
 
 /** Local SQLite DDL statements, including the W4 queue. PostgreSQL uses reviewed migrations. */

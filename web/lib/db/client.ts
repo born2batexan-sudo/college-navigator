@@ -11,9 +11,7 @@ const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "lib", "db", "de
 const SCHEMA_PATH = path.join(process.cwd(), "lib", "db", "schema.sql");
 
 declare global {
-  // eslint-disable-next-line no-var
   var __cnPgPool: Pool | undefined;
-  // eslint-disable-next-line no-var
   var __cnSqliteDb: DatabaseSync | undefined;
 }
 

@@ -1,4 +1,4 @@
--- VERSIONED POSTGRES MIGRATION: private CampusPassage demo access requests.
+-- VERSIONED POSTGRES MIGRATION: private Campus Passage demo access requests.
 -- Apply after 20260920-private-demo-invites.sql and before enabling the public
 -- request page. This migration creates no browser-facing grants or policies.
 BEGIN;

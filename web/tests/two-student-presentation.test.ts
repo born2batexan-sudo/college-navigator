@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { studentAccent } from "../components/StudentSwitcher";
 
-const landing = readFileSync(new URL("../components/CampusPassageLanding.tsx", import.meta.url), "utf8");
+const landing = readFileSync(new URL("../components/SamplePlan.tsx", import.meta.url), "utf8");
 const dashboard = readFileSync(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
 const switcher = readFileSync(new URL("../components/StudentSwitcher.tsx", import.meta.url), "utf8");
 const actionItem = readFileSync(new URL("../components/ActionListItem.tsx", import.meta.url), "utf8");
