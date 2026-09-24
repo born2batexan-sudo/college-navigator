@@ -5,7 +5,7 @@ import { isStartTerm } from "@/lib/terms";
 // Production schema comes only from versioned migrations. SQLite loads the
 // canonical schema.sql for local/test compatibility.
 export const REQUEST_DDL: string[] = [];
-export const REQUEST_TABLES = ["school_directory", "school_research_jobs", "school_requests", "budget_ledger", "research_versions"] as const;
+export const REQUEST_TABLES = ["school_directory", "school_research_jobs", "school_requests", "budget_ledger", "research_versions", "request_subject_states"] as const;
 export const DEFAULT_MONTHLY_BUDGET_CENTS = 1600;
 export const DEFAULT_JOB_ESTIMATE_CENTS = 800;
 export const MAX_FAMILY_REQUESTS_PER_MONTH = 3;
@@ -21,7 +21,7 @@ function positiveIntEnv(name: string, fallback: number, min: number, max: number
 function queueConfig() {
   const budget = positiveIntEnv("REQUEST_MONTHLY_BUDGET_CENTS", DEFAULT_MONTHLY_BUDGET_CENTS, 1, 10_000_000);
   const reservation = positiveIntEnv("REQUEST_JOB_ESTIMATE_CENTS", DEFAULT_JOB_ESTIMATE_CENTS, 1, 1_000_000);
-  const leaseSeconds = positiveIntEnv("REQUEST_LEASE_SECONDS", 10800, 300, 14400);
+  const leaseSeconds = positiveIntEnv("REQUEST_LEASE_SECONDS", 300, 300, 14400);
   if (reservation > budget) throw new Error("REQUEST_JOB_ESTIMATE_CENTS cannot exceed the monthly budget");
   return { budget, reservation, leaseSeconds };
 }
@@ -80,20 +80,33 @@ export async function createSchoolRequest(input:{householdId:string;personId?:st
   const request=await getFamilyRequest(input.householdId,input.unitid,input.term);if(!request)throw new Error("Request transaction did not persist");return{request,created};
 }
 
+// These UTC timestamps are durable, non-identifying benchmark markers. An
+// accepted dispatch is only a wake-up, never evidence of worker execution.
+export async function recordRequestDispatch(requestId:string,outcome:"accepted"|"failed"):Promise<void>{
+  await exec("UPDATE school_requests SET dispatch_attempted_at=$1,dispatch_outcome=$2 WHERE id=$3 AND dispatch_attempted_at IS NULL",[nowIso(),outcome,requestId]);
+}
+export async function markFamilyFirstView(householdId:string,requestId:string):Promise<void>{
+  // The caller is the authenticated /request server page after reading all 144
+  // states. A household cannot mark another household's request as visible.
+  await exec(`UPDATE school_requests SET first_visible_at=$1 WHERE id=$2 AND household_id=$3 AND first_visible_at IS NULL
+    AND (SELECT COUNT(*) FROM request_subject_states s WHERE s.unitid=school_requests.unitid AND s.term=school_requests.term)=144`,[nowIso(),requestId,householdId]);
+}
+
 export async function claimNextResearchJob():Promise<{job:ResearchJob;school:DirectorySchool;requestCount:number}|null>{
-  if(process.env.REQUEST_QUEUE_ENABLED!=="1")return null;const cfg=queueConfig();
+  if(process.env.REQUEST_QUEUE_ENABLED!=="1" || process.env.REQUEST_PIPELINE_ENABLED!=="1")return null;const cfg=queueConfig();
   return withTransaction(async()=>{
     if(usingPostgres)await exec("SELECT pg_advisory_xact_lock(hashtext('school-research-queue'))");
     const now=nowIso();
-    await exec("UPDATE school_research_jobs SET status=CASE WHEN attempts>=3 THEN 'review' ELSE 'queued' END,note='Worker lease expired; conservative reservation retained.',attempt_id=NULL,lease_expires_at=NULL,updated_at=$1 WHERE status='running' AND lease_expires_at<$2",[now,now]);
+    await exec("UPDATE school_research_jobs SET status=CASE WHEN attempts>=3 THEN 'review' ELSE 'queued' END,note='Worker lease expired; conservative reservation retained.',last_report_outcome='failed',attempt_id=NULL,lease_expires_at=NULL,updated_at=$1 WHERE status='running' AND lease_expires_at<$2",[now,now]);
     if(await queryOne("SELECT 1 AS ok FROM school_research_jobs WHERE status='running' LIMIT 1"))return null;
     const month=now.slice(0,7),spent=Number((await queryOne<any>("SELECT COALESCE(SUM(cents),0) AS cents FROM budget_ledger WHERE month=$1",[month]))?.cents??0);if(spent+cfg.reservation>cfg.budget)return null;
     const candidate=await queryOne<any>(`SELECT j.*,d.name,d.alias,d.city,d.state,d.website,d.domain,d.control,d.institution_id,d.updated_at,(SELECT COUNT(*) FROM school_requests r WHERE r.unitid=j.unitid AND r.term=j.term) AS request_count
-      FROM school_research_jobs j JOIN school_directory d ON d.unitid=j.unitid WHERE j.status='queued' AND j.attempts<3 ORDER BY j.first_requested_at,j.unitid,j.term LIMIT 1`);if(!candidate)return null;
+      FROM school_research_jobs j JOIN school_directory d ON d.unitid=j.unitid WHERE (j.status='queued' AND j.attempts<3) OR (j.status='review' AND j.last_report_outcome='review' AND j.next_check_at IS NOT NULL AND j.next_check_at<=$1) ORDER BY j.first_requested_at,j.unitid,j.term LIMIT 1`,[now]);if(!candidate)return null;
     if(!normalizeDomain(candidate.domain)){await exec("UPDATE school_research_jobs SET status='review',note='No valid approved institutional domain; no research was started.',finished_at=$1,updated_at=$2 WHERE unitid=$3 AND term=$4 AND status='queued'",[now,now,candidate.unitid,candidate.term]);return null;}
-    const attempt=Number(candidate.attempts)+1,attemptId=newId("attempt"),leaseExpiresAt=new Date(Date.now()+cfg.leaseSeconds*1000).toISOString();
-    const claimed=await queryOne<any>("UPDATE school_research_jobs SET status='running',attempts=$1,attempt_id=$2,lease_expires_at=$3,heartbeat_at=$4,started_at=$5,updated_at=$6 WHERE unitid=$7 AND term=$8 AND status='queued' RETURNING *",[attempt,attemptId,leaseExpiresAt,now,now,now,candidate.unitid,candidate.term]);if(!claimed)return null;
+    const attempt=candidate.status==='review'?1:Number(candidate.attempts)+1,attemptId=newId("attempt"),leaseExpiresAt=new Date(Date.now()+cfg.leaseSeconds*1000).toISOString();
+    const claimed=await queryOne<any>("UPDATE school_research_jobs SET status='running',attempts=$1,attempt_id=$2,lease_expires_at=$3,heartbeat_at=$4,started_at=$5,updated_at=$6 WHERE unitid=$7 AND term=$8 AND status IN ('queued','review') RETURNING *",[attempt,attemptId,leaseExpiresAt,now,now,now,candidate.unitid,candidate.term]);if(!claimed)return null;
     await exec("INSERT INTO budget_ledger(id,month,cents,kind,reference,created_at) VALUES($1,$2,$3,'reservation',$4,$5)",[newId("budget"),month,cfg.reservation,attemptId,now]);
+    await exec("UPDATE school_requests SET first_claimed_at=$1 WHERE unitid=$2 AND term=$3 AND first_claimed_at IS NULL AND created_at<=$4",[now,candidate.unitid,candidate.term,now]);
     return{job:toJob(claimed),school:toDirectory(candidate),requestCount:Number(candidate.request_count??0)};
   });
 }
@@ -101,6 +114,7 @@ export async function claimNextResearchJob():Promise<{job:ResearchJob;school:Dir
 type ReportInput={unitid:string;term:string;attempt:number;attemptId:string;outcome:"recheck"|"certified"|"review"|"failed";costCents?:number|null;coveragePct?:number|null;note?:string|null;slug?:string|null};
 export async function reportResearchJob(input:ReportInput):Promise<ResearchJob>{
   if(!isStartTerm(input.term))throw new Error("Invalid research term");if(!input.attemptId)throw new Error("attemptId is required");
+  if(input.outcome==='certified')throw new Error("Automated certification is quarantined; use a partial evidence-state view");
   return withTransaction(async()=>{
     if(usingPostgres)await exec("SELECT pg_advisory_xact_lock(hashtext('school-research-queue'))");
     const row=await queryOne<any>("SELECT * FROM school_research_jobs WHERE unitid=$1 AND term=$2",[input.unitid,input.term]);if(!row)throw new Error("Unknown job");
@@ -122,7 +136,7 @@ export async function reportResearchJob(input:ReportInput):Promise<ResearchJob>{
       }
       if(cost!==null)await exec("INSERT INTO budget_ledger(id,month,cents,kind,reference,created_at) VALUES($1,$2,$3,'reconciliation',$4,$5) ON CONFLICT(kind,reference) DO NOTHING",[newId("budget"),reservation.month,cost-Number(reservation.cents),input.attemptId,now]);
       await exec(`UPDATE school_research_jobs SET status=$1,cost_cents=$2,coverage_pct=$3,note=$4,slug=COALESCE($5,slug),finished_at=$6,last_report_outcome=$7,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=$8
-        WHERE unitid=$9 AND term=$10 AND status='running' AND attempt_id=$11`,[status,cost??Number(reservation.cents),cov,input.note??null,input.slug??null,now,input.outcome,now,input.unitid,input.term,input.attemptId]);
+        WHERE unitid=$9 AND term=$10 AND status='running' AND attempt_id=$11`,[status,Number(row.cost_cents??0)+(cost??Number(reservation.cents)),cov,input.note??null,input.slug??null,now,input.outcome,now,input.unitid,input.term,input.attemptId]);
     }
     const saved=await queryOne<any>("SELECT * FROM school_research_jobs WHERE unitid=$1 AND term=$2",[input.unitid,input.term]);if(!saved)throw new Error("Job disappeared");return toJob(saved);
   });
@@ -132,6 +146,10 @@ export async function linkDirectoryInstitution(unitid:string,slug:string):Promis
 export async function getResearchJob(unitid:string,term:string):Promise<ResearchJob|null>{const r=await queryOne<any>("SELECT * FROM school_research_jobs WHERE unitid=$1 AND term=$2",[unitid,term]);return r?toJob(r):null;}
 export async function canHouseholdViewInstitution(householdId:string,institutionId:string,term:string):Promise<boolean>{
   const queued=await queryOne("SELECT 1 AS ok FROM school_directory WHERE institution_id=$1 LIMIT 1",[institutionId]);if(!queued)return true;
-  const allowed=await queryOne(`SELECT 1 AS ok FROM school_requests r JOIN school_directory d ON d.unitid=r.unitid JOIN school_research_jobs j ON j.unitid=r.unitid AND j.term=r.term JOIN research_versions v ON v.institution_id=d.institution_id AND v.research_term=r.term WHERE r.household_id=$1 AND d.institution_id=$2 AND r.term=$3 AND j.status='ready' AND v.coverage_status='certified' LIMIT 1`,[householdId,institutionId,term]);return!!allowed;
+  // Legacy 90%-complete rows are not a reviewed certification protocol.
+  // A requested school only has the partial evidence view until a separately
+  // audited publish gate is implemented; do not infer access from old ready rows.
+  void householdId; void term;
+  return false;
 }
 export async function queueOverview(){const cfg=queueConfig(),month=nowIso().slice(0,7),spent=await queryOne<any>("SELECT COALESCE(SUM(cents),0) AS cents FROM budget_ledger WHERE month=$1",[month]),rows=await queryRows<any>("SELECT status,COUNT(*) AS n FROM school_research_jobs GROUP BY status"),demand=await queryRows<any>("SELECT term,COUNT(*) AS requests FROM school_requests GROUP BY term ORDER BY COUNT(*) DESC,term"),counts:Record<string,number>={};for(const r of rows)counts[r.status]=Number(r.n);return{month,spentCents:Number(spent?.cents??0),budgetCents:cfg.budget,queued:counts.queued??0,running:counts.running??0,ready:counts.ready??0,review:counts.review??0,demandByTerm:demand.map(r=>({term:String(r.term),requests:Number(r.requests)}))};}

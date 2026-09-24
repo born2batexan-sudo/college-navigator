@@ -377,6 +377,11 @@ CREATE TABLE IF NOT EXISTS school_research_jobs (
   coverage_pct REAL,
   note TEXT,
   updated_at TEXT NOT NULL,
+  last_checked_at TEXT,
+  next_check_at TEXT,
+  material_fingerprint TEXT,
+  publication_revision INTEGER NOT NULL DEFAULT 0,
+  first_evidence_committed_at TEXT,
   PRIMARY KEY (unitid, term)
 );
 
@@ -389,6 +394,10 @@ CREATE TABLE IF NOT EXISTS school_requests (
   created_at TEXT NOT NULL,
   seen_at TEXT,
   notified_at TEXT,
+  dispatch_attempted_at TEXT,
+  dispatch_outcome TEXT CHECK (dispatch_outcome IN ('accepted','failed')),
+  first_claimed_at TEXT,
+  first_visible_at TEXT,
   UNIQUE(household_id, unitid, term)
 );
 
@@ -410,6 +419,15 @@ CREATE INDEX IF NOT EXISTS idx_school_requests_person ON school_requests(person_
 CREATE INDEX IF NOT EXISTS idx_school_requests_unitid ON school_requests(unitid);
 CREATE INDEX IF NOT EXISTS idx_school_directory_institution ON school_directory(institution_id);
 CREATE INDEX IF NOT EXISTS idx_budget_ledger_month ON budget_ledger(month);
+CREATE TABLE IF NOT EXISTS request_subject_states (
+  unitid TEXT NOT NULL, term TEXT NOT NULL, code TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('verified','not_applicable','not_yet_published','publication_date_unknown','not_publicly_available','not_found_official','conflicting','under_review','withheld')),
+  source_url TEXT, evidence_quote TEXT, explanation TEXT NOT NULL,
+  fingerprint TEXT, last_checked_at TEXT NOT NULL, next_check_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, PRIMARY KEY(unitid,term,code),
+  FOREIGN KEY(unitid,term) REFERENCES school_research_jobs(unitid,term)
+);
+CREATE INDEX IF NOT EXISTS idx_request_subject_recheck ON request_subject_states(next_check_at);
 
 -- ---------------------------------------------------------------------
 -- Paid, forwarding-first email validation. Only normalized evidence and
@@ -560,6 +578,23 @@ CREATE TABLE IF NOT EXISTS reminder_delivery_events (
 );
 CREATE INDEX IF NOT EXISTS idx_reminder_delivery_events_outbox ON reminder_delivery_events(reminder_outbox_id, occurred_at);
 
+-- Public owner-approved beta invitations. Legacy demo_invites remain owner-lab only.
+CREATE TABLE IF NOT EXISTS beta_access_invites (
+  id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL UNIQUE REFERENCES demo_access_requests(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  cycle TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('complimentary','founding_family')),
+  authorized_by TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT,
+  accepted_by TEXT,
+  accepted_email TEXT,
+  accepted_household_id TEXT REFERENCES households(id) ON DELETE SET NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL
+);
+
 -- Review-only owner foundations. Keep in sync with deploy/20260924-owner-foundations.sql.
 CREATE TABLE IF NOT EXISTS cycle_orders (
  id TEXT PRIMARY KEY, household_id TEXT REFERENCES households(id) ON DELETE SET NULL, cycle TEXT NOT NULL,
@@ -599,12 +634,19 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_events (
  event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('processed','exception')),
  detail_code TEXT NOT NULL, received_at TEXT NOT NULL
 );
+-- Single-use, short-lived OAuth authorization; the PKCE verifier is encrypted at rest.
+CREATE TABLE IF NOT EXISTS mail_oauth_attempts (
+ state_hash TEXT PRIMARY KEY, household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ actor_id TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('gmail','microsoft')),
+ encrypted_verifier TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mail_oauth_expiry ON mail_oauth_attempts(expires_at);
 CREATE TABLE IF NOT EXISTS mail_connections (
  id TEXT PRIMARY KEY, household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
  provider TEXT NOT NULL CHECK(provider IN ('gmail','microsoft')), account_hash TEXT NOT NULL,
  encrypted_tokens TEXT NOT NULL, key_version TEXT NOT NULL, consent_version TEXT NOT NULL,
  consented_by TEXT NOT NULL, consented_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','reconsent','failed','revoked')),
- checkpoint TEXT, last_sync_at TEXT, revoked_at TEXT, delete_after TEXT,
+ checkpoint TEXT, last_sync_at TEXT, retry_after TEXT, revoked_at TEXT, delete_after TEXT,
  UNIQUE(household_id,provider,account_hash)
 );
 CREATE TABLE IF NOT EXISTS mail_sync_events (
