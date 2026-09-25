@@ -80,6 +80,18 @@ export async function createSchoolRequest(input:{householdId:string;personId?:st
   const request=await getFamilyRequest(input.householdId,input.unitid,input.term);if(!request)throw new Error("Request transaction did not persist");return{request,created};
 }
 
+// These UTC timestamps are durable, non-identifying benchmark markers. An
+// accepted dispatch is only a wake-up, never evidence of worker execution.
+export async function recordRequestDispatch(requestId:string,outcome:"accepted"|"failed"):Promise<void>{
+  await exec("UPDATE school_requests SET dispatch_attempted_at=$1,dispatch_outcome=$2 WHERE id=$3 AND dispatch_attempted_at IS NULL",[nowIso(),outcome,requestId]);
+}
+export async function markFamilyFirstView(householdId:string,requestId:string):Promise<void>{
+  // The caller is the authenticated /request server page after reading all 144
+  // states. A household cannot mark another household's request as visible.
+  await exec(`UPDATE school_requests SET first_visible_at=$1 WHERE id=$2 AND household_id=$3 AND first_visible_at IS NULL
+    AND (SELECT COUNT(*) FROM request_subject_states s WHERE s.unitid=school_requests.unitid AND s.term=school_requests.term)=144`,[nowIso(),requestId,householdId]);
+}
+
 export async function claimNextResearchJob():Promise<{job:ResearchJob;school:DirectorySchool;requestCount:number}|null>{
   if(process.env.REQUEST_QUEUE_ENABLED!=="1" || process.env.REQUEST_PIPELINE_ENABLED!=="1")return null;const cfg=queueConfig();
   return withTransaction(async()=>{
@@ -94,6 +106,7 @@ export async function claimNextResearchJob():Promise<{job:ResearchJob;school:Dir
     const attempt=candidate.status==='review'?1:Number(candidate.attempts)+1,attemptId=newId("attempt"),leaseExpiresAt=new Date(Date.now()+cfg.leaseSeconds*1000).toISOString();
     const claimed=await queryOne<any>("UPDATE school_research_jobs SET status='running',attempts=$1,attempt_id=$2,lease_expires_at=$3,heartbeat_at=$4,started_at=$5,updated_at=$6 WHERE unitid=$7 AND term=$8 AND status IN ('queued','review') RETURNING *",[attempt,attemptId,leaseExpiresAt,now,now,now,candidate.unitid,candidate.term]);if(!claimed)return null;
     await exec("INSERT INTO budget_ledger(id,month,cents,kind,reference,created_at) VALUES($1,$2,$3,'reservation',$4,$5)",[newId("budget"),month,cfg.reservation,attemptId,now]);
+    await exec("UPDATE school_requests SET first_claimed_at=$1 WHERE unitid=$2 AND term=$3 AND first_claimed_at IS NULL AND created_at<=$4",[now,candidate.unitid,candidate.term,now]);
     return{job:toJob(claimed),school:toDirectory(candidate),requestCount:Number(candidate.request_count??0)};
   });
 }
