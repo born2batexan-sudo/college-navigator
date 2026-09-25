@@ -1,0 +1,34 @@
+name: School requests (staging dispatch gate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Controlled staging wake-up
+        required: true
+        type: choice
+        options: [process the next requested school]
+        default: process the next requested school
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-research-dispatch
+  cancel-in-progress: false
+
+jobs:
+  accept-staging-dispatch:
+    if: github.event_name == 'workflow_dispatch' && inputs.task == 'process the next requested school'
+    environment: staging-research
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify paid research remains disabled
+        env:
+          REQUEST_PIPELINE_ENABLED: ${{ vars.REQUEST_PIPELINE_ENABLED || '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$REQUEST_PIPELINE_ENABLED" = "0"
+          echo "Staging dispatch accepted; no queue claim or paid provider call executed."
