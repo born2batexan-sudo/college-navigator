@@ -393,6 +393,10 @@ CREATE TABLE IF NOT EXISTS school_requests (
   created_at TEXT NOT NULL,
   seen_at TEXT,
   notified_at TEXT,
+  dispatch_attempted_at TEXT,
+  dispatch_outcome TEXT,
+  first_claimed_at TEXT,
+  first_visible_at TEXT,
   UNIQUE(household_id, unitid, term)
 );
 

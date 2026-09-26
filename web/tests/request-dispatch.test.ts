@@ -40,6 +40,7 @@ describe("post-commit request dispatch and durable first-view timing", () => {
     } finally {process.env.REQUEST_PIPELINE_ENABLED="1";globalThis.fetch=originalFetch;}
   });
   it("accepts only a fixed server-to-GitHub workflow wake-up, not a claim",async()=>{
+    process.env.REQUEST_EVENT_DISPATCH_ENABLED="1";
     const result=await create("81002");
     process.env.REQUEST_DISPATCH_GITHUB_TOKEN="private-test-token";
     process.env.REQUEST_DISPATCH_REPOSITORY="review-org/review-repo";
@@ -64,6 +65,7 @@ describe("post-commit request dispatch and durable first-view timing", () => {
     } finally {globalThis.fetch=originalFetch;}
   });
   it("preserves a committed request on transport failure and rejects unsafe target config",async()=>{
+    process.env.REQUEST_EVENT_DISPATCH_ENABLED="1";
     const result=await create("81003");
     globalThis.fetch=async()=>{throw new Error("network offline")};
     try {
