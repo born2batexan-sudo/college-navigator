@@ -1,8 +1,8 @@
 name: Export school data report
 
 # Manual "Run workflow" button (Actions tab). Reads researched schools from the live app (read-only),
-# computes comparison numbers, and publishes them as a GitHub "pre-release" page in this repo so they
-# can be read without logging in. Costs nothing (no Anthropic calls). Changes nothing in the app.
+# computes comparison numbers, and stores a short-lived workflow artifact for authorized review.
+# Costs nothing (no model calls) and changes nothing in the app or repository.
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
         default: "ut-dallas"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   export:
@@ -197,12 +197,12 @@ jobs:
           print("\n".join(L[:14]))
           PY
 
-      - name: Publish report as a GitHub pre-release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="report-$(date -u +%Y%m%d-%H%M%S)"
-          gh release create "$tag" out/*.json \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --prerelease --title "School data report $tag" --notes-file report.md
-          echo "Report: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload short-lived report artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: school-data-report
+          path: |
+            report.md
+            out/*.json
+          if-no-files-found: error
+          retention-days: 7

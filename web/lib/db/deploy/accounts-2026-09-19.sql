@@ -1,7 +1,7 @@
--- OPTIONAL. The app runs this automatically the first time someone signs in
--- (lib/db/accounts.ts, ensureAccountSchema), so you do not need to paste it.
--- It is here as a fallback and as a record of exactly what is created.
--- Safe to run more than once.
+-- VERSIONED POSTGRES MIGRATION. Apply through the reviewed database release
+-- process; the app does not create PostgreSQL tables at request time.
+-- ensureAccountSchema() validates the completed schema, RLS, and grants and
+-- fails closed when the release is incomplete. Safe to run more than once.
 
 CREATE TABLE IF NOT EXISTS auth_links (
   id TEXT PRIMARY KEY,

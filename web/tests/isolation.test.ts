@@ -87,6 +87,51 @@ describe("accounts and household isolation", () => {
     assert.equal(second.name, "Alex");
   });
 
+  it("keeps multiple student profiles, school preferences, and review hooks separate within one household", async () => {
+    const ctx = await A.provisionAccount({ authUserId: "multi-student", email: "multi@example.com" });
+    await A.completeOnboarding(ctx, {
+      role: "parent",
+      students: [
+        { name: "Jordan", enteringTerm: "Fall 2027" },
+        { name: "Casey", enteringTerm: "Fall 2027" },
+      ],
+      purchaserAttested: true,
+    });
+    const profiles = await R.listStudentsForHousehold(ctx.household.id);
+    assert.equal(profiles.length, 2);
+    const jordan = profiles.find((profile) => profile.name === "Jordan")!;
+    const casey = profiles.find((profile) => profile.name === "Casey")!;
+    assert.ok(jordan && casey);
+    assert.ok(await A.getPurchaserAttestation(ctx.household.id));
+    assert.equal((await A.getStudentForHousehold(ctx.household.id, casey.id))?.name, "Casey");
+    assert.equal(await A.getStudentForHousehold(famB.household.id, casey.id), null, "a guessed profile id is denied outside its household");
+
+    const [jordanRel, caseyRel] = await Promise.all([R.upsertRelationship({ studentId: jordan.id, institutionId: inst.id }), R.upsertRelationship({ studentId: casey.id, institutionId: inst.id })]);
+    await R.updateRelationshipAttributes(jordanRel.id, { housingPlan: "on_campus" });
+    await R.updateRelationshipAttributes(caseyRel.id, { housingPlan: "commuter" });
+    assert.equal((await R.findRelationship(jordan.id, inst.id))?.attributes, JSON.stringify({ housingPlan: "on_campus" }));
+    assert.equal((await R.findRelationship(casey.id, inst.id))?.attributes, JSON.stringify({ housingPlan: "commuter" }));
+
+    await A.recordHouseholdReviewFlag({ householdId: ctx.household.id, signalCode: "duplicate_payment_attempt" });
+    assert.ok(await A.getContextForUser("multi-student"), "a review hook never denies access automatically");
+  });
+
+  it("rejects a household plan that mixes high-school graduation years or admissions cycles", async () => {
+    const ctx = await A.provisionAccount({ authUserId: "mixed-cycle", email: "mixed-cycle@example.com" });
+    await assert.rejects(
+      () => A.completeOnboarding(ctx, {
+        role: "parent",
+        students: [
+          { name: "Same Cycle", enteringTerm: "Fall 2027" },
+          { name: "Different Cycle", enteringTerm: "Fall 2028" },
+        ],
+        purchaserAttested: true,
+      }),
+      /same high-school graduation year and admissions cycle/i,
+    );
+    assert.equal((await R.listStudentsForHousehold(ctx.household.id)).length, 0);
+  });
+
   it("a family passes ownership checks for its own data only", async () => {
     for (const [mine, theirs, fam, other] of [
       ["a", "b", famA, famB],
@@ -142,6 +187,29 @@ describe("accounts and household isolation", () => {
     // Cap on open invites.
     for (let i = 0; i < 5; i++) assert.ok((await A.createInvite(famA, "parent")).ok);
     assert.deepEqual(await A.createInvite(famA, "parent"), { ok: false, reason: "too_many" });
+  });
+
+  it("serializes concurrent invitations for one empty account", async () => {
+    const ownerOne = await newFamily("invite-owner-one", "Owner One");
+    const ownerTwo = await newFamily("invite-owner-two", "Owner Two");
+    const inviteOne = await A.createInvite(ownerOne, "parent");
+    const inviteTwo = await A.createInvite(ownerTwo, "parent");
+    assert.ok(inviteOne.ok && inviteTwo.ok);
+    if (!inviteOne.ok || !inviteTwo.ok) return;
+
+    const joining = await A.provisionAccount({ authUserId: "invite-race", email: "race@example.com" });
+    const results = await Promise.all([
+      A.acceptInvite(joining, inviteOne.token),
+      A.acceptInvite(joining, inviteTwo.token),
+    ]);
+    assert.equal(results.filter((r) => r.ok).length, 1);
+    const after = (await A.getContextForUser("invite-race"))!;
+    assert.ok([ownerOne.household.id, ownerTwo.household.id].includes(after.household.id));
+    const accepted = await C.queryOne<any>(
+      "SELECT COUNT(*) AS n FROM household_invites WHERE accepted_by = $1",
+      ["invite-race"]
+    );
+    assert.equal(Number(accepted?.n ?? 0), 1);
   });
 
   it("a member removing themself leaves the household and its data intact", async () => {

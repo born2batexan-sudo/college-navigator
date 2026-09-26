@@ -7,9 +7,12 @@ import {
   setRelationshipActive,
   updateRelationshipAttributes,
   getInstitution,
+  listRelationshipsForStudent,
 } from "@/lib/db/repo";
 import { materializeActionsForRelationship } from "@/lib/materialize";
-import { requireOnboardedHousehold } from "@/lib/auth/session";
+import { requireWritableSelectedStudent } from "@/lib/auth/session";
+import { updateStudentAttributes } from "@/lib/db/accounts";
+import { isStartTerm } from "@/lib/terms";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 
 // The student always comes from the signed-in family (requireOnboardedHousehold),
@@ -23,7 +26,7 @@ import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
  * interest on) immediately updates which of the 144 checkpoints apply.
  */
 export async function saveSchoolPreferences(formData: FormData): Promise<void> {
-  const { student } = await requireOnboardedHousehold();
+  const { student } = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
   const institution = await getInstitution(institutionId);
@@ -53,8 +56,20 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
  * touching its underlying tracker or action history. Re-tracking later
  * (saveSchoolPreferences) picks up exactly where this left off.
  */
+export async function saveStartTerm(formData: FormData): Promise<void> {
+  const ctx = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
+  const term = String(formData.get("enteringTerm") ?? "");
+  if (!isStartTerm(term)) throw new Error("Choose a valid start term");
+  await updateStudentAttributes(ctx, { enteringTerm: term });
+  // Rebuild each tracked school's actions from this exact term. If that term
+  // has no certified rules yet, no other cycle is substituted.
+  const relationships = await listRelationshipsForStudent(ctx.student.id);
+  await Promise.all(relationships.map((rel) => materializeActionsForRelationship(rel.id)));
+  revalidatePath("/welcome"); revalidatePath("/");
+}
+
 export async function stopTracking(formData: FormData): Promise<void> {
-  const { student } = await requireOnboardedHousehold();
+  const { student } = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
 

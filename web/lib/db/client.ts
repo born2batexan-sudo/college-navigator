@@ -1,26 +1,7 @@
-// Dual-backend database client.
-//
-// - No DATABASE_URL set -> Node 22's built-in node:sqlite, zero external
-//   dependencies. This is the "clone and run" local-dev path: no accounts,
-//   no network, works the moment you run `npm run db:seed`.
-// - DATABASE_URL set -> real Postgres via `pg` (e.g. a Supabase project).
-//   This is what a real deployment (Vercel, or anywhere else) should use —
-//   serverless platforms don't give you a persistent local disk to put a
-//   SQLite file on, so production always needs a real database server.
-//
-// lib/db/repo.ts is the only other file that touches SQL, and it's written
-// once, in Postgres-style `$1, $2, ...` placeholders — this file adapts
-// that same SQL to SQLite's `?` placeholders internally when running
-// without a DATABASE_URL, so nothing above this file needs to know which
-// backend is active.
-//
-// IMPORTANT: this file does NOT run schema.sql against Postgres. Applying
-// the schema to a Supabase project is a one-time step you run yourself in
-// Supabase's own SQL Editor (see README.md) — a server-side function
-// re-running DDL on every cold start is unnecessary overhead and requires
-// schema-modifying permissions on every request, not just once.
-
-import { Pool } from "pg";
+// Dual Postgres/SQLite database client. Production uses Postgres; SQLite is
+// deliberately retained for local development and deterministic unit tests.
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Pool, type PoolClient } from "pg";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -30,105 +11,105 @@ const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "lib", "db", "de
 const SCHEMA_PATH = path.join(process.cwd(), "lib", "db", "schema.sql");
 
 declare global {
-  // eslint-disable-next-line no-var
   var __cnPgPool: Pool | undefined;
-  // eslint-disable-next-line no-var
   var __cnSqliteDb: DatabaseSync | undefined;
 }
 
 export const usingPostgres = !!DATABASE_URL;
-
-// ---------- SQLite backend (local dev, zero setup) ----------
+type TxContext = { pg?: PoolClient; sqlite?: DatabaseSync };
+const transactionContext = new AsyncLocalStorage<TxContext>();
 
 function openSqlite(): DatabaseSync {
-  const isNew = !existsSync(DB_PATH);
-  const sqliteDb = new DatabaseSync(DB_PATH);
-  sqliteDb.exec("PRAGMA foreign_keys = ON;");
-  const schema = readFileSync(SCHEMA_PATH, "utf-8");
-  sqliteDb.exec(schema); // CREATE TABLE IF NOT EXISTS — safe to run every boot
-  if (isNew) {
-    console.log(`[db] created new SQLite database at ${DB_PATH} (no DATABASE_URL set — using local SQLite)`);
-  }
-  return sqliteDb;
+  const isNew = !existsSync(/* turbopackIgnore: true */ DB_PATH);
+  const db = new DatabaseSync(DB_PATH);
+  db.exec("PRAGMA foreign_keys = ON;");
+  db.exec("PRAGMA busy_timeout = 5000;");
+  db.exec(readFileSync(SCHEMA_PATH, "utf-8"));
+  if (isNew) console.log(`[db] created new SQLite database at ${DB_PATH}`);
+  return db;
 }
-
 function getSqlite(): DatabaseSync {
-  if (!globalThis.__cnSqliteDb) {
-    globalThis.__cnSqliteDb = openSqlite();
-  }
+  if (!globalThis.__cnSqliteDb) globalThis.__cnSqliteDb = openSqlite();
   return globalThis.__cnSqliteDb;
 }
-
-// repo.ts is written in Postgres-style "$1, $2, ..." positional
-// placeholders throughout; node:sqlite (like better-sqlite3) uses
-// positional "?" instead. Since both are strictly positional and in the
-// same left-to-right order as the params array, a straight regex swap is
-// sufficient — no reordering needed.
-function toSqlitePlaceholders(sql: string): string {
-  return sql.replace(/\$\d+/g, "?");
-}
-
+function toSqlitePlaceholders(sql: string): string { return sql.replace(/\$\d+/g, "?"); }
 const sqliteStmtCache = new Map<string, StatementSync>();
-function sqliteStatement(sql: string): StatementSync {
+function sqliteStatement(sql: string, db = getSqlite()): StatementSync {
   const converted = toSqlitePlaceholders(sql);
+  // There is one process-global SQLite handle. Caching is safe and avoids
+  // invalid statement reuse across transaction handles.
   let stmt = sqliteStmtCache.get(converted);
-  if (!stmt) {
-    stmt = getSqlite().prepare(converted);
-    sqliteStmtCache.set(converted, stmt);
-  }
+  if (!stmt) { stmt = db.prepare(converted); sqliteStmtCache.set(converted, stmt); }
   return stmt;
 }
-
-// ---------- Postgres backend (production) ----------
-
 function getPgPool(): Pool {
   if (!globalThis.__cnPgPool) {
-    // Supabase (and most managed Postgres) terminate TLS with a
-    // certificate that Node's default trust store doesn't chain to;
-    // rejectUnauthorized: false keeps the connection encrypted without
-    // requiring you to vendor their CA bundle. Fine for this app's threat
-    // model (no on-path attacker within Vercel's / Supabase's own network).
     const isLocal = /localhost|127\.0\.0\.1/.test(DATABASE_URL!);
+    const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n").trim();
     globalThis.__cnPgPool = new Pool({
       connectionString: DATABASE_URL,
-      ssl: isLocal ? false : { rejectUnauthorized: false },
-      max: 3, // small pool — serverless functions run many short-lived instances, not one long-lived process
+      // Remote database certificates are always verified. Supabase's pooler
+      // uses its own CA, supplied through the deployment secret store.
+      ssl: isLocal ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
+      max: 3,
     });
   }
   return globalThis.__cnPgPool;
 }
 
-// ---------- Unified query surface used by repo.ts ----------
-
 export async function queryRows<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-  if (DATABASE_URL) {
-    const result = await getPgPool().query(sql, params);
-    return result.rows as T[];
-  }
-  return sqliteStatement(sql).all(...params) as T[];
+  const ctx = transactionContext.getStore();
+  if (DATABASE_URL) return ((ctx?.pg ? await ctx.pg.query(sql, params) : await getPgPool().query(sql, params)).rows as T[]);
+  return sqliteStatement(sql, ctx?.sqlite).all(...params) as T[];
 }
-
 export async function queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
-  if (DATABASE_URL) {
-    const result = await getPgPool().query(sql, params);
-    return (result.rows[0] as T) ?? null;
-  }
-  const row = sqliteStatement(sql).get(...params);
-  return (row as T) ?? null;
+  const rows = await queryRows<T>(sql, params);
+  return rows[0] ?? null;
 }
-
 export async function exec(sql: string, params: any[] = []): Promise<void> {
+  const ctx = transactionContext.getStore();
   if (DATABASE_URL) {
-    await getPgPool().query(sql, params);
+    if (ctx?.pg) await ctx.pg.query(sql, params); else await getPgPool().query(sql, params);
     return;
   }
-  sqliteStatement(sql).run(...params);
+  sqliteStatement(sql, ctx?.sqlite).run(...params);
 }
 
-export function newId(prefix: string): string {
-  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+/** All repository calls inside fn share one real database transaction. */
+let sqliteTransactionTail: Promise<void> = Promise.resolve();
+
+export async function withTransaction<T>(fn: () => Promise<T>, mode: "deferred" | "immediate" = "immediate"): Promise<T> {
+  if (transactionContext.getStore()) return fn();
+  if (DATABASE_URL) {
+    const client = await getPgPool().connect();
+    try {
+      await client.query("BEGIN");
+      const value = await transactionContext.run({ pg: client }, fn);
+      await client.query("COMMIT");
+      return value;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
+  // DatabaseSync has one connection; serialize top-level async transactions
+  // so test/dev concurrency has the same atomic semantics as Postgres.
+  let release!: () => void;
+  const prior = sqliteTransactionTail;
+  sqliteTransactionTail = new Promise<void>((resolve) => { release = resolve; });
+  await prior;
+  const db = getSqlite();
+  db.exec(mode === "immediate" ? "BEGIN IMMEDIATE" : "BEGIN");
+  try {
+    const value = await transactionContext.run({ sqlite: db }, fn);
+    db.exec("COMMIT");
+    return value;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally { release(); }
 }
 
-export function nowIso(): string {
-  return new Date().toISOString();
-}
+export function newId(prefix: string): string { return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`; }
+export function nowIso(): string { return new Date().toISOString(); }
+

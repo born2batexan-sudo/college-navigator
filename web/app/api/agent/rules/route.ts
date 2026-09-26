@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 /** GET ?institutionSlug=alabama — current state of every rule for an institution. */
 export async function GET(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const slug = req.nextUrl.searchParams.get("institutionSlug");
@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   const institution = await getInstitutionBySlug(slug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${slug}` }, { status: 404 });
 
-  const rawRules = await listRulesForInstitution(institution.id);
+  const term = req.nextUrl.searchParams.get("term") || "Fall 2027";
+  const rawRules = await listRulesForInstitution(institution.id, term);
   const rules = await Promise.all(rawRules.map(async (r) => ({ ...r, hasGuidance: !!(await getGuidanceForRule(r.id)) })));
   return NextResponse.json({ rules });
 }
@@ -39,14 +40,14 @@ export async function GET(req: NextRequest) {
  * rather than trusted from the caller, since they're fixed by definition.
  */
 export async function POST(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const body = await req.json();
   const { institutionSlug, checkpointCode, requirement, status, confidence } = body ?? {};
-  if (!institutionSlug || !checkpointCode || !requirement || !status || !confidence) {
+  if (!institutionSlug || !checkpointCode || !requirement || !status || !confidence || !body.researchTerm || !body.cycleState || !body.applicability) {
     return NextResponse.json(
-      { error: "institutionSlug, checkpointCode, requirement, status, and confidence are required" },
+      { error: "institutionSlug, checkpointCode, requirement, status, confidence, researchTerm, cycleState, and applicability are required" },
       { status: 400 }
     );
   }
@@ -57,7 +58,9 @@ export async function POST(req: NextRequest) {
   const canonical = ALL_CHECKPOINTS.find((c) => c.code === checkpointCode);
   if (!canonical) return NextResponse.json({ error: `Unknown checkpoint code: ${checkpointCode}` }, { status: 400 });
 
-  const rule = await upsertRule({
+  let rule;
+  try {
+    rule = await upsertRule({
     institutionId: institution.id,
     checkpointCode: canonical.code,
     domain: canonical.domain,
@@ -73,11 +76,18 @@ export async function POST(req: NextRequest) {
     consequence: body.consequence,
     status,
     confidence,
+    researchTerm: body.researchTerm,
+    cycleState: body.cycleState,
+    applicability: body.applicability,
+    evidenceQuote: body.evidenceQuote,
     verifiedAt: body.verifiedAt ?? (status === "verified" ? new Date().toISOString() : null),
     sourceId: body.sourceId ?? null,
-  });
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid evidence" }, { status: 400 });
+  }
 
-  const coverage = await recomputeCoverage(institution.id);
+  const coverage = await recomputeCoverage(institution.id, rule.researchTerm);
 
   const relationships = await listRelationshipsForInstitution(institution.id);
   for (const rel of relationships) {

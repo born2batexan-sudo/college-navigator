@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { COVERAGE_LABELS, COVERAGE_STYLES } from "@/lib/format";
 import { StatePill } from "./StatusPill";
 import type { Institution, InstitutionRelationship } from "@/lib/db/types";
 
@@ -28,20 +27,36 @@ const LIFECYCLE_STYLES: Record<string, string> = {
 };
 
 export function SchoolCard({ institution, relationship, openCount }: { institution: Institution; relationship: InstitutionRelationship; openCount: number }) {
+  const submittedStates = new Set(["applied", "admitted", "waitlisted", "enrolled", "declined", "attending", "alumni"]);
+  const receivedStates = new Set(["admitted", "waitlisted", "enrolled", "declined", "attending", "alumni"]);
+  const milestoneState = {
+    submitted: submittedStates.has(relationship.lifecycleState),
+    received: receivedStates.has(relationship.lifecycleState),
+    complete: receivedStates.has(relationship.lifecycleState),
+  };
+
   return (
     <Link
       href={`/school/${institution.slug}`}
-      className="flex flex-col gap-2 rounded-lg border border-line bg-white p-4 transition hover:border-ink/20"
+      className="group flex flex-col gap-4 rounded-2xl border border-line bg-white/85 p-5 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-lg"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-ink">{institution.name}</span>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${COVERAGE_STYLES[institution.coverageStatus]}`}>
-          {COVERAGE_LABELS[institution.coverageStatus]} · {institution.coveragePct}%
+        <span className="font-display text-lg font-semibold text-ink transition group-hover:text-accent">{institution.name}</span>
+        <span className="rounded-full bg-ok/10 px-2 py-0.5 text-[11px] font-medium text-ok">
+          Plan ready
         </span>
       </div>
-      <div className="flex items-center justify-between text-sm text-ink/60">
+      <div className="flex items-center justify-between gap-3 text-sm text-ink/60">
         <StatePill state={relationship.lifecycleState} styles={LIFECYCLE_STYLES} labels={LIFECYCLE_LABELS} />
-        <span>{openCount > 0 ? `${openCount} open action${openCount === 1 ? "" : "s"}` : "No tracked actions yet"}</span>
+        <span className="text-right">{openCount > 0 ? `${openCount} open action${openCount === 1 ? "" : "s"}` : "No tracked actions yet"}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1 border-t border-line pt-3" aria-label="Application progress">
+        {(["submitted", "received", "complete"] as const).map((step) => (
+          <div key={step} className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">
+            <span className={`h-2 w-2 rounded-full ${milestoneState[step] ? "bg-accent" : "border border-line bg-paper"}`} />
+            <span className={milestoneState[step] ? "text-accent" : ""}>{step}</span>
+          </div>
+        ))}
       </div>
     </Link>
   );

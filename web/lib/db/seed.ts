@@ -22,18 +22,65 @@
 import {
   upsertInstitution,
   createSource,
+  findSourceByUrl,
   upsertRule,
   upsertGuidance,
   createObservationPattern,
+  listObservationPatternsForInstitution,
   upsertHousehold,
   createPerson,
+  listPeopleForHousehold,
   upsertStudent,
   upsertRelationship,
   getRuleByCode,
+  updateActionInstance,
+  createActionEvent,
+  findActionInstance,
 } from "./repo";
 import { materializeActionsForRelationship } from "../materialize";
 import { ALL_CHECKPOINTS } from "../checkpoints";
 import { recomputeCoverage } from "../coverage";
+
+// ---------------------------------------------------------------------
+// 0. Small idempotency helpers, local to this file.
+//
+// upsertInstitution / upsertRule / upsertGuidance / upsertRelationship /
+// upsertStudent are already find-or-create by a stable natural key, so
+// re-running this seed against an existing database is safe for them.
+// createPerson, createSource, and createObservationPattern are plain
+// inserts everywhere else they're used (e.g. real account provisioning
+// always wants a brand-new row), so this seed — which is the one caller
+// that must tolerate being re-run against a shared dev/staging database —
+// guards each of its own calls with its own find-before-create check
+// instead of changing that shared, intentionally-always-new behavior.
+// ---------------------------------------------------------------------
+
+async function ensureDemoPerson(input: { householdId: string; name: string; role: string; email: string; consentState?: string }) {
+  const existing = (await listPeopleForHousehold(input.householdId)).find((p) => p.email === input.email);
+  if (existing) return existing;
+  return createPerson(input);
+}
+
+async function ensureSource(input: { institutionId: string; url: string; label: string; owner?: string; lastVerified?: string }) {
+  const existing = await findSourceByUrl(input.institutionId, input.url);
+  if (existing) return existing;
+  return createSource(input);
+}
+
+async function ensureObservationPattern(input: {
+  institutionId: string;
+  workflow: string;
+  urlPattern: string;
+  signal: string;
+  impliesState: string;
+  relatedCheckpointCode?: string | null;
+}) {
+  const existing = (await listObservationPatternsForInstitution(input.institutionId)).find(
+    (p) => p.workflow === input.workflow && p.urlPattern === input.urlPattern && p.relatedCheckpointCode === (input.relatedCheckpointCode ?? null)
+  );
+  if (existing) return existing;
+  return createObservationPattern(input);
+}
 
 const RESEARCH_DATE = "2026-09-07T00:00:00.000Z";
 
@@ -325,7 +372,7 @@ const OTHER_SCHOOLS = [
   { name: "University of Arizona", slug: "arizona", domains: ["orientation.arizona.edu", "housing.arizona.edu", "bursar.arizona.edu", "greek.arizona.edu", "career.arizona.edu"] },
 ];
 
-async function main() {
+export async function main() {
   console.log("Seeding College Navigator...");
 
   const alabama = await upsertInstitution({
@@ -338,14 +385,15 @@ async function main() {
 
   const sourceIds: Record<SourceKey, string> = {} as Record<SourceKey, string>;
   for (const [key, s] of Object.entries(SOURCES)) {
-    const created = await createSource({ institutionId: alabama.id, url: s.url, label: s.label, owner: s.owner, lastVerified: RESEARCH_DATE });
+    const created = await ensureSource({ institutionId: alabama.id, url: s.url, label: s.label, owner: s.owner, lastVerified: RESEARCH_DATE });
     sourceIds[key as SourceKey] = created.id;
   }
 
   let verifiedCount = 0;
   for (const cp of ALL_CHECKPOINTS) {
     const override = OVERRIDES[cp.code];
-    if (override) verifiedCount++;
+    // Legacy seed overrides predate quote-level evidence. Keep their sourced
+    // text for local UI demos, but do not represent them as verified.
 
     await upsertRule({
       institutionId: alabama.id,
@@ -361,9 +409,12 @@ async function main() {
       costCents: override?.costCents ?? null,
       refundable: override?.refundable ?? "unknown",
       consequence: override?.consequence ?? null,
-      status: override ? "verified" : "unverified",
+      status: "unverified",
       confidence: override?.confidence ?? "low",
-      verifiedAt: override ? RESEARCH_DATE : null,
+      researchTerm: "Fall 2027",
+      cycleState: "undated",
+      applicability: "applies",
+      verifiedAt: null,
       sourceId: override ? sourceIds[override.sourceKey] : null,
     });
   }
@@ -409,7 +460,7 @@ async function main() {
     await upsertGuidance({ ruleId: rule.id, what: g.what, when: g.when, why: g.why, how: g.how, consequence: g.consequence, deepLink: g.deepLink, generatedBy: "human" });
   }
 
-  await createObservationPattern({
+  await ensureObservationPattern({
     institutionId: alabama.id,
     workflow: "housing_application",
     urlPattern: "housing.sl.ua.edu/*",
@@ -417,7 +468,7 @@ async function main() {
     impliesState: "submitted",
     relatedCheckpointCode: "HOU-04",
   });
-  await createObservationPattern({
+  await ensureObservationPattern({
     institutionId: alabama.id,
     workflow: "enrollment_deposit",
     urlPattern: "mybama.ua.edu/*deposit*",
@@ -425,7 +476,7 @@ async function main() {
     impliesState: "received",
     relatedCheckpointCode: "ENR-02",
   });
-  await createObservationPattern({
+  await ensureObservationPattern({
     institutionId: alabama.id,
     workflow: "immunization_upload",
     urlPattern: "mybama.ua.edu/*immunization*",
@@ -440,8 +491,8 @@ async function main() {
 
   // --- Demo household ---
   const household = await upsertHousehold({ id: "demo-household", name: "Taylor Household" });
-  await createPerson({ householdId: household.id, name: "Jordan Taylor", role: "student", email: "jordan.taylor.demo@example.com", consentState: "granted" });
-  await createPerson({ householdId: household.id, name: "Dana Taylor", role: "parent", email: "dana.taylor.demo@example.com", consentState: "granted" });
+  await ensureDemoPerson({ householdId: household.id, name: "Jordan Taylor", role: "student", email: "jordan.taylor.demo@example.com", consentState: "granted" });
+  await ensureDemoPerson({ householdId: household.id, name: "Dana Taylor", role: "parent", email: "dana.taylor.demo@example.com", consentState: "granted" });
 
   const student = await upsertStudent({
     id: "demo-student",
@@ -450,7 +501,10 @@ async function main() {
     gradYear: 2027,
     applicantType: "freshman",
     residency: "out_of_state",
-    attributes: { gpaBand: "3.5-3.79", housingPlan: "on_campus", greekInterest: true, disabilityAccommodation: false },
+    // enteringTerm is set explicitly (rather than left to the welcome page's
+    // own default) so this seed's own materialization below — and every
+    // fresh clone of it — actually has real, non-empty actions to show.
+    attributes: { gpaBand: "3.5-3.79", enteringTerm: "Fall 2027", housingPlan: "on_campus", greekInterest: true, disabilityAccommodation: false },
   });
 
   const alabamaRel = await upsertRelationship({ studentId: student.id, institutionId: alabama.id, lifecycleState: "admitted", decisionDate: "2026-12-15T00:00:00.000Z" });
@@ -465,10 +519,178 @@ async function main() {
   const applicableCount = materialized.filter((m) => m.applicable).length;
   console.log(`Evaluated ${materialized.length} rules, ${applicableCount} applicable ActionInstances created for the demo household.`);
 
+  // A second, genuinely distinct student profile in the same demo household,
+  // so the signed-in Private Preview itself — not only the public marketing
+  // mock in lib/landing-demo.ts — demonstrates a combined household view
+  // plus real per-student switching. Both are Class of 2027 / Fall 2027
+  // applicants in the same admissions cycle, while their pathways remain
+  // deliberately different:
+  //   - a different lifecycle stage ("considering" vs "admitted")
+  //   - a smaller, different set of tracked schools (2 vs 6)
+  //   - different priorities and preferences (no Greek interest, needs
+  //     accommodations, bringing a car, housing undecided, in-state residency)
+  // Both students are upserted by a fixed id, so re-running this seed never
+  // duplicates either one (see tests/demo-household.test.ts).
+  const secondStudent = await upsertStudent({
+    id: "demo-student-2",
+    householdId: household.id,
+    name: "Morgan Taylor",
+    gradYear: 2027,
+    applicantType: "freshman",
+    residency: "in_state",
+    attributes: { gpaBand: "3.2-3.49", enteringTerm: "Fall 2027", housingPlan: "undecided", greekInterest: false, disabilityAccommodation: true, bringingCar: true },
+  });
+  await ensureDemoPerson({ householdId: household.id, name: "Morgan Taylor", role: "student", email: "morgan.taylor.demo@example.com", consentState: "granted" });
+
+  const morganAlabamaRel = await upsertRelationship({ studentId: secondStudent.id, institutionId: alabama.id, lifecycleState: "considering" });
+  const arkansas = OTHER_SCHOOLS.find((s) => s.slug === "arkansas")!;
+  const arkansasInstitution = await upsertInstitution({ name: arkansas.name, slug: arkansas.slug, domains: arkansas.domains });
+  await upsertRelationship({ studentId: secondStudent.id, institutionId: arkansasInstitution.id, lifecycleState: "considering" });
+
+  // Materializing here (rather than skipping it) keeps Morgan on the exact
+  // same idempotent, re-runnable path as Jordan. It is expected to produce
+  // zero ActionInstances against the real Alabama index: that index is
+  // researched only for Fall 2027, and materializeActionsForRelationship()
+  // never substitutes a different cycle's rules for an unresearched term.
+  // That empty, honestly labeled queue (see lib/terms.ts termNotice) is
+  // itself part of the demonstration, not a gap.
+  await materializeActionsForRelationship(morganAlabamaRel.id);
+
+  // ---------------------------------------------------------------------
+  // 5. A dedicated, clearly fictional practice institution for the demo
+  //    household's action ledger.
+  //
+  // Every real Alabama checkpoint above is intentionally kept "unverified"
+  // (see the loop above and the OVERRIDES comment) because it lacks a
+  // quote-level evidence citation, and listRulesForInstitution() — the same
+  // gate every real household's plan goes through — only ever surfaces
+  // status="verified" + confidence in (high, medium) rules. That is a
+  // safety property, not a bug, and this seed must not weaken it by
+  // stamping unverified real-school research as "verified" just to make a
+  // demo look fuller.
+  //
+  // So the Private Preview's action queue is instead powered by a small,
+  // explicitly fictional practice school ("Example Demo University" — not a
+  // real institution, never offered in the real /welcome picker because it
+  // is not in TRACKABLE_SCHOOL_SLUGS). Its evidence quotes say plainly that
+  // they are illustrative. This lets the signed-in demo honestly show a
+  // real, varied, per-student action ledger — not just the public
+  // marketing mock in lib/landing-demo.ts — without ever implying the real
+  // University of Alabama research is more complete than it is.
+  // ---------------------------------------------------------------------
+  const demoSchool = await upsertInstitution({
+    name: "Example Demo University",
+    slug: "example-demo-university",
+    domains: ["admissions.example-demo-university.edu", "housing.example-demo-university.edu"],
+    pathway: "both",
+    coverageStatus: "unsupported",
+    coveragePct: 0,
+  });
+  const demoSource = await ensureSource({
+    institutionId: demoSchool.id,
+    url: "https://admissions.example-demo-university.edu/private-preview-demo",
+    label: "Illustrative example only — Example Demo University is fictional and used solely to power the Private Preview demo household",
+    owner: "Fictional Example Demo University",
+    lastVerified: RESEARCH_DATE,
+  });
+  const DEMO_RULES = [
+    { code: "DEMO-01", domain: "Enrollment", title: "Pay the enrollment deposit", critical: true, population: "all", trigger: "admitted", deadlineExpr: "2027-01-15",
+      requirement: "Illustrative example: pay the enrollment deposit to confirm intent to enroll.", quote: "Illustrative example: the enrollment deposit confirms a student's intent to enroll." },
+    { code: "DEMO-02", domain: "Housing", title: "Submit the housing application", critical: false, population: "campus_housing", trigger: "admitted", deadlineExpr: "2027-02-01",
+      requirement: "Illustrative example: submit a housing application to be eligible for room selection.", quote: "Illustrative example: housing applications determine eligibility for room selection." },
+    { code: "DEMO-03", domain: "Health", title: "Upload immunization records", critical: true, population: "all", trigger: "admitted", deadlineExpr: null as string | null,
+      requirement: "Illustrative example: upload immunization records before registering for classes.", quote: "Illustrative example: immunization records are required before class registration." },
+    { code: "DEMO-04", domain: "Admissions", title: "Confirm intent to enroll", critical: false, population: "all", trigger: null as string | null, deadlineExpr: "2026-12-01",
+      requirement: "Illustrative example: confirm continued interest while a decision is pending.", quote: "Illustrative example: confirming interest keeps a pending application active." },
+  ];
+  for (const r of DEMO_RULES) {
+    await upsertRule({
+      institutionId: demoSchool.id, checkpointCode: r.code, domain: r.domain, title: r.title, critical: r.critical,
+      population: r.population, requirement: r.requirement, trigger: r.trigger, deadlineExpr: r.deadlineExpr,
+      status: "verified", confidence: "high", researchTerm: "Fall 2027", cycleState: "current", applicability: "applies",
+      evidenceQuote: r.quote, sourceId: demoSource.id,
+    });
+    const savedRule = await getRuleByCode(demoSchool.id, r.code);
+    await upsertGuidance({
+      ruleId: savedRule!.id,
+      what: r.title, when: r.deadlineExpr ? `By ${r.deadlineExpr} (illustrative example date).` : "As soon as it's ready — no fixed date in this example.",
+      why: r.requirement, how: "This is a fictional Private Preview example; there is no real official page to visit.",
+      consequence: "Illustrative example only — nothing here is a real deadline or requirement.",
+      deepLink: demoSource.url, generatedBy: "human",
+    });
+  }
+  // The second applicant shares the Fall 2027 cycle but remains in a
+  // different pathway. A separate, lighter, trigger-free fictional rule lets
+  // the demo show that distinction without inventing a different admissions
+  // cycle or changing the source context.
+  const morganDemoRule = {
+    code: "DEMO-05", domain: "Admissions", title: "Confirm continued interest", critical: false, population: "all", trigger: null as string | null, deadlineExpr: "2027-11-01",
+    requirement: "Illustrative example: an early, informal way to stay on a school's radar while still exploring.", quote: "Illustrative example: confirming interest early keeps a prospective student on a school's radar.",
+  };
+  await upsertRule({
+    institutionId: demoSchool.id, checkpointCode: morganDemoRule.code, domain: morganDemoRule.domain, title: morganDemoRule.title, critical: morganDemoRule.critical,
+    population: morganDemoRule.population, requirement: morganDemoRule.requirement, trigger: morganDemoRule.trigger, deadlineExpr: morganDemoRule.deadlineExpr,
+    status: "verified", confidence: "high", researchTerm: "Fall 2027", cycleState: "current", applicability: "applies",
+    evidenceQuote: morganDemoRule.quote, sourceId: demoSource.id,
+  });
+  const morganSavedRule = await getRuleByCode(demoSchool.id, morganDemoRule.code, "Fall 2027");
+  await upsertGuidance({
+    ruleId: morganSavedRule!.id,
+    what: morganDemoRule.title, when: `By ${morganDemoRule.deadlineExpr} (illustrative example date).`,
+    why: morganDemoRule.requirement, how: "This is a fictional Private Preview example; there is no real official page to visit.",
+    consequence: "Illustrative example only — nothing here is a real deadline or requirement.",
+    deepLink: demoSource.url, generatedBy: "human",
+  });
+
+  // Jordan (admitted, further along) tracks the example school too, and
+  // gets the full illustrative action set materialized against Fall 2027 —
+  // her actual researched term.
+  const jordanDemoRel = await upsertRelationship({ studentId: student.id, institutionId: demoSchool.id, lifecycleState: "admitted", decisionDate: "2026-12-15T00:00:00.000Z" });
+  await materializeActionsForRelationship(jordanDemoRel.id);
+  // Vary the states by hand so the dashboard honestly shows a mix, the same
+  // way a real household's plan would look after some progress: one item
+  // already confirmed complete, one in progress, the rest not yet started.
+  const confirmIntentRule = await getRuleByCode(demoSchool.id, "DEMO-04");
+  const confirmIntent = confirmIntentRule ? await findActionInstance(jordanDemoRel.id, confirmIntentRule.id) : null;
+  if (confirmIntent && confirmIntent.state === "not_started") {
+    await updateActionInstance(confirmIntent.id, { state: "complete" });
+    await createActionEvent({ actionId: confirmIntent.id, eventType: "state_change", fromState: "not_started", toState: "complete", actorType: "student" });
+  }
+  const depositRule = await getRuleByCode(demoSchool.id, "DEMO-01");
+  const depositAction = depositRule ? await findActionInstance(jordanDemoRel.id, depositRule.id) : null;
+  if (depositAction && depositAction.state === "not_started") {
+    await updateActionInstance(depositAction.id, { state: "started" });
+    await createActionEvent({ actionId: depositAction.id, eventType: "state_change", fromState: "not_started", toState: "started", actorType: "student" });
+  }
+
+  // Morgan (on a considering pathway) reaches only the non-admitted
+  // checkpoints — an honest, much shorter queue that reflects a different
+  // pathway in the same cycle, not an empty or broken one.
+  const morganDemoRel = await upsertRelationship({ studentId: secondStudent.id, institutionId: demoSchool.id, lifecycleState: "considering" });
+  const morganDemoMaterialized = await materializeActionsForRelationship(morganDemoRel.id);
+
+  console.log(`Second demo applicant Morgan Taylor added: Class of 2027 / Fall 2027, 3 schools tracked, ${morganDemoMaterialized.filter((m) => m.applicable).length} illustrative-example action(s) (Alabama itself stays at 0 — its research is unverified for any term, honestly).`);
+
   console.log("Seed complete.");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Import-safe: `npm test` and any future test can `import { main } from
+// "./seed"` and call it against a temp database without triggering a CLI
+// run or process.exit. Only a direct `tsx lib/db/seed.ts` (npm run db:seed)
+// executes it here.
+const isDirectRun = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === new URL(entry, "file://").href || import.meta.url === `file://${entry}`;
+  } catch {
+    return false;
+  }
+})();
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

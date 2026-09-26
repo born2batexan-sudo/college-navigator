@@ -1,183 +1,169 @@
-# College Navigator — Vertical Slice (Alabama)
+# College Navigator
 
-This is a working build-out of the College Lifecycle Intelligence Platform described in the
-Master Transfer Brief: a household dashboard, a Rules Engine, an Action Ledger, three
-standalone AI agents, and a Chrome browser companion skeleton — built end to end for
-**University of Alabama** first, per the "prove the loop on one school before replicating"
-decision, with the other five pressure-test schools (Arkansas, Oklahoma, UT Austin, Texas
-A&M, Arizona) present as institution shells ready for the same agents to fill in.
+A Next.js application for household-scoped college process, timing, cost, and logistics. The protected-content boundary is unchanged: the application and agents must never read, store, quote, generate, rewrite, or score admissions essays or other substantively evaluated application content.
 
-**Status, honestly:** Alabama is at 29/144 checkpoints (20.1%) independently verified against
-real, fetched, dated official sources — which puts it at "Unsupported" under the platform's
-own certification gate (Section 8 of the brief: <50% verified). That is correct and expected
-for a first pass; it is not a bug to fix before reading further. The Institutional Research
-Agent below is what closes the remaining 115 checkpoints, the same way it would for a human
-analyst continuing this work.
+## Current status
 
-## What's real vs. what's a stub
+This branch is a **review candidate, not a production-ready release**. It has local SQLite tests and build validation, but production enablement still requires applying and validating the PostgreSQL migrations, RLS/grants, Supabase authentication, and the queue against disposable/staging services. The request worker is manual-only and the server-side `REQUEST_QUEUE_ENABLED=1` kill switch remains required.
 
-| Piece | Status |
-|---|---|
-| Data model (Household → Student → InstitutionRelationship → Rule → ActionInstance) | Fully implemented, matches Section 6 of the brief |
-| Rules Engine (population + trigger + deadline → applicability + priority) | Fully implemented and tested |
-| Action Ledger state machine | Fully implemented (Not Started → Started → Submitted → Received → Complete, plus Blocked/Waived/Missed/N-A) |
-| Alabama's 144-point checklist | 29 checkpoints verified from 8 real official sources; 115 honestly marked "unverified — queued for research" |
-| Household dashboard (Next.js) | Fully working — multi-school action queue, per-school 144-point tracker, action detail with WHAT/WHEN/WHY/HOW/CONSEQUENCE |
-| Institutional Research Agent | Fully implemented, calls the real Anthropic API + web search; **not run against a real API key from this build environment** — you provide your own key |
-| Guidance Generation Agent | Fully implemented, same caveat |
-| Monitoring / Change-Detection Agent | Fully implemented; live fetches to university domains couldn't be exercised from this build environment's network policy — verified everything up to that call |
-| Chrome browser companion | Real end-to-end loop (content script → observe endpoint → Action Ledger state change), verified with simulated page content. ASK mode (conversational assistant) is an explicit stub — TRACK and GUIDE are real |
-| Live hosting | Not deployed anywhere — this is a repo you run locally or deploy yourself (see below) |
+## Local development
 
-## Repo layout
-
-```
-college-navigator/
-  web/         Next.js 14 app — dashboard, Rules Engine, Action Ledger, agent-facing API
-  agents/      Three standalone Python scripts (call the Anthropic API + web/'s API)
-  extension/   Chrome MV3 browser companion (ASK / GUIDE / TRACK side panel)
-```
-
-## Running the dashboard
+Use Node 22 and Python 3.12:
 
 ```bash
 cd web
-npm install
-npm run db:seed      # creates web/lib/db/dev.sqlite3 and seeds Alabama + the demo household
-npm run dev          # http://localhost:3000
+npm ci
+npm test
+npm run build
+npm run db:seed
+npm run dev
 ```
 
-No external database, no API keys needed just to see the dashboard — it uses Node 22's
-built-in `node:sqlite` (zero native dependencies; see "Why not Prisma" below).
+Without `DATABASE_URL`, local development uses Node's `node:sqlite` and `web/lib/db/schema.sql`. PostgreSQL is the only supported production database.
 
-`npm run db:reset` wipes and re-seeds from scratch if you want to start over.
+## Database release process
 
-## Why not Prisma
+The application uses a server-only PostgreSQL connection for data and Supabase only for authentication. Do not grant browser roles (`anon` or `authenticated`) direct table access, do not add client-facing RLS policies for the current architecture, and do not give the runtime role DDL privileges. `ensureAccountSchema()` verifies the completed release and fails closed; it never creates PostgreSQL tables.
 
-The original build used Prisma, but this environment's network policy blocks
-`binaries.prisma.sh` (where Prisma downloads its query-engine binary), and that's a
-deliberate organizational policy, not a bug to route around. The data layer was rewritten on
-Node 22's built-in `node:sqlite` instead — zero external binaries, same schema
-(`web/lib/db/schema.sql`, written as Postgres-compatible DDL). If you hit the same wall in
-your own environment, or if you just don't like Prisma, this is why there's no `prisma/`
-folder here. If your environment isn't blocked and you'd prefer Prisma or another ORM, the
-whole data layer is isolated behind `web/lib/db/repo.ts` — swap `client.ts` and `repo.ts` and
-nothing else changes.
+`web/lib/db/schema.sql` is the canonical SQLite development schema. `web/lib/db/deploy/supabase-setup.sql` is a legacy baseline/seed snapshot and must never be applied by itself or treated as the current security baseline. For the existing production baseline, apply reviewed migrations in this order:
 
-## Deploying for real
+1. `web/lib/db/deploy/accounts-2026-09-19.sql` if the account tables are not already present;
+2. `web/lib/db/deploy/request-queue.sql` if the request queue is not already present;
+3. `web/lib/db/deploy/20260919-secure-research-queue.sql` last, exactly once through the migration ledger;
+4. `web/lib/db/deploy/20260920-private-demo-invites.sql` for the existing private-demo invitation tables, exactly once through the migration ledger;
+5. `web/lib/db/deploy/20260921-email-validation.sql` after the account/request/research release, exactly once through the migration ledger;
+6. `web/lib/db/deploy/20260922-demo-access-requests.sql` after the private-demo invitation migration, exactly once through the migration ledger;
+7. `web/lib/db/deploy/20260923-reminder-foundation.sql` after the account/demo/request release, exactly once through the migration ledger.
 
-This was intentionally built as a repo you own and deploy, not something built and hosted
-inside this session (no hosting credentials were available here, and putting real family data
-on infrastructure this session controls unilaterally would be the wrong call anyway). To take
-it to Vercel + Supabase, which is a reasonable free-tier-to-start path:
+Reminder delivery is provider-neutral and dry-run by default. The reminder foundation
+stores no message body and performs no network delivery. A future reviewed adapter
+must additionally require `REMINDER_PRODUCTION_DELIVERY_ENABLED=1`; leaving that
+variable unset (the default) rejects non-dry-run recipient mode. Applying the
+migration alone does not enable delivery or create a provider account.
 
-1. **Database:** create a Supabase (or any Postgres) project. Port `web/lib/db/schema.sql` — it's
-   already Postgres-compatible DDL (`TEXT`, `INTEGER`, `REAL` all exist as-is in Postgres; only
-   `PRAGMA foreign_keys = ON` in `client.ts` is SQLite-specific and can be dropped). Swap
-   `web/lib/db/client.ts` for a `pg` or `@supabase/supabase-js` client, and update
-   `web/lib/db/repo.ts`'s SQL calls to use that client's query method instead of
-   `db.prepare(...).run/get/all(...)` — the function signatures in `repo.ts` don't need to change,
-   only their bodies, so nothing outside that one file needs to know.
-2. **App:** push `web/` to a GitHub repo, import it into Vercel, set `DATABASE_URL` and a real
-   (long, random) `AGENT_API_KEY` in Vercel's environment variables.
-3. **Agents:** run them anywhere with outbound internet and set `APP_BASE_URL` to your deployed
-   URL and `AGENT_API_KEY` to the same value you set in Vercel. A cron job, a scheduled GitHub
-   Action, or a small always-on box all work — see `agents/README` usage notes below for a sample
-   crontab line.
-4. **Extension:** update `extension/manifest.json`'s `host_permissions` to include your deployed
-   domain instead of `http://localhost:3000`, and change the default `appBaseUrl` in
-   `extension/background.js`.
-5. Before onboarding a real family: replace the demo household/student in
-   `web/lib/db/seed.ts` with a real signup flow, and add real authentication — none exists yet
-   (see "What's explicitly not built" below).
+For a brand-new production database, first generate and review a current baseline from the canonical schema and seed requirements; do not improvise from the legacy snapshot. Before traffic, verify every expected table exists, RLS is enabled, `anon`/`authenticated` have no grants, the server runtime role can perform required queries, and two-household isolation passes against PostgreSQL. The staging migration and integrity checks have been exercised; production remains intentionally unmigrated while this pull request is a draft.
 
-## The three agents
+## Authentication and machine credentials
 
-All three are in `agents/`, talk to the Anthropic API directly, and read/write the app's
-state only through `/api/agent/*` HTTP endpoints (bearer-token authenticated with
-`AGENT_API_KEY`) — never touching the database file directly. That means they can run from
-anywhere, independent of how or where the app itself is deployed.
+Supabase Auth provides household sign-in. Agent credentials are deliberately split:
+
+- `AGENT_API_KEY`: general monitoring/guidance endpoints;
+- `RESEARCH_WRITER_API_KEY`: institution/source/rule research writes;
+- `QUEUE_AGENT_API_KEY`: queue claim/report only;
+- `DIRECTORY_IMPORT_API_KEY`: IPEDS directory import/search only.
+
+Set distinct long random values in the web runtime and the relevant worker environment. Also configure `DATABASE_URL`, Supabase values, and conservative queue settings documented in `web/.env.example`. A research attempt receives an opaque attempt id, a lease, and a maximum dollar reservation. Unknown actual cost keeps the full reservation charged.
+
+## Research integrity
+
+Research records are keyed by institution, checkpoint, and entering term. Verified and structured waiting/not-applicable states require:
+
+- a source owned by the same institution;
+- an HTTPS source host on the institution's approved domain allow-list;
+- a supporting evidence quote;
+- explicit cycle and applicability state.
+
+Coverage and queue readiness are computed from the exact term version. Queue-created school routes remain unavailable unless the signed-in household requested that exact term and the matching job and research version are both ready/certified.
+
+## Workflows
+
+`.github/workflows/ci.yml` runs Node 22 install, tests, build, production dependency audit, and Python syntax checks without production secrets. The school-request workflow is intentionally `workflow_dispatch` only. Do not add a schedule until a protected GitHub Environment, reviewer approval, staging PostgreSQL tests, monitoring, and a supervised single-job smoke test are in place.
+
+## Browser companion
+
+The unauthenticated demo companion routes are disabled in production and are no longer public middleware exceptions. Extension authentication remains future work.
+
+## Agents
 
 ```bash
 cd agents
-pip install -r requirements.txt
-cp .env.example .env   # fill in ANTHROPIC_API_KEY, and match AGENT_API_KEY to web/.env
+python -m pip install -r requirements.txt
+cp .env.example .env
+python research_agent.py --institution example --domains example.edu --term "Fall 2027"
 ```
 
-**Institutional Research Agent** (`research_agent.py`) — the one that actually grows
-coverage. Give it an institution slug; it pulls that school's outstanding checkpoints,
-researches each one with Claude's web search tool against official sources, and files a
-Rule (status `verified` or an honest `unverified`) plus a Source for every one it touches.
+The research agent refuses an empty domain allow-list and writes term/cycle/applicability/evidence fields through the scoped API. Paid agent calls were not made during this hardening work.
 
-```bash
-python research_agent.py --institution arkansas --only-critical   # start with the 56 critical checkpoints
-python research_agent.py --institution arkansas                   # then the rest
-python research_agent.py --institution alabama --domain "Financial Aid"  # or fill remaining gaps in one Alabama domain
-```
+## Paid forwarding-first email validation (closed loop)
 
-**Guidance Generation Agent** (`guidance_agent.py`) — turns verified Rules into the
-WHAT/WHEN/WHY/HOW/CONSEQUENCE copy the dashboard shows. Only ever drafts from rules already
-`status: verified`; run the research agent first.
+Email validation is intentionally forwarding-first and provider-neutral. There
+is no OAuth, IMAP, mailbox credential, inbox search, or public unauthenticated
+intake route. A household owner must explicitly consent while the household is
+in an active `trial` or `paid` entitlement. The app can then issue one private
+revocable/rotatable forwarding alias; only a SHA-256 alias digest is persisted.
+Configure only the non-secret `EMAIL_FORWARDING_DOMAIN` and keep
+`EMAIL_VALIDATION_REPLAY_SECRET` in the deployment secret store.
 
-```bash
-python guidance_agent.py --institution alabama
-```
+A future inbound adapter passes normalized evidence and authentication results
+through `web/lib/db/email-validation.ts`. Curated institution sender policies
+are exact hostnames under the institution's approved domains; generic `.edu`
+matching is never used. Only authenticated-original evidence with an exact
+institution, applicant, entering-term, checkpoint, and unique action match may
+make the legal monotonic `submitted -> received` or `received -> complete`
+transition. Forward/ARC evidence creates a suggestion. Quoted, unauthenticated,
+domain-mismatched, ambiguous, unsupported, or illegal evidence is quarantined
+with an append-only decision event. No deadline/payment/research record is
+changed, and demo/template households are excluded.
 
-**Monitoring / Change-Detection Agent** (`monitoring_agent.py`) — re-fetches every known
-Source, fingerprints its content, and on a real change asks Claude to classify it as
-`material` or `cosmetic`, logging a ChangeEvent to the review queue
-(`GET /api/agent/change-events`). Run it on a schedule:
+The reviewed PostgreSQL migration is
+`web/lib/db/deploy/20260921-email-validation.sql`; apply it only through the
+reviewed release process after the existing migrations. Local SQLite picks up
+the matching definitions from `web/lib/db/schema.sql`. The library also
+provides pause, revoke, rotation, deletion, and dry-run normalized-ingestion
+controls. Raw message material and sender local-parts are deliberately not
+part of the schema.
 
-```bash
-# crontab -e
-0 6 * * * cd /path/to/college-navigator/agents && python monitoring_agent.py --institution alabama >> monitor.log 2>&1
-```
+## Public marketing and approved access (not deployed)
 
-All three respect the platform's protected admissions-content boundary by construction —
-their prompts explicitly forbid reading, storing, or scoring essay/personal-statement content,
-and none of them are given any field to put that content in even if they tried.
+`/`, `/sample-plan`, `/login`, and `/request-access` stay public, including for
+signed-in users. `/request-access` accepts a name, email, and explicit consent
+and returns a generic acknowledgement for valid, duplicate, and throttled
+submissions. Every product page and server action checks fresh server-side
+access: the authenticated `DEMO_OWNER_EMAIL`, an unexpired and unrevoked
+household `cycle_entitlements` row, or an accepted, still-approved private
+preview invitation claimed by the exact request email and auth user. A signed-in
+user without access is sent to `/request-access`; JSON product endpoints return
+403. Invitation acceptance is a narrow exception so an unapproved user can
+claim an approved invitation. The seven-day private-preview invitation expiry
+also ends that preview's product access, even after claim; owner revocation
+ends it immediately. Complimentary grants retain their own expiration and
+revocation; no payment, inbox capture, Ask model, or research integration is
+enabled by this access gate. Agent routes use independent machine keys and normally return 404 in
+production. Only scoped queue routes can be enabled by all three reviewed
+server flags (`REQUEST_QUEUE_ENABLED`, `REQUEST_PIPELINE_ENABLED`,
+`RESEARCH_API_ENABLED`); other research routes remain unavailable.
 
-## The browser companion
+Required for the production access boundary: `DATABASE_URL` (server-only
+PostgreSQL connection), `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase auth), `APP_ORIGIN` (exact canonical
+HTTPS origin with no trailing slash, registered in Supabase redirect allowlist),
+`DEMO_OWNER_EMAIL` (the owner's verified sign-in email),
+`DEMO_TEMPLATE_HOUSEHOLD_ID` (existing immutable, onboarded template
+household), and `REQUEST_ACCESS_HASH_SECRET` (unique random secret, at least
+32 bytes). Set `ACCESS_CYCLE="Fall 2027"` when using the owner-only
+complimentary grant controls; each student's `enteringTerm` must match.
+Local-only `AUTH_DEV_LOGIN=1` cannot be used in production. For reviewed
+outbound mail, set both `RESEND_API_KEY` and `DEMO_EMAIL_FROM` to a verified
+sender; optionally set `DEMO_EMAIL_REPLY_TO`. Without both, messages remain
+`queued_no_provider`; the owner must securely share the one-time invitation
+URL shown at approval. Approval tokens are never stored in the outbox, so a
+failed delivery cannot be retried from the queue without a new issuance flow.
+All generated callback, invitation and notification URLs use `APP_ORIGIN`,
+never forwarded Host headers. Configure production secrets in the deployment
+secret manager, not in source control.
 
-`extension/` is a Manifest V3 Chrome extension. To try it locally:
+Apply the reviewed `20260924-multi-student-safety.sql` and
+`20260924-owner-foundations.sql` migrations after the earlier numbered
+migrations, then verify Postgres RLS/grants and auth/entitlement behavior on
+staging before any traffic. The local SQLite schema already contains the
+required tables; this slice adds no migration. Do not switch on
+`STRIPE_REVIEW_ENABLED`, `ASSISTANT_MODEL_ENABLED`, inbound mail adapters, or
+research workers as part of this release.
 
-1. Run the dashboard (`npm run dev` in `web/`, so `http://localhost:3000` is up).
-2. In Chrome, go to `chrome://extensions`, enable Developer Mode, "Load unpacked", select the
-   `extension/` folder.
-3. Click the extension icon to open the side panel, then visit a matched Alabama page (anything
-   under `admissions.ua.edu`, `housing.sl.ua.edu`, `mybama.ua.edu`, etc.).
+## Net-new request research (subsequent review-only work)
 
-TRACK shows the demo household's open Alabama actions; click one to see GUIDE's
-WHAT/WHEN/WHY/HOW/CONSEQUENCE. The content script reads the page's own visible text (never
-form fields — it cannot see anything typed, essays included, by construction) and reports it
-to `/api/companion/observe`; if it matches a known signal (e.g. a housing confirmation page),
-the matching ActionInstance's state advances automatically and TRACK refreshes. This is the
-brief's own signature demo (Section 7) working for real, not simulated.
-
-ASK is an explicit stub in this build — wiring a conversational assistant grounded in the same
-verified Rule data is the natural next step, not done here.
-
-## What's explicitly not built yet
-
-Called out here rather than left implicit, per the brief's own "don't overclaim" instinct:
-
-- **Authentication / multi-tenant accounts.** There's one demo household, seeded directly into
-  the database. `lib/companion.ts` says so at the top of the file. Real signup, login, and
-  matching a browser session to the right household is the next real engineering milestone
-  before this could hold more than one family's data.
-- **Email/inbox-based status detection** (the brief's alternative to logging into portals
-  directly) — not built. The browser companion's page-observation approach is built instead;
-  the two aren't mutually exclusive and the brief treats email reconciliation as a fast-follow.
-- **Calendar/ICS export, payment rails, native mobile** — all explicitly out of MVP scope per
-  the brief itself (Section 12); not built here either, correctly.
-- **The other five pressure-test schools' actual research** — the institutions exist as shells;
-  running the Research Agent against each is the immediate next step, not a redesign.
-
-## Verifying this yourself
-
-```bash
-cd web && npm run build     # type-checks and builds cleanly
-npm run db:seed && npm run dev
-# then open http://localhost:3000, click through a few actions,
-# and open http://localhost:3000/school/alabama to see the full 144-point tracker
-```
+See [REQUEST_PIPELINE.md](REQUEST_PIPELINE.md) for the default-off 12-lane
+first-view design, exact-term evidence states, separate
+`20260926-request-pipeline.sql` migration, security/cost controls, and the
+unperformed 60-school live-provider benchmark. The new partial view is not
+certification; no migrations or enablement were performed here.

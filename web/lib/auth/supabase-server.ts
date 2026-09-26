@@ -6,8 +6,8 @@ import { SUPABASE_URL, SUPABASE_KEY } from "./env";
  * Supabase client for server components, route handlers and server actions.
  * A new one is created per call (never shared across requests).
  */
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies();
   return createServerClient(SUPABASE_URL, SUPABASE_KEY, {
     cookies: {
       getAll() {

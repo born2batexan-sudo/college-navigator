@@ -46,6 +46,10 @@ function toRule(r: any): Rule {
     consequence: cleanCopy(r.consequence),
     status: r.status,
     confidence: r.confidence,
+    researchTerm: r.research_term ?? "Fall 2027",
+    cycleState: r.cycle_state ?? "undated",
+    applicability: r.applicability ?? "applies",
+    evidenceQuote: r.evidence_quote ?? null,
     verifiedAt: r.verified_at,
     sourceId: r.source_id,
     createdAt: r.created_at,
@@ -225,6 +229,10 @@ export async function createPerson(input: { householdId: string; name: string; r
   return { id, householdId: input.householdId, name: input.name, role: input.role, email: input.email ?? null, phone: null, consentState: input.consentState ?? "pending", createdAt: now };
 }
 
+export async function listPeopleForHousehold(householdId: string): Promise<Person[]> {
+  return (await queryRows<any>("SELECT * FROM people WHERE household_id = $1", [householdId])).map(toPerson);
+}
+
 export async function upsertStudent(input: {
   id?: string;
   householdId: string;
@@ -305,7 +313,27 @@ export async function getSource(id: string): Promise<Source | null> {
 
 // ---------- Sources ----------
 
+function normalizedInstitutionDomains(institution: Institution): string[] {
+  try {
+    const parsed = JSON.parse(institution.domains);
+    return Array.isArray(parsed) ? parsed.map(String).map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]).filter(Boolean) : [];
+  } catch { return []; }
+}
+
+export function isOfficialInstitutionUrl(url: string, institution: Institution): boolean {
+  let host = "";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  } catch { return false; }
+  const domains = normalizedInstitutionDomains(institution);
+  return domains.length > 0 && domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
 export async function createSource(input: { institutionId: string; url: string; label: string; owner?: string; lastVerified?: string }): Promise<Source> {
+  const institution = await getInstitution(input.institutionId);
+  if (!institution || !isOfficialInstitutionUrl(input.url, institution)) throw new Error("Source must be an HTTPS URL on an approved institution domain");
   const id = newId("src");
   const now = nowIso();
   await exec(
@@ -352,103 +380,72 @@ export type RuleInput = {
   consequence?: string | null;
   status?: string;
   confidence?: string;
+  researchTerm?: string;
+  cycleState?: "current" | "prior" | "undated";
+  applicability?: "applies" | "not_applicable" | "not_yet_published";
+  evidenceQuote?: string | null;
   verifiedAt?: string | null;
   sourceId?: string | null;
 };
 
 export async function upsertRule(input: RuleInput): Promise<Rule> {
+  const researchTerm = String(input.researchTerm ?? "Fall 2027").trim();
+  if (!researchTerm) throw new Error("researchTerm is required");
+  if (input.checkpointCode.startsWith("CAR-") && input.population === "bringing_car") throw new Error("Career checkpoints cannot use vehicle applicability");
+  const status = input.status ?? "unverified";
+  const applicability = input.applicability ?? "applies";
+  const cycleState = input.cycleState ?? "undated";
+  const evidenceQuote = input.evidenceQuote?.trim().slice(0, 500) || null;
+  if (status === "verified" || applicability === "not_applicable" || applicability === "not_yet_published") {
+    if (!input.sourceId || !evidenceQuote) throw new Error("Evidence-backed rule state requires a same-institution official source and evidence quote");
+    const source = await getSource(input.sourceId);
+    const institution = await getInstitution(input.institutionId);
+    if (!source || source.institutionId !== input.institutionId || !institution || !isOfficialInstitutionUrl(source.url, institution)) {
+      throw new Error("Rule source must belong to the same institution and approved domain");
+    }
+  }
+  if (status === "verified" && cycleState === "prior") throw new Error("Prior-cycle evidence cannot verify the requested research term");
+  if (applicability === "not_yet_published" && status !== "unverified") throw new Error("Not-yet-published rules must remain unverified");
   const existing = await queryOne<any>(
-    "SELECT * FROM rules WHERE institution_id = $1 AND checkpoint_code = $2",
-    [input.institutionId, input.checkpointCode]
+    "SELECT * FROM rules WHERE institution_id = $1 AND checkpoint_code = $2 AND research_term = $3",
+    [input.institutionId, input.checkpointCode, researchTerm]
   );
   const now = nowIso();
 
+  const values = [input.domain, input.title, input.critical ? 1 : 0, input.population ?? "all", input.requirement,
+    input.trigger ?? null, input.dependsOnCode ?? null, input.deadlineExpr ?? null, input.costCents ?? null,
+    input.refundable ?? "unknown", input.consequence ?? null, status, input.confidence ?? "low", researchTerm,
+    cycleState, applicability, evidenceQuote, input.verifiedAt ?? (status === "verified" ? now : null), input.sourceId ?? null];
   if (existing) {
-    await exec(
-      `UPDATE rules SET domain=$1, title=$2, critical=$3, population=$4, requirement=$5, trigger_state=$6, depends_on_code=$7,
-       deadline_expr=$8, cost_cents=$9, refundable=$10, consequence=$11, status=$12, confidence=$13, verified_at=$14, source_id=$15, updated_at=$16
-       WHERE id = $17`,
-      [
-        input.domain,
-        input.title,
-        input.critical ? 1 : 0,
-        input.population ?? "all",
-        input.requirement,
-        input.trigger ?? null,
-        input.dependsOnCode ?? null,
-        input.deadlineExpr ?? null,
-        input.costCents ?? null,
-        input.refundable ?? "unknown",
-        input.consequence ?? null,
-        input.status ?? "unverified",
-        input.confidence ?? "low",
-        input.verifiedAt ?? null,
-        input.sourceId ?? null,
-        now,
-        existing.id,
-      ]
-    );
-    return toRule({ ...existing, ...input, trigger_state: input.trigger, depends_on_code: input.dependsOnCode, deadline_expr: input.deadlineExpr, cost_cents: input.costCents, verified_at: input.verifiedAt, source_id: input.sourceId, updated_at: now });
+    await exec(`UPDATE rules SET domain=$1,title=$2,critical=$3,population=$4,requirement=$5,trigger_state=$6,depends_on_code=$7,
+      deadline_expr=$8,cost_cents=$9,refundable=$10,consequence=$11,status=$12,confidence=$13,research_term=$14,
+      cycle_state=$15,applicability=$16,evidence_quote=$17,verified_at=$18,source_id=$19,updated_at=$20 WHERE id=$21`,
+      [...values, now, existing.id]);
+  } else {
+    const id = newId("rule");
+    await exec(`INSERT INTO rules (id,institution_id,checkpoint_code,domain,title,critical,population,requirement,trigger_state,
+      depends_on_code,deadline_expr,actor,cost_cents,refundable,consequence,status,confidence,research_term,cycle_state,
+      applicability,evidence_quote,verified_at,source_id,created_at,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'student',$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+      [id, input.institutionId, input.checkpointCode, ...values.slice(0, 11), ...values.slice(11), now, now]);
   }
-
-  const id = newId("rule");
-  await exec(
-    `INSERT INTO rules (id, institution_id, checkpoint_code, domain, title, critical, population, requirement, trigger_state,
-      depends_on_code, deadline_expr, actor, cost_cents, refundable, consequence, status, confidence, verified_at, source_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'student', $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
-    [
-      id,
-      input.institutionId,
-      input.checkpointCode,
-      input.domain,
-      input.title,
-      input.critical ? 1 : 0,
-      input.population ?? "all",
-      input.requirement,
-      input.trigger ?? null,
-      input.dependsOnCode ?? null,
-      input.deadlineExpr ?? null,
-      input.costCents ?? null,
-      input.refundable ?? "unknown",
-      input.consequence ?? null,
-      input.status ?? "unverified",
-      input.confidence ?? "low",
-      input.verifiedAt ?? null,
-      input.sourceId ?? null,
-      now,
-      now,
-    ]
-  );
-  return toRule({
-    id,
-    institution_id: input.institutionId,
-    checkpoint_code: input.checkpointCode,
-    domain: input.domain,
-    title: input.title,
-    critical: input.critical ? 1 : 0,
-    population: input.population ?? "all",
-    requirement: input.requirement,
-    trigger_state: input.trigger ?? null,
-    depends_on_code: input.dependsOnCode ?? null,
-    deadline_expr: input.deadlineExpr ?? null,
-    cost_cents: input.costCents ?? null,
-    refundable: input.refundable ?? "unknown",
-    consequence: input.consequence ?? null,
-    status: input.status ?? "unverified",
-    confidence: input.confidence ?? "low",
-    verified_at: input.verifiedAt ?? null,
-    source_id: input.sourceId ?? null,
-    created_at: now,
-    updated_at: now,
-  });
+  const saved = await queryOne<any>("SELECT * FROM rules WHERE institution_id=$1 AND checkpoint_code=$2 AND research_term=$3", [input.institutionId, input.checkpointCode, researchTerm]);
+  if (!saved) throw new Error("Rule write failed");
+  return toRule(saved);
 }
 
-export async function listRulesForInstitution(institutionId: string): Promise<Rule[]> {
-  return (await queryRows<any>("SELECT * FROM rules WHERE institution_id = $1 ORDER BY checkpoint_code", [institutionId])).map(toRule);
+export async function listRulesForInstitution(institutionId: string, researchTerm = "Fall 2027"): Promise<Rule[]> {
+  // Customer plans may use only evidence-backed, customer-ready research.
+  // Low-confidence or unverified checkpoints remain internal and never become actions.
+  return (await queryRows<any>(`SELECT * FROM rules
+    WHERE institution_id=$1 AND research_term=$2
+      AND status='verified' AND confidence IN ('high','medium')
+      AND NOT (checkpoint_code LIKE 'CAR-%' AND population='bringing_car')
+    ORDER BY checkpoint_code`, [institutionId, researchTerm])).map(toRule);
 }
 
-export async function getRuleByCode(institutionId: string, checkpointCode: string): Promise<Rule | null> {
-  const r = await queryOne<any>("SELECT * FROM rules WHERE institution_id = $1 AND checkpoint_code = $2", [institutionId, checkpointCode]);
+export async function getRuleByCode(institutionId: string, checkpointCode: string, researchTerm = "Fall 2027"): Promise<Rule | null> {
+  const r = await queryOne<any>("SELECT * FROM rules WHERE institution_id=$1 AND checkpoint_code=$2 AND research_term=$3", [institutionId, checkpointCode, researchTerm]);
   return r ? toRule(r) : null;
 }
 
@@ -607,6 +604,14 @@ export async function createActionInstance(input: {
   priority: string;
   state?: string;
 }): Promise<ActionInstance> {
+  const institutions = await queryOne<any>(`SELECT r.institution_id AS relationship_institution_id,
+      ru.institution_id AS rule_institution_id
+    FROM institution_relationships r
+    CROSS JOIN rules ru
+    WHERE r.id=$1 AND ru.id=$2`, [input.relationshipId, input.ruleId]);
+  if (institutions && institutions.relationship_institution_id !== institutions.rule_institution_id) {
+    throw new Error("Action relationship and rule must belong to the same institution");
+  }
   const id = newId("action");
   const now = nowIso();
   await exec(
@@ -631,8 +636,11 @@ export async function updateActionInstance(id: string, patch: Partial<{ dueAt: s
   );
 }
 
-export async function listActionInstancesForRelationship(relationshipId: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null })[]> {
-  const rows = await queryRows<any>("SELECT * FROM action_instances WHERE relationship_id = $1", [relationshipId]);
+export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null })[]> {
+  const rows = researchTerm
+    ? await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
+        WHERE a.relationship_id=$1 AND r.research_term=$2`, [relationshipId, researchTerm])
+    : await queryRows<any>("SELECT * FROM action_instances WHERE relationship_id = $1", [relationshipId]);
   const out: (ActionInstance & { rule: Rule; guidance: GuidanceAsset | null })[] = [];
   for (const r of rows) {
     const action = toActionInstance(r);

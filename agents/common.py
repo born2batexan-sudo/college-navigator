@@ -31,6 +31,9 @@ except ImportError:
 
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:3000")
 AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")
+RESEARCH_WRITER_API_KEY = os.environ.get("RESEARCH_WRITER_API_KEY", "")
+QUEUE_AGENT_API_KEY = os.environ.get("QUEUE_AGENT_API_KEY", "")
+DIRECTORY_IMPORT_API_KEY = os.environ.get("DIRECTORY_IMPORT_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
@@ -50,8 +53,20 @@ def require_env(name: str, value: str):
         sys.exit(1)
 
 
-def _headers() -> dict:
-    return {"Authorization": f"Bearer {AGENT_API_KEY}", "Content-Type": "application/json"}
+def _key_for(path: str, body: str | None = None) -> str:
+    if path.startswith("/api/agent/requests/"):
+        return QUEUE_AGENT_API_KEY
+    if path in {"/api/agent/rules", "/api/agent/sources", "/api/agent/institutions"}:
+        return RESEARCH_WRITER_API_KEY
+    if path == "/api/agent/directory":
+        if body and '"link"' in body:
+            return RESEARCH_WRITER_API_KEY
+        return DIRECTORY_IMPORT_API_KEY
+    return AGENT_API_KEY
+
+
+def _headers(path: str, body: str | None = None) -> dict:
+    return {"Authorization": f"Bearer {_key_for(path, body)}", "Content-Type": "application/json"}
 
 
 # The app runs on serverless hosting, so an occasional request is slow (a cold start, or the
@@ -67,7 +82,7 @@ def _request(method: str, path: str, **kwargs) -> Any:
     last_error: Exception | None = None
     for attempt in range(len(RETRY_WAITS) + 1):
         try:
-            resp = requests.request(method, f"{APP_BASE_URL}{path}", headers=_headers(), timeout=REQUEST_TIMEOUT, **kwargs)
+            resp = requests.request(method, f"{APP_BASE_URL}{path}", headers=_headers(path, kwargs.get("data")), timeout=REQUEST_TIMEOUT, **kwargs)
             if resp.status_code in RETRY_STATUSES and attempt < len(RETRY_WAITS):
                 print(f"{method} {path} -> {resp.status_code}; retrying in {RETRY_WAITS[attempt]}s", file=sys.stderr)
                 time.sleep(RETRY_WAITS[attempt])

@@ -7,48 +7,54 @@ export const dynamic = "force-dynamic";
 
 type Search = { error?: string; step?: string; email?: string; next?: string; deleted?: string; out?: string };
 
-export default async function LoginPage({ searchParams }: { searchParams: Search }) {
-  const next = safeNext(searchParams.next);
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const query = await searchParams;
+  const next = safeNext(query.next);
   if (await getSessionUser()) redirect(next);
 
-  const codeStep = searchParams.step === "code" && !!searchParams.email;
+  const codeStep = query.step === "code" && !!query.email;
   const inputCls = "w-full rounded-md border border-line bg-white px-3 py-2 text-ink";
   const btnCls = "w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition hover:opacity-90";
 
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-6 pt-10">
-      <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-ink/40">College Navigator</p>
-        <h1 className="mt-1 text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Sign in"}</h1>
-        <p className="mt-1 text-ink/60">
-          {codeStep
-            ? emailCodeEnabled
-              ? `We sent a code to ${searchParams.email}. Type it below.`
-              : `We sent a sign-in link to ${searchParams.email}. Open it on this same device and browser to finish signing in.`
-            : "Sign in or create your family plan. Signing in never gives us access to your inbox."}
-        </p>
-      </header>
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-full bg-tealDark font-display text-base text-white">◇</span>
+        <p className="text-sm font-semibold uppercase tracking-wide text-ink/50">Campus Passage</p>
+      </div>
+      <div className="rounded-2xl border border-line bg-white/85 p-6 shadow-card">
+        <header>
+          <h1 className="font-display text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Welcome back"}</h1>
+          <p className="mt-1 text-ink/60">
+            {codeStep
+              ? emailCodeEnabled
+                ? `We sent a code to ${query.email}. Type it below to open your household plan.`
+                : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
+              : "Sign in to keep every student's plan in one place. Signing in does not buy access or grant inbox permission. Optional connected mail would require separate explicit consent and is not live."}
+          </p>
+        </header>
 
-      {searchParams.deleted && (
-        <p className="rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
-      )}
-      {searchParams.error && (
-        <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
-          {searchParams.error}
-        </p>
-      )}
+        {query.deleted && (
+          <p className="mt-4 rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
+        )}
+        {query.error && (
+          <p role="alert" className="mt-4 rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">
+            {query.error}
+          </p>
+        )}
 
       {!supabaseConfigured && !devLoginEnabled && (
-        <p className="rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">
+        <p className="mt-4 rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">
           Sign-in is not switched on for this site yet.
         </p>
       )}
 
+      <div className="mt-5">
       {codeStep ? (
         <div className="flex flex-col gap-3">
           {emailCodeEnabled ? (
             <form action={verifyEmailCode} className="flex flex-col gap-3">
-              <input type="hidden" name="email" value={searchParams.email} />
+              <input type="hidden" name="email" value={query.email} />
               <input type="hidden" name="next" value={next} />
               <label className="flex flex-col gap-1 text-sm text-ink/70" htmlFor="code">
                 6-digit code
@@ -112,6 +118,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
           )}
         </>
       )}
+      </div>
+      </div>
     </main>
   );
 }

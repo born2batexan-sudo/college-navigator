@@ -1,17 +1,20 @@
-import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import { createHash } from "node:crypto";
 import { createSupabaseServerClient } from "./supabase-server";
 import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "./env";
-import { ensureAccountSchema, provisionAccount, type HouseholdContext } from "@/lib/db/accounts";
+import { ensureAccountSchema, getStudentForHousehold, isDemoOwnerEmail, provisionAccount, requireWritableHousehold as assertWritableHousehold, requireWritableOnboardedHousehold as assertWritableOnboardedHousehold, type HouseholdContext } from "@/lib/db/accounts";
 import type { Student } from "@/lib/db/types";
+import { hasProductAccess } from "./product-access";
+import { hasBetaOnboardingAccess } from "@/lib/db/beta-access";
+import { appOrigin } from "./origin";
 
 export type SessionUser = { id: string; email: string | null };
 
 /** The signed-in user for this request, or null. Verified with Supabase, never trusted from a cookie alone. */
 export async function getSessionUser(): Promise<SessionUser | null> {
   if (devLoginEnabled) {
-    const email = cookies().get(DEV_COOKIE)?.value;
+    const email = (await cookies()).get(DEV_COOKIE)?.value;
     if (email && /^[^\s@]+@[^\s@]+$/.test(email)) {
       return { id: `dev_${createHash("sha1").update(email.toLowerCase()).digest("hex").slice(0, 16)}`, email: email.toLowerCase() };
     }
@@ -19,7 +22,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
   if (!supabaseConfigured) return null;
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub) return null;
   const email = typeof data.claims.email === "string" ? data.claims.email.toLowerCase() : null;
@@ -36,15 +39,40 @@ export async function requireUser(opts?: { next?: string }): Promise<SessionUser
   return user;
 }
 
-/**
- * The starting point for every signed-in page and action: who is signed in,
- * and which household they belong to (created empty on first sign-in).
- * Never look up a household any other way.
- */
+/** Only invitation acceptance may provision an unapproved account. Never use for product reads or writes. */
+export async function requireInvitationHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
+  const user = await requireUser(opts);
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  return { ...ctx, email: user.email };
+}
+
+/** All product pages and mutations must pass this live authorization check. */
 export async function requireHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
   const user = await requireUser(opts);
   await ensureAccountSchema();
-  return provisionAccount({ authUserId: user.id, email: user.email });
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  if (!await hasProductAccess(user, ctx.household.id)) redirect("/request-access");
+  return ctx;
+}
+
+/** Narrow accepted-approval gate for the onboarding page/action, not product routes. */
+export async function requireOnboardingHousehold(): Promise<HouseholdContext> {
+  const user = await requireUser({ next: "/onboarding" });
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  if (!await hasProductAccess(user, ctx.household.id) &&
+      !await hasBetaOnboardingAccess(user, ctx.household.id)) redirect("/request-access");
+  return { ...ctx, email: user.email };
+}
+
+/** JSON endpoints must respond 403, not follow a page redirect. */
+export async function authorizedApiHousehold(): Promise<HouseholdContext | null> {
+  const user = await getSessionUser();
+  if (!user) return null;
+  await ensureAccountSchema();
+  const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
+  return await hasProductAccess(user, ctx.household.id) ? ctx : null;
 }
 
 /** Like requireHousehold, but sends brand-new accounts to finish setup first. */
@@ -54,10 +82,46 @@ export async function requireOnboardedHousehold(): Promise<HouseholdContext & { 
   return ctx as HouseholdContext & { student: Student };
 }
 
-/** The address the browser used to reach us (works on preview and production URLs alike). */
-export function requestOrigin(): string {
-  const h = headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+/** Signed-in household write gates. Reads continue to use the normal helpers. */
+export async function requireWritableHousehold(opts?: { next?: string }): Promise<HouseholdContext> {
+  const ctx = await requireHousehold(opts);
+  return assertWritableHousehold(ctx);
+}
+
+export async function requireWritableOnboardedHousehold(): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireOnboardedHousehold();
+  return assertWritableOnboardedHousehold(ctx);
+}
+
+/**
+ * Selects one profile only after confirming it belongs to the signed-in
+ * household. `studentId` can come from a URL/form, but never grants access.
+ */
+export async function requireSelectedStudent(studentId?: string | null): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireOnboardedHousehold();
+  if (!studentId) return ctx;
+  const student = await getStudentForHousehold(ctx.household.id, studentId);
+  if (!student) notFound();
+  return { ...ctx, student };
+}
+
+export async function requireWritableSelectedStudent(studentId?: string | null): Promise<HouseholdContext & { student: Student }> {
+  const ctx = await requireWritableOnboardedHousehold();
+  if (!studentId) return ctx;
+  const student = await getStudentForHousehold(ctx.household.id, studentId);
+  if (!student) throw new Error("Student profile not found");
+  return { ...ctx, student };
+}
+
+/** Private-preview administration is intentionally fail-closed. */
+export async function requireDemoOwner(): Promise<SessionUser> {
+  const user = await requireUser({ next: "/admin/demo" });
+  if (!isDemoOwnerEmail(user.email)) notFound();
+  await ensureAccountSchema();
+  return user;
+}
+
+/** Kept for existing callers; all outbound URLs use the configured origin. */
+export async function requestOrigin(): Promise<string> {
+  return appOrigin();
 }

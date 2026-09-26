@@ -85,6 +85,10 @@ export type Rule = {
   consequence: string | null;
   status: string;
   confidence: string;
+  researchTerm: string;
+  cycleState: "current" | "prior" | "undated";
+  applicability: "applies" | "not_applicable" | "not_yet_published";
+  evidenceQuote: string | null;
   verifiedAt: string | null;
   sourceId: string | null;
   createdAt: string;

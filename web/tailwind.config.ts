@@ -5,13 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14171F",
-        paper: "#F7F6F3",
-        line: "#E4E1D9",
-        accent: "#8C1D40", // crimson-adjacent, swap per household/brand later
-        urgent: "#B3261E",
-        warn: "#8A5A00",
-        ok: "#1E6B4E",
+        ink: "#18273D",
+        paper: "#FFF8EB",
+        paperDeep: "#EEE8F8",
+        line: "#CFC8D5",
+        accent: "#087F78",
+        tealDark: "#123B55",
+        violet: "#6758C9",
+        violetPale: "#E9E5FB",
+        coral: "#E96555",
+        coralDeep: "#C84B40",
+        coralPale: "#FDE0D8",
+        sky: "#D9EEF2",
+        gold: "#EDAE35",
+        goldPale: "#FFEDB8",
+        urgent: "#C84B40",
+        warn: "#9A6808",
+        ok: "#087F78",
+      },
+      fontFamily: {
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Iowan Old Style", "Baskerville", "Georgia", "serif"],
+      },
+      boxShadow: {
+        card: "0 22px 55px rgba(24, 39, 61, 0.13)",
       },
     },
   },

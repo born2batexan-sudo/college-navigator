@@ -50,8 +50,23 @@ function tidy(text: string, max = 220): string {
 }
 
 /** Reads the label (if any) off a rule's requirement text. */
-export function parseDateStatus(rule: { requirement: string | null | undefined }): DateStatus {
+export function parseDateStatus(rule: {
+  requirement: string | null | undefined;
+  applicability?: "applies" | "not_applicable" | "not_yet_published";
+  cycleState?: "current" | "prior" | "undated";
+  researchTerm?: string;
+}): DateStatus {
   const text = rule.requirement ?? "";
+
+  // Structured research fields are authoritative; text prefixes remain for
+  // backwards-compatible records and human-readable detail.
+  if (rule.applicability === "not_applicable") {
+    return { kind: "not_applicable", detail: tidy(text.replace(NOT_APPLICABLE, "")) || "This does not apply at this school." };
+  }
+  if (rule.applicability === "not_yet_published" || rule.cycleState === "prior") {
+    const detail = tidy(text.replace(PRIOR_CYCLE, "").replace(NOT_YET_PUBLISHED, ""));
+    return { kind: "awaiting", term: rule.researchTerm ?? ENTERING_TERM, lastYear: rule.cycleState === "prior" ? detail || null : null, detail };
+  }
 
   const prior = text.match(PRIOR_CYCLE);
   if (prior) {

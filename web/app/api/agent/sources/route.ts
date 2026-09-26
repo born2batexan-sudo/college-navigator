@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** GET ?institutionSlug=alabama — list known sources, so an agent doesn't refetch/re-create duplicates. */
 export async function GET(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const slug = req.nextUrl.searchParams.get("institutionSlug");
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
  * lastVerified? (ISO string) }.
  */
 export async function POST(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const body = await req.json();
@@ -40,8 +40,12 @@ export async function POST(req: NextRequest) {
   const existing = await findSourceByUrl(institution.id, url);
   if (existing) return NextResponse.json({ source: existing, created: false });
 
-  const source = await createSource({ institutionId: institution.id, url, label, owner, lastVerified });
-  return NextResponse.json({ source, created: true }, { status: 201 });
+  try {
+    const source = await createSource({ institutionId: institution.id, url, label, owner, lastVerified });
+    return NextResponse.json({ source, created: true }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid source" }, { status: 400 });
+  }
 }
 
 /**
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
  * an actual detected difference. Body: { institutionSlug, url, fingerprint, content? }.
  */
 export async function PATCH(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "research");
   if (unauthorized) return unauthorized;
 
   const { institutionSlug, url, fingerprint, content } = (await req.json()) ?? {};

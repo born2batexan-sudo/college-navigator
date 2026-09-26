@@ -23,10 +23,10 @@ export async function sendEmailCode(formData: FormData): Promise<void> {
   if (!parsed.success) back({ error: "Enter a valid email address.", next });
   if (!supabaseConfigured) back({ error: "Sign-in is not set up yet.", next });
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data,
-    options: { shouldCreateUser: true, emailRedirectTo: `${requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
+    options: { shouldCreateUser: true, emailRedirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
   });
   if (error) {
     const msg = /rate|limit|seconds/i.test(error.message)
@@ -45,7 +45,7 @@ export async function verifyEmailCode(formData: FormData): Promise<void> {
   if (!email.success) back({ error: "Enter a valid email address.", next });
   if (!/^\d{6,10}$/.test(token)) back({ step: "code", email: email.data, error: "Enter the code from the email.", next });
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.verifyOtp({ email: email.data, token, type: "email" });
   if (error) back({ step: "code", email: email.data, error: "That code did not work. It may have expired. Request a new one.", next });
   redirect(next);
@@ -57,11 +57,11 @@ export async function signInWithProvider(formData: FormData): Promise<void> {
   const provider = String(formData.get("provider") ?? "");
   if (!enabledProviders.includes(provider)) back({ error: "That sign-in option is not available.", next });
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: provider as any,
     options: {
-      redirectTo: `${requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
+      redirectTo: `${await requestOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
       ...(provider === "azure" ? { scopes: "email" } : {}),
     },
   });
@@ -74,6 +74,6 @@ export async function devSignIn(formData: FormData): Promise<void> {
   if (!devLoginEnabled) back({ error: "That sign-in option is not available." });
   const email = emailSchema.safeParse(formData.get("email"));
   if (!email.success) back({ error: "Enter a valid email address." });
-  cookies().set(DEV_COOKIE, email.data, { httpOnly: true, sameSite: "lax", path: "/" });
+  (await cookies()).set(DEV_COOKIE, email.data, { httpOnly: true, sameSite: "lax", path: "/" });
   redirect(safeNext(formData.get("next")));
 }
