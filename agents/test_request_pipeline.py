@@ -5,7 +5,7 @@ import time
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,os.path.dirname(__file__))
-from request_pipeline import Meter, CostCeiling, PublicSources, OfficialPublicProvider, research_lane, run_lanes, validate_budget_config, main, preflight
+from request_pipeline import Meter, CostCeiling, PublicSources, OfficialPublicProvider, official_search_urls, research_lane, run_lanes, validate_budget_config, main, preflight
 
 class PipelineTest(unittest.TestCase):
     def setUp(self):
@@ -68,6 +68,8 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("environment: staging-research",workflow)
         self.assertIn("secrets.STAGING_APP_BASE_URL",workflow)
         self.assertIn("secrets.STAGING_QUEUE_AGENT_API_KEY",workflow)
+        self.assertIn("secrets.STAGING_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY",workflow)
+        self.assertNotIn("STAGING_BRAVE_SEARCH_API_KEY",workflow)
         self.assertIn("vars.REQUEST_PAID_PROVIDERS_ENABLED || '0'",workflow)
     def staging_env(self):
         return {"REQUEST_PIPELINE_ENABLED":"1","REQUEST_WORKER_STAGE":"staging",
@@ -88,7 +90,7 @@ class PipelineTest(unittest.TestCase):
             with self.assertRaises(ValueError): main()
     def test_budget_rejects_unfunded_paid_lanes_before_claim(self):
         env={**self.staging_env(),"REQUEST_PAID_PROVIDERS_ENABLED":"1",
-             "BRAVE_SEARCH_API_KEY":"test","ANTHROPIC_API_KEY":"test","REQUEST_RESEARCH_MODEL":"test",
+             "ANTHROPIC_API_KEY":"test","REQUEST_RESEARCH_MODEL":"test",
              "REQUEST_SEARCH_COST_CENTS":"1","REQUEST_LANE_RESERVATION_CENTS":"40",
              "REQUEST_INPUT_CENTS_PER_MILLION":"300","REQUEST_OUTPUT_CENTS_PER_MILLION":"1500",
              "REQUEST_ATTEMPT_CEILING_CENTS":"479"}
@@ -101,6 +103,14 @@ class PipelineTest(unittest.TestCase):
             validate_budget_config(paid=True)
             os.environ["REQUEST_SEARCH_COST_CENTS"]="nan"
             with self.assertRaisesRegex(ValueError,"twelve-lane reservations"): main()
+    def test_search_result_urls_are_restricted_to_approved_official_domain(self):
+        class Item:
+            def __init__(self,**kwargs): self.__dict__.update(kwargs)
+        message=Item(content=[
+            Item(type="web_search_tool_result",content=[Item(url="https://www.example.edu/fall-2027"),Item(url="https://evil.example.net/no")]),
+            Item(type="text",citations=[Item(url="https://admissions.example.edu/apply#dates"),Item(url="http://example.edu/insecure")])])
+        self.assertEqual(official_search_urls(message,"example.edu"),[
+            "https://www.example.edu/fall-2027","https://admissions.example.edu/apply"])
     def test_default_free_path_claims_and_submits_first_states_without_paid_calls(self):
         env=self.staging_env()
         calls=[]

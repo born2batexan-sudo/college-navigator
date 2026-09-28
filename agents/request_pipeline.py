@@ -174,32 +174,56 @@ class OfficialPublicProvider:
                 return [{"code":"ADM-01","state":"verified","sourceUrl":page["url"],"quote":match.group()}]
         return []
 
+def official_search_urls(message,domain):
+    """Extract only HTTPS URLs on the approved school domain from Anthropic search blocks/citations."""
+    approved=domain.lower().removeprefix("www.")
+    urls=[]
+    def add(raw):
+        try:
+            parsed=urlparse(str(raw)); host=(parsed.hostname or "").lower()
+            if (parsed.scheme=="https" and not parsed.username and not parsed.password and not parsed.port
+                    and (host==approved or host.endswith("."+approved))):
+                value=parsed._replace(fragment="").geturl()
+                if value not in urls: urls.append(value)
+        except ValueError: pass
+    for block in getattr(message,"content",[]):
+        if getattr(block,"type",None)=="web_search_tool_result":
+            content=getattr(block,"content",[])
+            if isinstance(content,list):
+                for result in content: add(getattr(result,"url",None))
+        if getattr(block,"type",None)=="text":
+            for citation in getattr(block,"citations",[]) or []: add(getattr(citation,"url",None))
+    return urls[:5]
+
 class Providers:
     paid=True
-    def __init__(self,meter,deadline):
+    def __init__(self,meter,deadline,domain):
         self.meter=meter; self.deadline=deadline
-        self.search_key=os.environ["BRAVE_SEARCH_API_KEY"]
+        self.domain=domain.lower().removeprefix("www.")
         self.model_key=os.environ["ANTHROPIC_API_KEY"]
         self.model=os.environ["REQUEST_RESEARCH_MODEL"]
         self.search_cents=float(os.environ["REQUEST_SEARCH_COST_CENTS"])
         self.lane_reserved=float(os.environ["REQUEST_LANE_RESERVATION_CENTS"])
+        self.input_price=float(os.environ["REQUEST_INPUT_CENTS_PER_MILLION"])
+        self.output_price=float(os.environ["REQUEST_OUTPUT_CENTS_PER_MILLION"])
         if self.search_cents<=0 or self.lane_reserved<=self.search_cents: raise ValueError("Positive provider cost reservations required")
+    def _usage_cost(self,msg,include_search=False):
+        searches=getattr(getattr(msg.usage,"server_tool_use",None),"web_search_requests",0) or 0
+        tool_cost=searches if include_search else 0  # Anthropic web search: 1 cent/use at approved 2026-09-28 price.
+        return (msg.usage.input_tokens*self.input_price+msg.usage.output_tokens*self.output_price)/1_000_000+tool_cost
     def search(self,query):
         if time.monotonic()>self.deadline: return []
         self.meter.reserve(self.search_cents)
-        with requests.Session() as session:
-            session.trust_env=False
-            with session.get("https://api.search.brave.com/res/v1/web/search",params={"q":query,"count":5},
-                             headers={"X-Subscription-Token":self.search_key,"Accept":"application/json"},
-                             timeout=(3,min(8,max(1,self.deadline-time.monotonic()))),stream=True) as r:
-                r.raise_for_status()
-                chunks=[]; size=0
-                for chunk in r.iter_content(16384):
-                    size+=len(chunk)
-                    if size>250000: raise ValueError("Search response too large")
-                    chunks.append(chunk)
-        self.meter.settle(self.search_cents,self.search_cents)
-        return [x.get("url","") for x in json.loads(b"".join(chunks)).get("web",{}).get("results",[])][:5]
+        from anthropic import Anthropic
+        client=Anthropic(api_key=self.model_key,timeout=min(35,max(1,int(self.deadline-time.monotonic()))),max_retries=0)
+        msg=client.messages.create(model=self.model,max_tokens=800,system=(
+            "Use web search. Return a concise answer grounded only in current official pages on the allowed university domain. "
+            "Find up to three pages most likely to contain exact entering-term first-year dates, requirements, fees, or process details. "
+            "Never search for or reproduce essays, personal statements, login-only pages, or applicant personal data."),
+            messages=[{"role":"user","content":query}],tools=[{"type":"web_search_20260318","name":"web_search","max_uses":2,
+            "allowed_domains":[self.domain],"allowed_callers":["direct"]}])
+        self.meter.settle(self.search_cents,self._usage_cost(msg,include_search=True))
+        return official_search_urls(msg,self.domain)
     def propose(self,term,domain,checkpoints,pages):
         if time.monotonic()>self.deadline: return []
         prompt={"term":term,"domain":domain,"checkpoints":checkpoints,"official_pages":[{"url":p["url"],"text":p["text"][:4500]} for p in pages]}
@@ -209,15 +233,14 @@ class Providers:
         self.meter.reserve(reserved)
         from anthropic import Anthropic
         client=Anthropic(api_key=self.model_key,timeout=min(55,max(1,int(self.deadline-time.monotonic()))),max_retries=0)
-        msg=client.messages.create(model=self.model,max_tokens=MAX_MODEL_OUTPUT_TOKENS,temperature=0,system=(
+        msg=client.messages.create(model=self.model,max_tokens=MAX_MODEL_OUTPUT_TOKENS,system=(
             "Return only a JSON array, one object per checkpoint with code,state,sourceUrl,quote,secondSourceUrl,secondQuote,publicationDate. "
             "Use exact quoted substrings from supplied official pages, including the exact requested term. "
             "Never invent evidence or dates. If no exact-term answer, choose not_found_official, publication_date_unknown, "
             "not_publicly_available or under_review. No admission essays or personal content. "
             "For high-risk deadlines/costs/requirements, find independently corroborating text on a second supplied page or mark under_review."),
             messages=[{"role":"user","content":prompt_json}])
-        input_price=float(os.environ["REQUEST_INPUT_CENTS_PER_MILLION"]); output_price=float(os.environ["REQUEST_OUTPUT_CENTS_PER_MILLION"])
-        self.meter.settle(reserved,(msg.usage.input_tokens*input_price+msg.usage.output_tokens*output_price)/1_000_000)
+        self.meter.settle(reserved,self._usage_cost(msg))
         text="".join(getattr(c,"text","") for c in msg.content).strip()
         if text.startswith("```"): text=re.sub(r"^```(?:json)?|```$","",text).strip()
         value=json.loads(text)
@@ -325,7 +348,7 @@ def preflight():
     if flag not in ("0","1"): raise ValueError("Paid-provider gate must be 0 or 1")
     paid=flag=="1"
     if paid:
-        for name in ("BRAVE_SEARCH_API_KEY","ANTHROPIC_API_KEY","REQUEST_RESEARCH_MODEL"):
+        for name in ("ANTHROPIC_API_KEY","REQUEST_RESEARCH_MODEL"):
             if not os.environ.get(name): raise ValueError(f"Paid provider configuration missing: {name}")
     validate_budget_config(paid)
     return paid
@@ -350,7 +373,7 @@ def main():
             raise ValueError("No approved public institutional domain")
         cps=queue_api("GET","/api/agent/requests/evidence")["checkpoints"]
         deadline=time.monotonic()+105
-        provider=Providers(meter,deadline) if paid else OfficialPublicProvider(sources,deadline)
+        provider=Providers(meter,deadline,domain) if paid else OfficialPublicProvider(sources,deadline)
         candidates=run_lanes(cps,domain,term,provider,sources=sources,budget_seconds=105)
         response=queue_api("POST","/api/agent/requests/evidence",{"unitid":school["unitid"],"term":term,"attemptId":job["attemptId"],"candidates":candidates})
         outcome="review"

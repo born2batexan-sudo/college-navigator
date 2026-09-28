@@ -37,7 +37,7 @@ jobs:
       - name: Process one request
         working-directory: agents
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.STAGING_ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.STAGING_ANTHROPIC_API_KEY || secrets.ANTHROPIC_API_KEY }}
           QUEUE_AGENT_API_KEY: ${{ secrets.STAGING_QUEUE_AGENT_API_KEY }}
           APP_BASE_URL: ${{ secrets.STAGING_APP_BASE_URL }}
           REQUEST_STAGING_APP_ORIGIN: ${{ vars.REQUEST_STAGING_APP_ORIGIN }}
@@ -45,7 +45,6 @@ jobs:
           REQUEST_WORKER_STAGE: staging
           REQUEST_PIPELINE_ENABLED: ${{ vars.REQUEST_PIPELINE_ENABLED || '0' }}
           REQUEST_PAID_PROVIDERS_ENABLED: ${{ vars.REQUEST_PAID_PROVIDERS_ENABLED || '0' }}
-          BRAVE_SEARCH_API_KEY: ${{ secrets.STAGING_BRAVE_SEARCH_API_KEY }}
           REQUEST_RESEARCH_MODEL: ${{ vars.REQUEST_RESEARCH_MODEL }}
           REQUEST_SEARCH_COST_CENTS: ${{ vars.REQUEST_SEARCH_COST_CENTS }}
           REQUEST_LANE_RESERVATION_CENTS: ${{ vars.REQUEST_LANE_RESERVATION_CENTS }}
