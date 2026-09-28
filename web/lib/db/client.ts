@@ -46,8 +46,12 @@ function getPgPool(): Pool {
   if (!globalThis.__cnPgPool) {
     const isLocal = /localhost|127\.0\.0\.1/.test(DATABASE_URL!);
     const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n").trim();
+    // node-postgres lets sslmode in the URL replace the explicit TLS object.
+    // Remove it so the pinned CA and certificate verification below remain active.
+    const connectionUrl = new URL(DATABASE_URL!);
+    connectionUrl.searchParams.delete("sslmode");
     globalThis.__cnPgPool = new Pool({
-      connectionString: DATABASE_URL,
+      connectionString: connectionUrl.toString(),
       // Remote database certificates are always verified. Supabase's pooler
       // uses its own CA, supplied through the deployment secret store.
       ssl: isLocal ? false : { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
