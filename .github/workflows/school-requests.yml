@@ -1,34 +1,91 @@
-name: School requests (staging dispatch gate)
-
+name: School requests (controlled, default off)
 on:
+  # Best-effort polling only. GitHub may delay or skip cron; this is not a 120s first-view SLA.
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       task:
-        description: Controlled staging wake-up
-        required: true
+        description: What to run
         type: choice
-        options: [process the next requested school]
-        default: process the next requested school
-
+        options: [process the next requested school, load the school directory]
+        default: load the school directory
+      year:
+        description: Directory year to try first
+        required: false
+        default: "2024"
+concurrency:
+  group: research-school
+  cancel-in-progress: false
 permissions:
   contents: read
-
-concurrency:
-  group: staging-research-dispatch
-  cancel-in-progress: false
-
 jobs:
-  accept-staging-dispatch:
-    if: github.event_name == 'workflow_dispatch' && inputs.task == 'process the next requested school'
+  process:
     environment: staging-research
+    # Staging-only worker: distinct staging/production origin comparison happens
+    # before any queue claim. This environment must contain only staging secrets.
+    # The worker/server flags are the fail-closed activation gates for both triggers.
+    # One claim per poll; the server selects either a queued request or a due review.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.task == 'process the next requested school')
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
-      - name: Verify paid research remains disabled
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: agents/requirements.lock }
+      - run: pip install --require-hashes -r agents/requirements.lock
+      - name: Process one request
+        working-directory: agents
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.STAGING_ANTHROPIC_API_KEY }}
+          QUEUE_AGENT_API_KEY: ${{ secrets.STAGING_QUEUE_AGENT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.STAGING_APP_BASE_URL }}
+          REQUEST_STAGING_APP_ORIGIN: ${{ vars.REQUEST_STAGING_APP_ORIGIN }}
+          REQUEST_PRODUCTION_APP_ORIGIN: ${{ vars.REQUEST_PRODUCTION_APP_ORIGIN }}
+          REQUEST_WORKER_STAGE: staging
           REQUEST_PIPELINE_ENABLED: ${{ vars.REQUEST_PIPELINE_ENABLED || '0' }}
+          REQUEST_PAID_PROVIDERS_ENABLED: ${{ vars.REQUEST_PAID_PROVIDERS_ENABLED || '0' }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.STAGING_BRAVE_SEARCH_API_KEY }}
+          REQUEST_RESEARCH_MODEL: ${{ vars.REQUEST_RESEARCH_MODEL }}
+          REQUEST_SEARCH_COST_CENTS: ${{ vars.REQUEST_SEARCH_COST_CENTS }}
+          REQUEST_LANE_RESERVATION_CENTS: ${{ vars.REQUEST_LANE_RESERVATION_CENTS }}
+          REQUEST_INPUT_CENTS_PER_MILLION: ${{ vars.REQUEST_INPUT_CENTS_PER_MILLION }}
+          REQUEST_OUTPUT_CENTS_PER_MILLION: ${{ vars.REQUEST_OUTPUT_CENTS_PER_MILLION }}
+          REQUEST_ATTEMPT_CEILING_CENTS: ${{ vars.REQUEST_ATTEMPT_CEILING_CENTS }}
+          REQUEST_JOB_ESTIMATE_CENTS: ${{ vars.REQUEST_JOB_ESTIMATE_CENTS }}
         shell: bash
+        # Hard process stop below the server's 300s minimum lease. If DNS/TLS
+        # stalls past the lane budget, the lease expires and reservation remains.
+        run: set -o pipefail; timeout --signal=TERM --kill-after=5s 225s python -u process_requests.py | tee process.log
+      - name: Save reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: request-run-status
+          path: agents/process.log
+          if-no-files-found: ignore
+  directory:
+    environment: production-directory
+    if: inputs.task == 'load the school directory'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: agents/requirements.lock }
+      - run: pip install --require-hashes -r agents/requirements.lock
+      - name: Download IPEDS HD file
+        env: { YEAR: "${{ inputs.year }}" }
         run: |
-          set -euo pipefail
-          test "$REQUEST_PIPELINE_ENABLED" = "0"
-          echo "Staging dispatch accepted; no queue claim or paid provider call executed."
+          YEAR="${YEAR:-2024}"; got=""
+          for y in "$YEAR" $((YEAR-1)) $((YEAR-2)); do
+            url="https://nces.ed.gov/ipeds/datacenter/data/HD${y}.zip"
+            if curl -sSL --fail --retry 3 -o hd.zip "$url" && unzip -tq hd.zip >/dev/null 2>&1; then got="$y"; break; fi
+          done
+          test -n "$got"
+      - name: Import directory
+        working-directory: agents
+        env:
+          DIRECTORY_IMPORT_API_KEY: ${{ secrets.DIRECTORY_IMPORT_API_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: python -u import_ipeds.py --file ../hd.zip
