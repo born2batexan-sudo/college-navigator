@@ -136,8 +136,10 @@ class PublicSources:
             if len(links)>=80: break
         for tag in soup(["nav"]): tag.decompose()
         text=" ".join(soup.stripped_strings)[:200000]
-        # Never store essay/personal-statement content as source excerpts.
-        if re.search(r"essay prompt|personal statement|write an essay",text,re.I): return None
+        # Forms, inputs, textareas, and essay/personal-statement links are excluded above.
+        # A public policy page is not discarded merely because it states that a personal
+        # statement may be required; the provider is separately forbidden to reproduce
+        # applicant-authored content.
         result={"url":final,"text":text,"links":links}
         with self.lock: self.cache[url]=result
         return result

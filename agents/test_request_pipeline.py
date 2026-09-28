@@ -36,6 +36,24 @@ class PipelineTest(unittest.TestCase):
             self.assertFalse(s.allowed(url))
         with patch("socket.getaddrinfo",return_value=[(None,None,None,None,("127.0.0.1",443))]):
             self.assertFalse(s.allowed("https://example.edu/a"))
+    def test_public_policy_page_is_not_discarded_for_personal_statement_requirement(self):
+        from contextlib import contextmanager
+        class Response:
+            status=200
+            headers={"Content-Type":"text/plain"}
+            def stream(self,_): return iter([b"User-agent: *\nAllow: /\n"])
+            def close(self): pass
+        @contextmanager
+        def opened(*_args,**_kwargs):
+            yield Response()
+        source=PublicSources("example.edu")
+        html=b"<html><body><main><p>A personal statement may be requested during individual review.</p></main></body></html>"
+        with patch.object(source,"allowed",return_value=True), patch.object(source,"_open",side_effect=opened), \
+             patch.object(source,"_get",return_value=("https://example.edu/admission",html.decode())):
+            page=source.fetch("https://example.edu/admission")
+        self.assertIsNotNone(page)
+        self.assertIn("personal statement may be requested",page["text"])
+
     def test_public_transport_pins_checked_ip_and_tls_host(self):
         source=PublicSources("example.edu")
         with patch("socket.getaddrinfo",return_value=[(None,None,None,None,("93.184.215.14",443))]), \
