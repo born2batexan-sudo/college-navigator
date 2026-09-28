@@ -178,6 +178,8 @@ def official_search_urls(message,domain):
     """Extract only HTTPS URLs on the approved school domain from Anthropic search blocks/citations."""
     approved=domain.lower().removeprefix("www.")
     urls=[]
+    def field(value, name):
+        return value.get(name) if isinstance(value, dict) else getattr(value, name, None)
     def add(raw):
         try:
             parsed=urlparse(str(raw)); host=(parsed.hostname or "").lower()
@@ -190,9 +192,9 @@ def official_search_urls(message,domain):
         if getattr(block,"type",None)=="web_search_tool_result":
             content=getattr(block,"content",[])
             if isinstance(content,list):
-                for result in content: add(getattr(result,"url",None))
+                for result in content: add(field(result,"url"))
         if getattr(block,"type",None)=="text":
-            for citation in getattr(block,"citations",[]) or []: add(getattr(citation,"url",None))
+            for citation in getattr(block,"citations",[]) or []: add(field(citation,"url"))
     return urls[:5]
 
 class Providers:

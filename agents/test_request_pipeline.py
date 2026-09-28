@@ -111,6 +111,11 @@ class PipelineTest(unittest.TestCase):
             Item(type="text",citations=[Item(url="https://admissions.example.edu/apply#dates"),Item(url="http://example.edu/insecure")])])
         self.assertEqual(official_search_urls(message,"example.edu"),[
             "https://www.example.edu/fall-2027","https://admissions.example.edu/apply"])
+        dict_message=Item(content=[
+            Item(type="web_search_tool_result",content=[{"url":"https://example.edu/dates"},{"url":"https://evil.example/no"}]),
+            Item(type="text",citations=[{"url":"https://admissions.example.edu/requirements"}])])
+        self.assertEqual(official_search_urls(dict_message,"example.edu"),[
+            "https://example.edu/dates","https://admissions.example.edu/requirements"])
     def test_default_free_path_claims_and_submits_first_states_without_paid_calls(self):
         env=self.staging_env()
         calls=[]
