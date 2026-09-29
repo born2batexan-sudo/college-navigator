@@ -42,7 +42,9 @@ export function readIntake(student: Pick<Student, "attributes">): Partial<Intake
 /** Reject partial, duplicate, or invented fields rather than overwriting saved answers with blanks. */
 export function parseIntakeForm(formData: FormData): IntakeAnswers {
   const allowed = new Set<string>(["studentId", ...INTAKE_QUESTIONS.map((q) => q.key)]);
-  for (const key of formData.keys()) if (!allowed.has(key)) throw new Error("Unexpected intake field");
+  // Next.js server-action forms add internal $ACTION_* fields to FormData.
+  // Ignore only that framework namespace; reject every other unexpected field.
+  for (const key of formData.keys()) if (!allowed.has(key) && !key.startsWith("$ACTION_")) throw new Error("Unexpected intake field");
   const answers: Record<string, string> = {};
   for (const question of INTAKE_QUESTIONS) {
     const values = formData.getAll(question.key);

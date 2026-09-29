@@ -29,6 +29,7 @@ describe("student intake contract", () => {
   });
   it("parses strict complete forms and leaves invalid stored fields out", () => {
     const f = fullForm(); f.set("housing", "commuter"); f.set("vehicle", "no");
+    f.set("$ACTION_ID_test", "framework-value");
     const parsed = parseIntakeForm(f);
     assert.equal(parsed.housing, "commuter"); assert.equal(parsed.vehicle, "no");
     const stored = readIntake(student({ enteringTerm: "Fall 2027", intake: { ...parsed, vehicle: "bad", unknown: "yes" } }));
