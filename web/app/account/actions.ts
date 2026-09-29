@@ -31,12 +31,15 @@ export async function addStudent(formData: FormData): Promise<void> {
   if (!name || name.length > 60 || !isStartTerm(enteringTerm)) redirect("/account?error=" + encodeURIComponent("Enter a first or preferred name and a valid start term."));
   const hasAttestation = await getPurchaserAttestation(ctx.household.id);
   if (!hasAttestation && !attested) redirect("/account?error=" + encodeURIComponent("Confirm authorization to manage this household plan before adding a student."));
+  let student;
   try {
-    const student = await addStudentProfile(ctx, { name, enteringTerm, purchaserAttested: attested });
-    redirect(`/welcome?student=${encodeURIComponent(student.id)}`);
+    student = await addStudentProfile(ctx, { name, enteringTerm, purchaserAttested: attested });
   } catch (error) {
     redirect("/account?error=" + encodeURIComponent(error instanceof Error ? error.message : "Could not add the student."));
   }
+  // Next.js implements redirect by throwing; keep it outside the domain-error
+  // catch so a successful add never renders NEXT_REDIRECT as an error.
+  redirect(`/welcome?student=${encodeURIComponent(student.id)}`);
 }
 
 /** Makes a one-time link the family can send to the other parent or the student. */
