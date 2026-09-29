@@ -197,6 +197,10 @@ EXPLICIT_CLAIMS={
     "GRK-05": (r"(?:eligib|minimum GPA|GPA requirement).{0,100}(?:GPA|grade point|requirement)|(?:GPA|grade point).{0,100}(?:eligib|minimum|requirement)", "eligibility"),
     "FAM-06": (r"(?:parent|family) weekend.{0,100}(?:date|Fall|Spring|Summer|Winter)|(?:date|Fall|Spring|Summer|Winter).{0,100}(?:parent|family) weekend", "date"),
 }
+CLAIM_EXCLUSIONS={
+    # Accepting an aid award is not accepting an admission offer.
+    "ENR-01": re.compile(r"financial aid|aid package|award offer|accept(?:ing)? (?:an? )?award",re.I),
+}
 CALENDAR_DATE=re.compile(r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+20\d\d)?\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b20\d\d-\d{2}-\d{2}\b",re.I)
 MONEY_VALUE=re.compile(r"(?:\$\s?\d[\d,]*(?:\.\d{2})?|\bfree\b|\bno (?:application )?fee\b)",re.I)
 CLAIM_TOKENS=re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{2})?|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%",re.I)
@@ -363,6 +367,8 @@ class OfficialPublicProvider:
         pattern,kind=rule; pattern=re.compile(pattern,re.I)
         for sentence in self._sentences(page.get("text","")):
             if not pattern.search(sentence) or not self._kind_supported(kind,sentence):
+                continue
+            if code in CLAIM_EXCLUSIONS and CLAIM_EXCLUSIONS[code].search(sentence):
                 continue
             exact_term=term in sentence
             evergreen=(not TERM_SENSITIVE_TITLE.search(title)

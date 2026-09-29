@@ -143,6 +143,15 @@ class PipelineTest(unittest.TestCase):
             validate_budget_config(paid=True)
             os.environ["REQUEST_SEARCH_COST_CENTS"]="nan"
             with self.assertRaisesRegex(ValueError,"twelve-lane reservations"): main()
+    def test_accepting_financial_aid_is_not_accepting_admission(self):
+        source=PublicSources("example.edu")
+        provider=OfficialPublicProvider(source,time.monotonic()+5)
+        checkpoint=[{"code":"ENR-01","domain":"Admission to Enrollment","title":"Admission offer acceptance mapped"}]
+        aid={"url":"https://example.edu/financialaid/accept","text":"Review and accept the financial aid award offer by clicking Confirm.","links":[]}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",checkpoint,[aid]),[])
+        admission={"url":"https://example.edu/admitted","text":"Accept your admission offer in the admitted student portal.","links":[]}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",checkpoint,[admission])[0]["code"],"ENR-01")
+
     def test_first_year_discovery_excludes_graduate_school_paths(self):
         self.assertFalse(_approved_public_url("https://example.edu/gradschool/admissions/checklist", "example.edu"))
         self.assertFalse(_approved_public_url("https://graduate.example.edu/admissions", "example.edu"))
