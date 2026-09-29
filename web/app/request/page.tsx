@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireOnboardedHousehold } from "@/lib/auth/session";
-import { listFamilyRequests, searchDirectory } from "@/lib/db/requests";
+import { listFamilyRequests, markFamilyFirstView, searchDirectory } from "@/lib/db/requests";
 import { requestSchool } from "./actions";
 import { familyResearchView } from "@/lib/db/request-pipeline";
 import { ALL_CHECKPOINTS } from "@/lib/checkpoints";
@@ -22,6 +22,9 @@ export default async function RequestSchoolPage({ searchParams }: { searchParams
   const q = (query.q ?? "").trim().slice(0, 100);
   const [matches, requests] = await Promise.all([searchDirectory(q), listFamilyRequests(household.id)]);
   const views = await Promise.all(requests.map(r => familyResearchView(household.id,r.unitid,r.term)));
+  // Record the authenticated server render handoff only after all 144 states exist.
+  // This is a durable latency marker, not proof that the browser painted the view.
+  await Promise.all(requests.map((r,i) => views[i]?.length === ALL_CHECKPOINTS.length ? markFamilyFirstView(household.id,r.id) : Promise.resolve()));
   const subjects = new Map(ALL_CHECKPOINTS.map(c=>[c.code,c]));
   return (
     <main className="flex max-w-3xl flex-col gap-7">
