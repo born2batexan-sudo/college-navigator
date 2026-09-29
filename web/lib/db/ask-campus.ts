@@ -42,7 +42,7 @@ function eligible(row: ResearchRow, student: Student, now: number): boolean {
   try { attrs = { ...JSON.parse(student.attributes), ...JSON.parse(row.relationship_attributes) }; } catch { return false; }
   return row.status === 'verified' && row.confidence === 'high' && row.applicability === 'applies' &&
     row.cycle_state === 'current' && row.coverage_status === 'certified' && row.authority_level === 'official' &&
-    !!row.source_id && row.pending_changes === 0 && fresh(row.certified_at, now) && fresh(row.research_updated_at, now) &&
+    !!row.source_id && Number(row.pending_changes) === 0 && fresh(row.certified_at, now) && fresh(row.research_updated_at, now) &&
     fresh(row.verified_at, now) && fresh(row.last_verified, now) &&
     Date.parse(row.updated_at) <= Date.parse(row.certified_at!) &&
     typeof row.evidence_quote === 'string' && row.evidence_quote.length >= 10 && row.evidence_quote.length <= 700 &&
@@ -87,7 +87,7 @@ export async function askCampus(input: { householdId: string; actorId: string; s
       ru.status,ru.confidence,ru.applicability,ru.cycle_state,ru.evidence_quote,ru.verified_at,ru.updated_at,ru.source_id,
       s.url,s.authority_level,s.last_verified,rv.coverage_status,rv.certified_at,rv.updated_at AS research_updated_at,
       i.name AS institution_name,i.domains AS institution_domains,ir.id AS relationship_id,ir.lifecycle_state,ir.attributes AS relationship_attributes,
-      (SELECT COUNT(*) FROM change_events ce WHERE ce.source_id=s.id AND ce.review_state='pending') AS pending_changes
+      CAST((SELECT COUNT(*) FROM change_events ce WHERE ce.source_id=s.id AND ce.review_state='pending') AS INTEGER) AS pending_changes
       FROM institution_relationships ir JOIN institutions i ON i.id=ir.institution_id
       JOIN action_instances a ON a.relationship_id=ir.id JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=ir.institution_id
       LEFT JOIN sources s ON s.id=ru.source_id AND s.institution_id=ir.institution_id
