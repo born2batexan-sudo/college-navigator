@@ -260,6 +260,22 @@ class PipelineTest(unittest.TestCase):
         policy_with_path={**policy_only,"text":"SAT and ACT scores are optional; students can submit scores through the application."}
         self.assertEqual(provider.propose("Fall 2027","example.edu",[policy],[policy_with_path])[0]["state"],"verified")
 
+    def test_special_population_rules_do_not_become_general_first_year_findings(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        checkpoints=[
+            {"code":"ADM-05","title":"Transcript submission rules verified"},
+            {"code":"ADM-06","title":"Test score policy and submission method verified"},
+        ]
+        page={"url":"https://example.edu/admissions","text":(
+            "Homeschooled applicants must submit an official homeschool transcript. "
+            "Applicants seeking early admission need an ACT composite of 26 and must submit letters from a counselor and parents.")}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",checkpoints,[page]),[])
+        general={"url":"https://example.edu/first-year","text":(
+            "Official high school transcripts must be submitted by first-year applicants. "
+            "SAT and ACT scores are optional; first-year students may submit scores through the application.")}
+        found={p["code"] for p in provider.propose("Fall 2027","example.edu",checkpoints,[general])}
+        self.assertEqual(found,{"ADM-05","ADM-06"})
+
     def test_term_sensitive_exact_term_and_independent_corroboration(self):
         provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
         cp={"code":"ADM-03","title":"Priority / early / regular application deadlines verified"}

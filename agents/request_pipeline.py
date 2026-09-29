@@ -173,6 +173,10 @@ TERM_SENSITIVE=re.compile(r"(?:deadline|date|fee|cost|tuition|deposit|refund|wai
 EXPLICIT_CYCLE=re.compile(r"\b(?:Fall|Spring|Summer|Winter)\s+20\d\d\b|\b20\d\d\s*[-–/]\s*20\d\d\b",re.I)
 VOLATILE_VALUE=re.compile(r"\$\s?\d|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%")
 QUOTE_TERM_SENSITIVE=re.compile(r"\b(?:deadline|due date|opening|opens|fees?|costs?|tuition|deposit|refund|waiver|financial aid|FAFSA|TASFA|scholarship|payments?|releas(?:e|ed)|notification|award|calendar|timing)\b|\b\d[\d,]*(?:\.\d{2})?\s*(?:dollars|USD)\b",re.I)
+# General first-year checkpoints must not inherit rules stated only for a
+# distinct applicant population. Those branches remain unresolved until the
+# family's intake and a population-specific checkpoint establish applicability.
+RESTRICTED_APPLICABILITY=re.compile(r"\b(?:home\s*school(?:ed|er|ers|ing)?|early admission|international|transfer|graduate|readmission|re-admission|dual[- ](?:credit|enrollment)|non[- ]degree|visiting student|exchange student|military|veteran)\b",re.I)
 
 class OfficialPublicProvider:
     """No paid calls: official links and a small set of explicit extracts only.
@@ -244,6 +248,8 @@ class OfficialPublicProvider:
         if not rule: return None
         pattern,kind=rule
         for sentence in self._sentences(page.get("text","")):
+            if RESTRICTED_APPLICABILITY.search(sentence):
+                continue  # do not project a special-population rule onto all first-year students
             if kind=="date" and re.search(r"\b(?:not yet (?:published|announced|posted)|to be announced|TBD|unknown)\b",sentence,re.I):
                 continue  # a calendar date in a publication notice is not a deadline
             if code=="ADM-04" and not (re.search(r"\bwaiv(?:e|er|ers|ed)\b",sentence,re.I)
