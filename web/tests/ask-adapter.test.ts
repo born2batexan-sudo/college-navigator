@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { parseAskRequest, AskRequestError } from '../lib/ask-request';
 import { selectOfficialEvidence } from '../lib/ask-provider';
 const payload = { studentId: 'student_1', question: 'What does housing require?' };
@@ -32,5 +33,11 @@ describe('assistant request and provider boundary', () => {
   await assert.rejects(selectOfficialEvidence({ question: 'Housing?', evidence }, async () => Response.json({ ...envelope('rule_1'), stop_reason: 'max_tokens' })));
   await assert.rejects(selectOfficialEvidence({ question: 'Housing?', evidence }, async () => Response.json({ ...envelope('rule_1'), usage: { input_tokens: 999999, output_tokens: 5 } })));
   delete process.env.ANTHROPIC_API_KEY;
+ });
+ it('keeps every API response private and maps cross-household access to a generic 404', () => {
+  const route = readFileSync(new URL('../app/api/ask/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /'Cache-Control': 'no-store'/);
+  assert.match(route, /error instanceof HouseholdAccessError/);
+  assert.match(route, /privateText\('Question unavailable', 404\)/);
  });
 });

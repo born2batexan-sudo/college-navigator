@@ -68,9 +68,9 @@ describe('Ask Campus Passage grounded assistant', () => {
   assert.equal((await C.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM assistant_usage'))!.n, count);
  });
  it('refuses unauthorized student/actor and demo data', async () => {
-  await assert.rejects(Q.askCampus({ householdId, actorId: 'other', studentId, question: 'Housing?' }), /access/);
+  await assert.rejects(Q.askCampus({ householdId, actorId: 'other', studentId, question: 'Housing?' }), Q.HouseholdAccessError);
   const other = await A.provisionAccount({ authUserId: 'other', email: 'other@example.com' });
-  await assert.rejects(Q.askCampus({ householdId: other.household.id, actorId: 'other', studentId, question: 'Housing?' }), /access/);
+  await assert.rejects(Q.askCampus({ householdId: other.household.id, actorId: 'other', studentId, question: 'Housing?' }), Q.HouseholdAccessError);
  });
  it('refuses stale, nonofficial, unpublished, pending changes, inactive tracking and mismatched exact term', async () => {
   const checks: [string, string, string, unknown][] = [

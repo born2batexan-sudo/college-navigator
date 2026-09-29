@@ -7,6 +7,9 @@ import { modelCostCents, selectOfficialEvidence, type EvidenceSelection } from '
 export type Citation = { title: string; quote: string; url: string; term: string; verifiedAt: string; sourceVerifiedAt: string };
 export type Answer = { kind: 'fact' | 'unknown'; text: string; citations: Citation[] };
 export interface EvidenceSelector { select(input: { question: string; evidence: readonly { id: string; title: string; quote: string; term: string }[] }): Promise<EvidenceSelection> }
+export class HouseholdAccessError extends Error {
+  constructor() { super('Household access required'); this.name = 'HouseholdAccessError'; }
+}
 const REFUSAL = 'I cannot answer this from current, certified official sources for this student and term. Please verify directly with the school.';
 const MAX_DAILY_QUESTIONS = 20, MAX_DAILY_COST = 100, RESERVED_CENTS = 5;
 // Ten included colleges can legitimately produce 1,440 action rows. Keep the
@@ -78,7 +81,7 @@ export async function askCampus(input: { householdId: string; actorId: string; s
     const link = await queryOne('SELECT 1 AS ok FROM auth_links WHERE household_id=$1 AND auth_user_id=$2', [input.householdId, input.actorId]);
     const student = await queryOne<Student>('SELECT * FROM students WHERE id=$1 AND household_id=$2', [input.studentId, input.householdId]);
     if (!link || !student || input.householdId === process.env.DEMO_TEMPLATE_HOUSEHOLD_ID ||
-      await queryOne('SELECT 1 AS ok FROM demo_households WHERE household_id=$1', [input.householdId])) throw new Error('Household access required');
+      await queryOne('SELECT 1 AS ok FROM demo_households WHERE household_id=$1', [input.householdId])) throw new HouseholdAccessError();
     const since = new Date(Date.now() - DAY_MS).toISOString();
     const usage = await queryOne<{ n: number; cost: number }>('SELECT COUNT(*) AS n, COALESCE(SUM(model_cost_cents),0) AS cost FROM assistant_usage WHERE household_id=$1 AND created_at>$2', [input.householdId, since]);
     if (Number(usage?.n ?? 0) >= MAX_DAILY_QUESTIONS || Number(usage?.cost ?? 0) + (wantsModel ? RESERVED_CENTS : 0) > MAX_DAILY_COST) return { blocked: true as const };
