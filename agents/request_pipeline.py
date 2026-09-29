@@ -157,8 +157,10 @@ class OfficialPublicProvider:
         self.sources=sources; self.deadline=deadline
     def search(self,query):
         if time.monotonic()>=self.deadline: return []
-        root=f"https://{self.sources.domain}/"
-        home=self.sources.fetch(root,timeout=min(5,max(1,self.deadline-time.monotonic())))
+        home=None
+        for root in (f"https://{self.sources.domain}/",f"https://www.{self.sources.domain}/"):
+            home=self.sources.fetch(root,timeout=min(5,max(1,self.deadline-time.monotonic())))
+            if home: break
         if not home: return []
         lane=query.split(" ",3)[3].split(" first-year official dates fees process")[0].lower()
         keywords={"admissions":("admission","apply","undergraduate"),
@@ -167,7 +169,22 @@ class OfficialPublicProvider:
                   "scholarships and funding":("scholarship",)}
         terms=keywords.get(lane,tuple(w.lower() for w in lane.split() if len(w)>3))
         matches=[link for link in home.get("links",[]) if any(w in link.lower() for w in terms)]
-        return [home["url"]]+matches[:3]
+        matches.sort(key=lambda link:(bool(re.search(r"visit|tour|news|research",link,re.I)),
+                                      0 if re.search(r"/apply(?:/|$)|first[-_]?year|freshm",link,re.I) else 1,
+                                      len(urlparse(link).path)))
+        deep=[]
+        if lane=="admissions":
+            for link in matches[:3]:
+                if time.monotonic()>=self.deadline: break
+                landing=self.sources.fetch(link,timeout=min(5,max(1,self.deadline-time.monotonic())))
+                if not landing: continue
+                for child in landing.get("links",[]):
+                    if re.search(r"first[-_]?year|freshm|/apply/(?!certificates?\b)",child,re.I) and child not in deep:
+                        deep.append(child)
+        ordered=[]
+        for link in deep+matches+[home["url"]]:
+            if link not in ordered: ordered.append(link)
+        return ordered[:5]
     def propose(self,term,domain,checkpoints,pages):
         if checkpoints[0]["domain"]!="Admissions": return []
         exact=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?)\b",re.I)

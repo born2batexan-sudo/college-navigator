@@ -184,6 +184,22 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(found[0]["state"],"verified")
         self.assertIn(found[0]["quote"],found[0]["pageText"])
         self.assertEqual(found[0]["sourceUrl"],application)
+    def test_free_discovery_uses_www_fallback_and_one_bounded_admissions_hop(self):
+        source=PublicSources("example.edu")
+        bare="https://example.edu/"; home="https://www.example.edu/"
+        apply="https://www.example.edu/admissions/apply"; visit="https://www.example.edu/admissions/visit"
+        first="https://www.example.edu/admissions/apply/freshmen"
+        pages={home:{"url":home,"text":"Welcome","links":[visit,apply]},
+               apply:{"url":apply,"text":"Choose an applicant type","links":[first]},
+               first:{"url":first,"text":"We recommend using the Common App to apply.","links":[]},
+               visit:{"url":visit,"text":"Visit campus","links":[]}}
+        provider=OfficialPublicProvider(source,time.monotonic()+2)
+        with patch.object(source,"fetch",side_effect=lambda url,timeout:pages.get(url)):
+            urls=provider.search("site:example.edu Fall 2027 Admissions first-year official dates fees process")
+        self.assertEqual(urls[0],first)
+        self.assertIn(apply,urls)
+        self.assertNotEqual(urls[0],visit)
+        self.assertNotIn(bare,urls)
     def test_pipeline_off_by_default(self):
         from request_pipeline import main
         with patch.dict(os.environ,{"REQUEST_PIPELINE_ENABLED":"0"}), patch("requests.get",side_effect=AssertionError("network")):
