@@ -60,7 +60,10 @@ describe("bounded first view evidence",()=>{
   const job=await Q.claimNextResearchJob(); assert.ok(job);
   const input={unitid:"800001",term,attemptId:job!.job.attemptId!,candidates:[candidate]};
   assert.equal((await P.ingestResearch(input)).changed,true);
+  const firstCommit=await DB.queryOne<any>("SELECT first_evidence_committed_at FROM school_research_jobs WHERE unitid=$1 AND term=$2",["800001",term]);
+  assert.ok(firstCommit?.first_evidence_committed_at);
   assert.equal((await P.ingestResearch(input)).changed,false);
+  assert.equal((await DB.queryOne<any>("SELECT first_evidence_committed_at FROM school_research_jobs WHERE unitid=$1 AND term=$2",["800001",term]))?.first_evidence_committed_at,firstCommit.first_evidence_committed_at);
   const aView=await P.familyResearchView(a.household.id,"800001",term);
   assert.equal(aView?.length,144);
   assert.equal(aView?.find(r=>r.code==="ADM-01")?.quote,phrase);

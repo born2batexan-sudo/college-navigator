@@ -21,7 +21,8 @@ export async function ingestResearch(input: {unitid:string;term:string;attemptId
       ON CONFLICT(unitid,term,code) DO UPDATE SET state=$12,source_url=$13,evidence_quote=$14,explanation=$15,fingerprint=$16,last_checked_at=$17,next_check_at=$18,updated_at=$19`,
       [input.unitid,input.term,r.code,r.state,r.sourceUrl,r.quote,r.explanation,r.fingerprint,r.checkedAt,r.nextCheckAt,now,r.state,r.sourceUrl,r.quote,r.explanation,r.fingerprint,r.checkedAt,r.nextCheckAt,now]);
     const next = states.map(s=>s.nextCheckAt).sort()[0];
-    await exec("UPDATE school_research_jobs SET last_checked_at=$1,next_check_at=$2,material_fingerprint=$3,publication_revision=publication_revision+$4,updated_at=$5 WHERE unitid=$6 AND term=$7 AND attempt_id=$8",[now,next,fingerprint,changed?1:0,now,input.unitid,input.term,input.attemptId]);
+    const hasFamilyEvidence = states.some(s => (s.state === "verified" || s.state === "not_applicable" || s.state === "not_yet_published") && !!s.sourceUrl && !!s.quote);
+    await exec("UPDATE school_research_jobs SET last_checked_at=$1,next_check_at=$2,material_fingerprint=$3,first_evidence_committed_at=CASE WHEN first_evidence_committed_at IS NULL AND $4=1 THEN $5 ELSE first_evidence_committed_at END,publication_revision=publication_revision+$6,updated_at=$7 WHERE unitid=$8 AND term=$9 AND attempt_id=$10",[now,next,fingerprint,hasFamilyEvidence?1:0,now,changed?1:0,now,input.unitid,input.term,input.attemptId]);
     return { changed, states };
   });
 }
