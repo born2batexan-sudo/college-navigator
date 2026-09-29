@@ -106,6 +106,44 @@ describe('connected mail OAuth and scoped transport',()=>{
   assert.equal((await C.queryOne<any>('SELECT COUNT(*) AS n FROM mail_connections WHERE household_id=$1',[owner.household.id])).n,0);
   process.env.CONNECTED_MAIL_ENABLED='1';
  });
+ it('callback rejects invalid provider, origin, and state while clearing its scoped cookie',async()=>{
+  const {NextRequest}=await import('next/server');
+  const {GET}=await import('../app/api/mail/callback/[provider]/route');
+  const invoke=(provider:string,url:string,cookie?:string)=>GET(new NextRequest(url,{headers:cookie?{cookie}:{}}),{params:Promise.resolve({provider})});
+  const invalid=await invoke('other','https://app.example.com/api/mail/callback/other?state=x&code=y');
+  assert.equal(invalid.status,303);assert.equal(invalid.headers.get('cache-control'),'no-store');
+  const wrongOrigin=await invoke('gmail','https://evil.example.com/api/mail/callback/gmail?state=matching&code=code','mail_oauth_gmail=matching');
+  assert.equal(wrongOrigin.status,303);assert.equal(wrongOrigin.headers.get('cache-control'),'no-store');
+  assert.match(wrongOrigin.headers.get('set-cookie')??'',/mail_oauth_gmail=;/);
+  const mismatch=await invoke('gmail','https://app.example.com/api/mail/callback/gmail?state=one&code=code','mail_oauth_gmail=two');
+  assert.equal(mismatch.status,303);assert.equal(mismatch.headers.get('cache-control'),'no-store');
+  assert.match(mismatch.headers.get('location')??'',/Mail%20consent%20not%20completed/);
+  assert.match(mismatch.headers.get('set-cookie')??'',/mail_oauth_gmail=;/);
+ });
+ it('retention purge removes expired mail data and preserves in-window records',async()=>{
+  const Db=await import('../lib/db/connected-mail');
+  const old=new Date(Date.now()-100*86400000).toISOString(), fresh=new Date().toISOString();
+  const active=await Db.storeConnectedMail({householdId:owner.household.id,actorId:actor.id,provider:'gmail',accountId:'retention-active',tokens:{accessToken:'a',refreshToken:'b'},consentVersion:P.consent});
+  const revoked=await Db.storeConnectedMail({householdId:owner.household.id,actorId:actor.id,provider:'microsoft',accountId:'retention-revoked',tokens:{accessToken:'a',refreshToken:'b'},consentVersion:P.consent});
+  await Db.revokeConnectedMail({householdId:owner.household.id,actorId:actor.id,connectionId:revoked});
+  await C.exec('UPDATE mail_connections SET delete_after=$1 WHERE id=$2',[old,revoked]);
+  await C.exec('INSERT INTO connected_mail_evidence(id,connection_id,household_id,institution_id,sender_domain,message_digest,observed_at,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',['retention-evidence-old',active,owner.household.id,'mail-school','example.edu','retention-old',old,'quarantined']);
+  await C.exec('INSERT INTO connected_mail_evidence(id,connection_id,household_id,institution_id,sender_domain,message_digest,observed_at,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',['retention-evidence-fresh',active,owner.household.id,'mail-school','example.edu','retention-fresh',fresh,'quarantined']);
+  await C.exec('INSERT INTO mail_sync_events(id,connection_id,event_type,detail_code,message_digest,created_at) VALUES($1,$2,$3,$4,$5,$6)',['retention-sync-old',active,'observed','quarantined','sync-old',old]);
+  await C.exec('INSERT INTO mail_sync_events(id,connection_id,event_type,detail_code,message_digest,created_at) VALUES($1,$2,$3,$4,$5,$6)',['retention-sync-fresh',active,'observed','quarantined','sync-fresh',fresh]);
+  await C.exec('INSERT INTO mail_control_audit(id,household_id,event_type,actor,detail_code,created_at) VALUES($1,$2,$3,$4,$5,$6)',['retention-audit-old',owner.household.id,'test',actor.id,'old',old]);
+  await C.exec('INSERT INTO mail_control_audit(id,household_id,event_type,actor,detail_code,created_at) VALUES($1,$2,$3,$4,$5,$6)',['retention-audit-fresh',owner.household.id,'test',actor.id,'fresh',fresh]);
+  await C.exec('INSERT INTO mail_oauth_attempts(state_hash,household_id,actor_id,provider,encrypted_verifier,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',['retention-attempt-old',owner.household.id,actor.id,'gmail',Db.sealTokens({accessToken:'v',refreshToken:'v'}),old,old]);
+  await C.exec('INSERT INTO mail_oauth_attempts(state_hash,household_id,actor_id,provider,encrypted_verifier,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',['retention-attempt-fresh',owner.household.id,actor.id,'gmail',Db.sealTokens({accessToken:'v',refreshToken:'v'}),new Date(Date.now()+600000).toISOString(),fresh]);
+  await M.purgeMailRetention();
+  const exists=async(table:string,id:string)=>(await C.queryOne<any>(`SELECT COUNT(*) AS n FROM ${table} WHERE id=$1`,[id])).n;
+  assert.equal(await exists('connected_mail_evidence','retention-evidence-old'),0);assert.equal(await exists('connected_mail_evidence','retention-evidence-fresh'),1);
+  assert.equal(await exists('mail_sync_events','retention-sync-old'),0);assert.equal(await exists('mail_sync_events','retention-sync-fresh'),1);
+  assert.equal(await exists('mail_control_audit','retention-audit-old'),0);assert.equal(await exists('mail_control_audit','retention-audit-fresh'),1);
+  assert.equal((await C.queryOne<any>('SELECT COUNT(*) AS n FROM mail_oauth_attempts WHERE state_hash=$1',['retention-attempt-old'])).n,0);
+  assert.equal((await C.queryOne<any>('SELECT COUNT(*) AS n FROM mail_oauth_attempts WHERE state_hash=$1',['retention-attempt-fresh'])).n,1);
+  assert.equal(await exists('mail_connections',revoked),0);assert.equal(await exists('mail_connections',active),1);
+ });
  it('retention maintenance requires a long bearer and canonical origin',async()=>{
   const {NextRequest}=await import('next/server');
   const {POST}=await import('../app/api/mail/maintenance/route');
