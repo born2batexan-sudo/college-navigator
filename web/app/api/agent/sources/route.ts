@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAgentAuth } from "../_auth";
+import { requireAgentAuth, requireResearchOrMonitorAuth } from "../_auth";
 import { getInstitutionBySlug, createSource, findSourceByUrl, listSourcesForInstitution, updateSourceFingerprint } from "@/lib/db/repo";
 
 // Talks to the database on every request — never let Next.js try to
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** GET ?institutionSlug=alabama — list known sources, so an agent doesn't refetch/re-create duplicates. */
 export async function GET(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req, "research");
+  const unauthorized = requireResearchOrMonitorAuth(req);
   if (unauthorized) return unauthorized;
 
   const slug = req.nextUrl.searchParams.get("institutionSlug");
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
  * an actual detected difference. Body: { institutionSlug, url, fingerprint, content? }.
  */
 export async function PATCH(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req, "research");
+  const unauthorized = requireResearchOrMonitorAuth(req);
   if (unauthorized) return unauthorized;
 
   const { institutionSlug, url, fingerprint, content } = (await req.json()) ?? {};

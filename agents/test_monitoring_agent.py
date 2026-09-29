@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.dirname(__file__))
-from monitoring_agent import check_source, fetch_text
+from monitoring_agent import check_source, fetch_text, preflight
 
 
 def fp(text: str) -> str:
@@ -56,6 +56,31 @@ class MonitoringAgentTest(unittest.TestCase):
         classifier.assert_not_called()
         event.assert_not_called()
         write.assert_not_called()
+
+    def test_preflight_requires_staging_origin_distinct_from_production_and_delivery_off(self):
+        valid = {
+            "MONITORING_PIPELINE_ENABLED": "1",
+            "MONITORING_DELIVERY_ENABLED": "0",
+            "MONITORING_WORKER_STAGE": "staging",
+            "APP_BASE_URL": "https://staging.example.test",
+            "MONITORING_STAGING_APP_ORIGIN": "https://staging.example.test",
+            "MONITORING_PRODUCTION_APP_ORIGIN": "https://www.example.test",
+            "MONITOR_API_KEY": "test",
+        }
+        with patch.dict(os.environ, valid, clear=True):
+            preflight()
+            for key, bad in (
+                ("MONITORING_PIPELINE_ENABLED", "0"),
+                ("MONITORING_DELIVERY_ENABLED", "1"),
+                ("MONITORING_WORKER_STAGE", "production"),
+                ("APP_BASE_URL", "https://www.example.test"),
+                ("MONITOR_API_KEY", ""),
+            ):
+                previous = os.environ[key]
+                os.environ[key] = bad
+                with self.assertRaises(ValueError):
+                    preflight()
+                os.environ[key] = previous
 
     @patch("monitoring_agent.requests.get")
     def test_fetch_refuses_cross_host_redirect(self, get):

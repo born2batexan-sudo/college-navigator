@@ -33,6 +33,7 @@ APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:3000")
 AGENT_API_KEY = os.environ.get("AGENT_API_KEY", "")
 RESEARCH_WRITER_API_KEY = os.environ.get("RESEARCH_WRITER_API_KEY", "")
 QUEUE_AGENT_API_KEY = os.environ.get("QUEUE_AGENT_API_KEY", "")
+MONITOR_API_KEY = os.environ.get("MONITOR_API_KEY", "")
 DIRECTORY_IMPORT_API_KEY = os.environ.get("DIRECTORY_IMPORT_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
@@ -56,6 +57,8 @@ def require_env(name: str, value: str):
 def _key_for(path: str, body: str | None = None) -> str:
     if path.startswith("/api/agent/requests/"):
         return QUEUE_AGENT_API_KEY
+    if MONITOR_API_KEY and path in {"/api/agent/sources", "/api/agent/change-events"}:
+        return MONITOR_API_KEY
     if path in {"/api/agent/rules", "/api/agent/sources", "/api/agent/institutions"}:
         return RESEARCH_WRITER_API_KEY
     if path == "/api/agent/directory":

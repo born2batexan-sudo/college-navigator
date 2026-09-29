@@ -3,13 +3,22 @@ on:
   # Best-effort polling only. GitHub may delay or skip cron; this is not a 120s first-view SLA.
   schedule:
     - cron: '*/5 * * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       task:
         description: What to run
         type: choice
-        options: [process the next requested school, load the school directory]
+        options: [process the next requested school, monitor one official source, load the school directory]
         default: load the school directory
+      institution_slug:
+        description: Institution slug for a manual source-monitor run
+        required: false
+        default: ""
+      source_url:
+        description: Optional exact known source URL; empty checks all sources for the institution
+        required: false
+        default: ""
       year:
         description: Directory year to try first
         required: false
@@ -62,6 +71,42 @@ jobs:
         with:
           name: request-run-status
           path: agents/process.log
+          if-no-files-found: ignore
+  monitor:
+    environment: staging-research
+    # Hourly staging-only source checks. No family delivery and no model call.
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 * * * *' && vars.MONITORING_PIPELINE_ENABLED == '1') || (github.event_name == 'workflow_dispatch' && inputs.task == 'monitor one official source')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: agents/requirements.lock }
+      - run: pip install --require-hashes -r agents/requirements.lock
+      - name: Check one institution's official sources
+        working-directory: agents
+        env:
+          APP_BASE_URL: ${{ secrets.STAGING_APP_BASE_URL }}
+          MONITOR_API_KEY: ${{ secrets.STAGING_MONITOR_API_KEY }}
+          MONITORING_STAGING_APP_ORIGIN: ${{ vars.REQUEST_STAGING_APP_ORIGIN }}
+          MONITORING_PRODUCTION_APP_ORIGIN: ${{ vars.REQUEST_PRODUCTION_APP_ORIGIN }}
+          MONITORING_WORKER_STAGE: staging
+          MONITORING_PIPELINE_ENABLED: ${{ vars.MONITORING_PIPELINE_ENABLED || '0' }}
+          MONITORING_DELIVERY_ENABLED: "0"
+          INSTITUTION: ${{ inputs.institution_slug || vars.MONITORING_INSTITUTION_SLUG }}
+          SOURCE_URL: ${{ inputs.source_url }}
+        shell: bash
+        run: |
+          test -n "$INSTITUTION" || { echo "::error::No monitoring institution configured"; exit 1; }
+          args=(--institution "$INSTITUTION" --no-model)
+          if [ -n "$SOURCE_URL" ]; then args+=(--url "$SOURCE_URL"); fi
+          timeout --signal=TERM --kill-after=5s 480s python -u monitoring_agent.py "${args[@]}" | tee monitoring.log
+      - name: Save monitor report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: source-monitor-status
+          path: agents/monitoring.log
           if-no-files-found: ignore
   directory:
     environment: production-directory

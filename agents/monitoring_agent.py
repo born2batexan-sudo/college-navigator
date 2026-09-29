@@ -9,6 +9,7 @@ rewrites family guidance. Dry-run performs no writes and no paid/model calls.
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from urllib.parse import urljoin, urlparse
@@ -143,12 +144,35 @@ def check_source(source: dict, institution: str, *, dry_run: bool = False, fetch
     return "changed"
 
 
+def preflight() -> None:
+    """Fail before reading or writing when staging boundaries are incomplete."""
+    enabled = os.environ.get("MONITORING_PIPELINE_ENABLED") == "1"
+    delivery_off = os.environ.get("MONITORING_DELIVERY_ENABLED", "0") == "0"
+    stage = os.environ.get("MONITORING_WORKER_STAGE")
+    app = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    staging = os.environ.get("MONITORING_STAGING_APP_ORIGIN", "").rstrip("/")
+    production = os.environ.get("MONITORING_PRODUCTION_APP_ORIGIN", "").rstrip("/")
+    token = os.environ.get("MONITOR_API_KEY", "")
+    if not enabled:
+        raise ValueError("monitoring pipeline is disabled")
+    if stage != "staging":
+        raise ValueError("monitoring worker is not staging-bound")
+    if not delivery_off:
+        raise ValueError("family delivery must remain disabled")
+    if not app.startswith("https://") or app != staging or app == production:
+        raise ValueError("staging origin is missing, insecure, or matches production")
+    if not token:
+        raise ValueError("monitor API credential is missing")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--institution", required=True)
     parser.add_argument("--url", help="Only check this one source URL")
     parser.add_argument("--dry-run", action="store_true", help="Fetch and compare only; never write or call a model")
+    parser.add_argument("--no-model", action="store_true", help="Flag changes as unclassified for human review without a model call")
     args = parser.parse_args()
+    preflight()
 
     sources = api_get("/api/agent/sources", {"institutionSlug": args.institution})["sources"]
     if args.url:
@@ -163,6 +187,11 @@ def main():
 
     def model_classifier(old_text: str, new_text: str) -> dict:
         nonlocal client
+        if args.no_model:
+            return {
+                "materiality": "unclassified",
+                "summary": "Official source content changed; human review is required before guidance can resume.",
+            }
         if client is None:
             client = get_anthropic_client()
         return classify_change(client, old_text, new_text)

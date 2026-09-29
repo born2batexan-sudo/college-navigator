@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
  * the next run diffs against this one.
  */
 export async function POST(req: NextRequest) {
-  const unauthorized = requireAgentAuth(req);
+  const unauthorized = requireAgentAuth(req, "monitor");
   if (unauthorized) return unauthorized;
 
   const body = await req.json();
