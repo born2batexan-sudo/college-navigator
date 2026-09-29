@@ -5,7 +5,7 @@ import time
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,os.path.dirname(__file__))
-from request_pipeline import Meter, CostCeiling, PublicSources, OfficialPublicProvider, official_search_urls, research_lane, run_lanes, validate_budget_config, main, preflight
+from request_pipeline import Meter, CostCeiling, PublicSources, OfficialPublicProvider, official_search_urls, research_lane, run_lanes, validate_budget_config, main, preflight, _approved_public_url
 
 class PipelineTest(unittest.TestCase):
     def setUp(self):
@@ -143,6 +143,11 @@ class PipelineTest(unittest.TestCase):
             validate_budget_config(paid=True)
             os.environ["REQUEST_SEARCH_COST_CENTS"]="nan"
             with self.assertRaisesRegex(ValueError,"twelve-lane reservations"): main()
+    def test_first_year_discovery_excludes_graduate_school_paths(self):
+        self.assertFalse(_approved_public_url("https://example.edu/gradschool/admissions/checklist", "example.edu"))
+        self.assertFalse(_approved_public_url("https://graduate.example.edu/admissions", "example.edu"))
+        self.assertTrue(_approved_public_url("https://example.edu/admissions/first-year", "example.edu"))
+
     def test_search_result_urls_are_restricted_to_approved_official_domain(self):
         class Item:
             def __init__(self,**kwargs): self.__dict__.update(kwargs)

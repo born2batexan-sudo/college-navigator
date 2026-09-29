@@ -229,7 +229,7 @@ MAX_DISCOVERY_WORKERS=4
 MAX_DISCOVERY_SECONDS=28
 DISCOVERY_FETCH_TIMEOUT=1.8
 MAX_LANE_PAGES=5
-UNSAFE_PUBLIC_PATH=re.compile(r"essay|personal[.-]?statement|supplement|upload|login|sign[.-]?in",re.I)
+UNSAFE_PUBLIC_PATH=re.compile(r"essay|personal[.-]?statement|supplement|upload|login|sign[.-]?in|(?:^|[/_.-])grad(?:uate|school)(?:[/_.-]|$)",re.I)
 
 def _approved_public_url(url,domain):
     """Structural allowlist; PublicSources additionally verifies public DNS on fetch."""
@@ -238,7 +238,7 @@ def _approved_public_url(url,domain):
         approved=domain.lower().removeprefix("www.")
         return (parsed.scheme=="https" and not parsed.username and not parsed.password and not parsed.port
                 and not parsed.fragment and (host==approved or host.endswith("."+approved))
-                and not UNSAFE_PUBLIC_PATH.search(parsed.path))
+                and not UNSAFE_PUBLIC_PATH.search(f"{host}{parsed.path}"))
     except ValueError:
         return False
 
