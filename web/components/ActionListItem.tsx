@@ -6,7 +6,7 @@ import { parseDateStatus, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
 import type { ActionInstance, Rule, GuidanceAsset } from "@/lib/db/types";
 
 type Props = {
-  action: ActionInstance & { rule: Rule; guidance: GuidanceAsset | null };
+  action: ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; pendingSourceChange?: boolean };
   schoolName: string;
   /** In a combined household queue, which student this belongs to (for a color dot). Omit on a single student's own plan. */
   studentIndex?: number;
@@ -14,8 +14,9 @@ type Props = {
 
 export function ActionListItem({ action, schoolName, studentIndex }: Props) {
   // If the school hasn't published this cycle's dates, show that plainly instead of any date.
-  const awaiting = parseDateStatus(action.rule).kind === "awaiting";
-  const due = awaiting ? null : daysUntil(action.dueAt);
+  const pending = !!action.pendingSourceChange;
+  const awaiting = !pending && parseDateStatus(action.rule).kind === "awaiting";
+  const due = awaiting || pending ? null : daysUntil(action.dueAt);
   const overdue = due !== null && due < 0 && !["complete", "waived", "not_applicable"].includes(action.state);
 
   return (
@@ -33,15 +34,15 @@ export function ActionListItem({ action, schoolName, studentIndex }: Props) {
             <span className="rounded-full border border-accent/20 bg-accent/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">Fictional demo</span>
           )}
         </div>
-        <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
+        <p className="mt-1 font-display text-lg font-semibold leading-snug text-ink">{pending || awaiting ? action.rule.title : (action.guidance?.what ?? action.rule.title)}</p>
         <p className="mt-0.5 text-sm text-ink/50">
-          {action.rule.domain}{awaiting ? " · waiting on the school" : " · included in your school plan"}
+          {action.rule.domain}{pending ? " · official source update under review" : awaiting ? " · waiting on the school" : " · included in your school plan"}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         <div className="text-right text-sm">
-          <div className={overdue ? "font-medium text-urgent" : awaiting ? "text-warn" : "text-ink/70"}>
-            {awaiting ? DATE_NOT_POSTED_LABEL : formatDate(action.dueAt)}
+          <div className={overdue ? "font-medium text-urgent" : awaiting || pending ? "text-warn" : "text-ink/70"}>
+            {pending ? "Under review" : awaiting ? DATE_NOT_POSTED_LABEL : formatDate(action.dueAt)}
           </div>
         </div>
         <StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} />

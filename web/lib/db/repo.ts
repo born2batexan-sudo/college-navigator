@@ -636,17 +636,23 @@ export async function updateActionInstance(id: string, patch: Partial<{ dueAt: s
   );
 }
 
-export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null })[]> {
+export async function hasPendingSourceChange(sourceId: string | null): Promise<boolean> {
+  if (!sourceId) return false;
+  return !!(await queryOne("SELECT 1 AS pending FROM change_events WHERE source_id=$1 AND review_state='pending' LIMIT 1", [sourceId]));
+}
+
+export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; pendingSourceChange: boolean })[]> {
   const rows = researchTerm
     ? await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
         WHERE a.relationship_id=$1 AND r.research_term=$2`, [relationshipId, researchTerm])
     : await queryRows<any>("SELECT * FROM action_instances WHERE relationship_id = $1", [relationshipId]);
-  const out: (ActionInstance & { rule: Rule; guidance: GuidanceAsset | null })[] = [];
+  const out: (ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; pendingSourceChange: boolean })[] = [];
   for (const r of rows) {
     const action = toActionInstance(r);
     const rule = (await getRuleById(action.ruleId))!;
-    const guidance = await getGuidanceForRule(rule.id);
-    out.push({ ...action, rule, guidance });
+    const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
+    const guidance = pendingSourceChange ? null : await getGuidanceForRule(rule.id);
+    out.push({ ...action, rule, guidance, pendingSourceChange });
   }
   return out;
 }
@@ -662,8 +668,9 @@ export async function getActionInstanceFull(id: string) {
   const rule = (await getRuleById(action.ruleId))!;
   const guidance = await getGuidanceForRule(rule.id);
   const source = rule.sourceId ? await getSource(rule.sourceId) : null;
+  const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
   const relationship = (await getRelationship(action.relationshipId))!;
-  return { ...action, rule, guidance, source, relationship };
+  return { ...action, rule, guidance: pendingSourceChange ? null : guidance, source, relationship, pendingSourceChange };
 }
 
 export async function createActionEvent(input: {

@@ -7,7 +7,7 @@ process.env.DB_PATH = path.join(mkdtempSync(path.join(tmpdir(), 'ask-grounding-'
 delete process.env.DATABASE_URL;
 delete process.env.ASSISTANT_ENABLED;
 delete process.env.ASSISTANT_MODEL_ENABLED;
-let A: typeof import('../lib/db/accounts'), C: typeof import('../lib/db/client'), Q: typeof import('../lib/db/ask-campus');
+let A: typeof import('../lib/db/accounts'), C: typeof import('../lib/db/client'), Q: typeof import('../lib/db/ask-campus'), R: typeof import('../lib/db/repo');
 let householdId: string, studentId: string;
 const now = () => new Date().toISOString();
 const ask = (question = 'Tell me about housing.', extra = {}) => Q.askCampus({ householdId, actorId: 'ask-owner', studentId, question, ...extra });
@@ -22,7 +22,7 @@ async function source(id: string, title: string, institution = 'school_a', opts:
 
 describe('Ask Campus Passage grounded assistant', () => {
  before(async () => {
-  A = await import('../lib/db/accounts'); C = await import('../lib/db/client'); Q = await import('../lib/db/ask-campus');
+  A = await import('../lib/db/accounts'); C = await import('../lib/db/client'); Q = await import('../lib/db/ask-campus'); R = await import('../lib/db/repo');
   const owner = await A.provisionAccount({ authUserId: 'ask-owner', email: 'ask-owner@example.com' });
   householdId = owner.household.id;
   await A.completeOnboarding(owner, { studentName: 'Student', role: 'parent', enteringTerm: 'Fall 2027' });
@@ -80,7 +80,10 @@ describe('Ask Campus Passage grounded assistant', () => {
   }
   await C.exec('INSERT INTO change_events(id,source_id,detected_at,review_state) VALUES($1,$2,$3,$4)', ['change_housing','src_HOUSING',now(),'pending']);
   assert.equal((await ask()).kind, 'unknown');
+  assert.equal((await R.getActionInstanceFull('act_HOUSING'))?.pendingSourceChange, true);
+  assert.equal((await R.listActionInstancesForRelationship('rel_a', 'Fall 2027')).find(a => a.id === 'act_HOUSING')?.pendingSourceChange, true);
   await C.exec("UPDATE change_events SET review_state='resolved' WHERE id='change_housing'");
+  assert.equal((await R.getActionInstanceFull('act_HOUSING'))?.pendingSourceChange, false);
   await C.exec("UPDATE students SET attributes=$1 WHERE id=$2", [JSON.stringify({ enteringTerm: 'Fall 2028' }), studentId]);
   assert.equal((await ask()).kind, 'unknown');
   await C.exec('UPDATE students SET attributes=$1 WHERE id=$2', [JSON.stringify({ enteringTerm: 'Fall 2027' }), studentId]);

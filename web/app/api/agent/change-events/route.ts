@@ -30,12 +30,25 @@ export async function POST(req: NextRequest) {
   if (!institutionSlug || !sourceUrl || !materiality || !newFingerprint) {
     return NextResponse.json({ error: "institutionSlug, sourceUrl, materiality, and newFingerprint are required" }, { status: 400 });
   }
+  if (!["material", "cosmetic", "unclassified"].includes(materiality)) {
+    return NextResponse.json({ error: "Unsupported materiality" }, { status: 400 });
+  }
+  if (typeof newFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(newFingerprint) ||
+      (oldFingerprint != null && (typeof oldFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(oldFingerprint)))) {
+    return NextResponse.json({ error: "Fingerprints must be lowercase SHA-256 values" }, { status: 400 });
+  }
+  if (oldFingerprint === newFingerprint) {
+    return NextResponse.json({ error: "No content change detected" }, { status: 400 });
+  }
 
   const institution = await getInstitutionBySlug(institutionSlug);
   if (!institution) return NextResponse.json({ error: `Unknown institution slug: ${institutionSlug}` }, { status: 404 });
 
   const source = await findSourceByUrl(institution.id, sourceUrl);
   if (!source) return NextResponse.json({ error: `No known source for ${sourceUrl} under ${institutionSlug}` }, { status: 404 });
+  if (source.fingerprint && oldFingerprint !== source.fingerprint) {
+    return NextResponse.json({ error: "Source changed since this monitor run; recheck required" }, { status: 409 });
+  }
 
   const event = await createChangeEvent({ sourceId: source.id, materiality, oldFingerprint: oldFingerprint ?? source.fingerprint, newFingerprint, summary });
   await updateSourceFingerprint(source.id, newFingerprint, new Date().toISOString(), newContent);
