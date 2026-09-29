@@ -36,6 +36,28 @@ class PipelineTest(unittest.TestCase):
             self.assertFalse(s.allowed(url))
         with patch("socket.getaddrinfo",return_value=[(None,None,None,None,("127.0.0.1",443))]):
             self.assertFalse(s.allowed("https://example.edu/a"))
+    def test_missing_robots_file_means_no_published_restriction_but_denials_fail_closed(self):
+        from contextlib import contextmanager
+        class Response:
+            def __init__(self,status,body=b"",content_type="text/plain"):
+                self.status=status; self.body=body; self.headers={"Content-Type":content_type}
+            def stream(self,_): return iter([self.body])
+            def close(self): pass
+        @contextmanager
+        def missing_robots(url,*_args,**_kwargs):
+            yield Response(404) if url.endswith("/robots.txt") else Response(200)
+        source=PublicSources("example.edu")
+        html="<main>For Fall 2027 first-year applicants, apply using the Common App.</main>"
+        with patch.object(source,"allowed",return_value=True), patch.object(source,"_open",side_effect=missing_robots), \
+             patch.object(source,"_get",return_value=("https://example.edu/admissions",html)):
+            self.assertIsNotNone(source.fetch("https://example.edu/admissions"))
+        @contextmanager
+        def denied_robots(*_args,**_kwargs): yield Response(403)
+        source2=PublicSources("example.edu")
+        with patch.object(source2,"allowed",return_value=True), patch.object(source2,"_open",side_effect=denied_robots), \
+             patch.object(source2,"_get",side_effect=AssertionError("page must not be fetched")):
+            self.assertIsNone(source2.fetch("https://example.edu/admissions"))
+
     def test_public_policy_page_is_not_discarded_for_personal_statement_requirement(self):
         from contextlib import contextmanager
         class Response:

@@ -109,14 +109,19 @@ class PublicSources:
         # Do not use requests with cookies, authorization, proxy credentials or browser sessions.
         try:
             with self._open(robots,timeout,accept="text/plain") as r:
-                if r.status!=200 or not any(t in r.headers.get("Content-Type","").lower() for t in ("text/plain","text/html")): return None
-                chunks=[]; size=0
-                for chunk in r.stream(16384):
-                    size+=len(chunk)
-                    if size>250000: return None
-                    chunks.append(chunk)
-                rp=RobotFileParser(); rp.parse(b"".join(chunks).decode("utf-8",errors="replace").splitlines())
-                if not rp.can_fetch(UA,url): return None
+                if r.status == 200:
+                    if not any(t in r.headers.get("Content-Type","").lower() for t in ("text/plain","text/html")): return None
+                    chunks=[]; size=0
+                    for chunk in r.stream(16384):
+                        size+=len(chunk)
+                        if size>250000: return None
+                        chunks.append(chunk)
+                    rp=RobotFileParser(); rp.parse(b"".join(chunks).decode("utf-8",errors="replace").splitlines())
+                    if not rp.can_fetch(UA,url): return None
+                elif r.status not in (404,410):
+                    # A missing/removed robots file publishes no restrictions. Auth
+                    # denials, redirects, throttles and server failures still fail closed.
+                    return None
         except (urllib3.exceptions.HTTPError,ValueError,OSError): return None
         raw=self._get(url,timeout)
         if not raw: return None
