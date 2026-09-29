@@ -381,6 +381,7 @@ CREATE TABLE IF NOT EXISTS school_research_jobs (
   next_check_at TEXT,
   material_fingerprint TEXT,
   publication_revision INTEGER NOT NULL DEFAULT 0,
+  first_evidence_committed_at TEXT,
   PRIMARY KEY (unitid, term)
 );
 

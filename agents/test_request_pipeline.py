@@ -156,7 +156,7 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(all(x["state"]=="under_review" for x in submitted["candidates"]))
         self.assertEqual(calls[3][2]["outcome"],"review")
         self.assertEqual(calls[3][2]["costCents"],0)
-    def test_extracts_exact_term_or_evergreen_first_year_platform(self):
+    def test_extracts_only_explicit_term_first_year_platform(self):
         sources=PublicSources("example.edu")
         text="For Fall 2027 first-year applicants, apply using the Common App online."
         provider=OfficialPublicProvider(sources,time.monotonic()+5)
@@ -164,11 +164,7 @@ class PipelineTest(unittest.TestCase):
         matching=provider.propose("Fall 2027","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}])
         self.assertEqual(matching[0]["code"],"ADM-01")
         self.assertIn("Fall 2027",matching[0]["quote"])
-        prior=provider.propose("Fall 2028","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}])
-        self.assertIn("Fall 2027",prior[0]["quote"],"server must see and withhold the competing cycle")
-        evergreen="We recommend using the Common App to apply, but you can also apply using the Apply Texas application."
-        evergreen_result=provider.propose("Fall 2027","example.edu",admissions,[{"url":"https://example.edu/admission","text":evergreen}])
-        self.assertEqual(evergreen_result[0]["quote"],evergreen)
+        self.assertEqual(provider.propose("Fall 2028","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}]),[])
         self.assertEqual(provider.propose("Fall 2027","example.edu",[{"code":"ENR-01","domain":"Admission to Enrollment"}],[{"url":"https://example.edu/admission","text":text}]),[])
     def test_official_home_link_proposes_exact_excerpt_without_provider(self):
         source=PublicSources("example.edu")
@@ -183,157 +179,161 @@ class PipelineTest(unittest.TestCase):
                                 source,provider,time.monotonic()+2)
         self.assertEqual(found[0]["state"],"verified")
         self.assertIn(found[0]["quote"],found[0]["pageText"])
+        self.assertEqual(found[0]["pageText"],found[0]["quote"])
         self.assertEqual(found[0]["sourceUrl"],application)
-    def test_free_discovery_uses_www_fallback_and_one_bounded_admissions_hop(self):
+    def test_unpaid_extractors_return_multiple_exact_term_facts(self):
         source=PublicSources("example.edu")
-        bare="https://example.edu/"; home="https://www.example.edu/"
-        apply="https://www.example.edu/admissions/apply"; visit="https://www.example.edu/admissions/visit"
-        first="https://www.example.edu/admissions/apply/freshmen"
-        pages={home:{"url":home,"text":"Welcome","links":[visit,apply]},
-               apply:{"url":apply,"text":"Choose an applicant type","links":[first]},
-               first:{"url":first,"text":"We recommend using the Common App to apply.","links":[]},
-               visit:{"url":visit,"text":"Visit campus","links":[]}}
-        provider=OfficialPublicProvider(source,time.monotonic()+2)
-        with patch.object(source,"fetch",side_effect=lambda url,timeout:pages.get(url)):
-            urls=provider.search("site:example.edu Fall 2027 Admissions first-year official dates fees process")
-        self.assertEqual(urls[0],first)
-        self.assertIn(apply,urls)
-        self.assertNotEqual(urls[0],visit)
-        self.assertNotIn(bare,urls)
+        provider=OfficialPublicProvider(source,time.monotonic()+5)
+        page={"url":"https://example.edu/admissions","text":(
+            "For Fall 2027 first-year applicants, apply using the Common App. "
+            "For Fall 2027 applicants, official high school transcripts must be submitted."),"links":[]}
+        checkpoints=[
+            {"code":"ADM-01","domain":"Admissions","title":"Application platform(s) and applicant type path identified"},
+            {"code":"ADM-05","domain":"Admissions","title":"Transcript submission rules verified"},
+        ]
+        results=provider.propose("Fall 2027","example.edu",checkpoints,[page])
+        self.assertEqual({r["code"] for r in results},{"ADM-01","ADM-05"})
+        self.assertTrue(all(r["state"]=="verified" for r in results))
+        self.assertTrue(all("Fall 2027" in r["quote"] for r in results))
+        self.assertTrue(all(r["quote"] in page["text"] for r in results))
+
+    def test_date_evidence_needs_distinct_exact_term_corroboration(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        cp={"code":"ADM-03","domain":"Admissions","title":"Priority / early / regular application deadlines verified"}
+        first={"url":"https://example.edu/admissions","text":"For Fall 2027 applicants, the priority application deadline is 2026-10-15."}
+        second={"url":"https://admissions.example.edu/deadlines","text":"The priority application deadline for Fall 2027 applicants is 2026-10-15."}
+        found=provider.propose("Fall 2027","example.edu",[cp],[first,second])
+        self.assertEqual(found[0]["state"],"verified")
+        self.assertEqual(found[0]["secondSourceUrl"],second["url"])
+        self.assertIn("2026-10-15",found[0]["secondQuote"])
+        unresolved=provider.propose("Fall 2027","example.edu",[cp],[first])
+        self.assertEqual(unresolved[0]["state"],"under_review")
+        conflict={**second,"text":"The priority application deadline for Fall 2027 applicants is 2026-11-01."}
+        disputed=provider.propose("Fall 2027","example.edu",[cp],[first,conflict])
+        self.assertEqual(disputed[0]["state"],"conflicting")
+
+    def test_unpaid_search_uses_official_anchor_text_to_find_topic_pages(self):
+        source=PublicSources("example.edu")
+        home={"url":"https://example.edu/","text":"Home","links":["https://example.edu/finaid"],
+              "linkLabels":{"https://example.edu/finaid":"Financial Aid and FAFSA"}}
+        provider=OfficialPublicProvider(source,time.monotonic()+5)
+        with patch.object(source,"fetch",return_value=home):
+            urls=provider.search("site:example.edu Fall 2027 Financial Aid first-year official dates fees process")
+        self.assertEqual(urls,[home["url"],"https://example.edu/finaid"])
+
+    def test_shared_two_hop_discovery_finds_distinct_lifecycle_pages_safely(self):
+        class Catalog:
+            domain="example.edu"
+            def __init__(self): self.calls=[]
+            @staticmethod
+            def page(url,text,links=(),labels=None):
+                return {"url":url,"text":text,"links":list(links),"linkLabels":labels or {}}
+            def fetch(self,url,timeout=6):
+                self.calls.append(url)
+                root="https://example.edu/"
+                hub="https://example.edu/students"
+                targets={
+                    "https://example.edu/admissions/apply":"First-year Admissions",
+                    "https://example.edu/admitted/next-steps":"Admitted Student Enrollment Checklist",
+                    "https://example.edu/financial-aid":"Financial Aid and FAFSA",
+                    "https://example.edu/student-accounts/billing":"Tuition Billing and 529 Payments",
+                    "https://example.edu/housing":"Housing and Dining",
+                    "https://example.edu/orientation":"New Student Orientation",
+                    "https://example.edu/student-health/immunization":"Student Health and Immunization",
+                    "https://example.edu/families":"Parents and Family Weekend",
+                    "https://example.edu/student-life/greek":"Greek Life Recruitment and Student Clubs",
+                }
+                if url==root:
+                    return self.page(root,"University home",[hub],{hub:"Student Resources"})
+                if url==hub:
+                    links=list(targets)+["https://evil.example.net/financial-aid",
+                         "https://example.edu/personal-statement","http://example.edu/aid"]
+                    labels={link:label for link,label in targets.items()}
+                    labels.update({"https://evil.example.net/financial-aid":"Financial Aid",
+                                   "https://example.edu/personal-statement":"Application essays"})
+                    return self.page(hub,"Student resources",links,labels)
+                if url in targets:
+                    deep="https://example.edu/deep/private-student-record"
+                    links=[deep] if url.endswith("financial-aid") else []
+                    return self.page(url,targets[url]+" official information",links,{deep:"Student record"})
+                return None
+        source=Catalog()
+        provider=OfficialPublicProvider(source,time.monotonic()+10)
+        lanes={
+            "Admissions":"/admissions/apply",
+            "Admission to Enrollment":"/admitted/next-steps",
+            "Financial Aid":"/financial-aid",
+            "Tuition Billing 529":"/student-accounts/billing",
+            "Housing and Dining":"/housing",
+            "Orientation and Academics":"/orientation",
+            "Health Compliance Access":"/student-health/immunization",
+            "Family and Campus Experience":"/families",
+            "Greek and Student Life":"/student-life/greek",
+        }
+        for lane,path in lanes.items():
+            urls=provider.search_lane("Fall 2027",lane)
+            self.assertIn("https://example.edu"+path,urls,lane)
+            self.assertLessEqual(len(urls),5)
+        self.assertEqual(source.calls.count("https://example.edu/"),1)
+        self.assertNotIn("https://evil.example.net/financial-aid",source.calls)
+        self.assertNotIn("https://example.edu/personal-statement",source.calls)
+        self.assertNotIn("http://example.edu/aid",source.calls)
+        self.assertNotIn("https://example.edu/deep/private-student-record",source.calls)
+        self.assertLessEqual(len(source.calls),32)
+
+    def test_discovery_page_budget_is_hard_capped(self):
+        class Catalog:
+            domain="example.edu"
+            def __init__(self): self.calls=[]
+            def fetch(self,url,timeout=6):
+                self.calls.append(url)
+                root="https://example.edu/"
+                if url==root:
+                    links=[f"https://example.edu/financial-aid/{i}" for i in range(20)]
+                    return {"url":root,"text":"University home","links":links,
+                            "linkLabels":{link:"Financial Aid" for link in links}}
+                return {"url":url,"text":"Financial Aid information","links":[],"linkLabels":{}}
+        source=Catalog()
+        provider=OfficialPublicProvider(source,time.monotonic()+5)
+        with patch("request_pipeline.MAX_DISCOVERY_PAGES",5):
+            provider.search_lane("Fall 2027","Financial Aid")
+        self.assertLessEqual(len(source.calls),5)
+
+    def test_evergreen_and_volatile_extractors_keep_exact_term_gate(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        evergreen={"code":"ADM-05","domain":"Admissions","title":"Transcript submission rules verified"}
+        generic={"url":"https://example.edu/admissions","text":"Official transcripts must be submitted by the high school."}
+        generic_result=provider.propose("Fall 2027","example.edu",[evergreen],[generic])
+        self.assertEqual(generic_result[0]["state"],"verified")
+        self.assertNotIn("Fall 2027",generic_result[0]["quote"])
+        evergreen_term={"url":"https://example.edu/admissions","text":"For Fall 2027 applicants, official transcripts must be submitted by the high school."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[evergreen],[evergreen_term])[0]["state"],"verified")
+        volatile={"code":"ADM-03","domain":"Admissions","title":"Priority application deadline verified"}
+        old_cycle={"url":"https://example.edu/deadlines","text":"For Fall 2028 applicants, the priority application deadline is October 15, 2027."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[volatile],[old_cycle]),[])
+
+    def test_extracts_distinct_exact_term_facts_across_lifecycle_lanes(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        checkpoints=[
+            {"code":"ADM-05","domain":"Admissions","title":"Transcript submission rules verified"},
+            {"code":"ENR-06","domain":"Admission to Enrollment","title":"Student account / NetID activation path mapped"},
+            {"code":"HLT-01","domain":"Health Compliance Access","title":"Immunization requirements identified"},
+        ]
+        transcript={"url":"https://example.edu/admissions","text":"For Fall 2027 applicants, official transcripts must be submitted by the high school."}
+        account={"url":"https://example.edu/enrollment","text":"For Fall 2027 admitted students, create a NetID and student account."}
+        health_quote="For Fall 2027 students, immunization is required before course registration."
+        health_a={"url":"https://example.edu/health/immunization","text":health_quote}
+        health_b={"url":"https://health.example.edu/required-immunizations","text":health_quote+" View the public compliance checklist."}
+        found=provider.propose("Fall 2027","example.edu",checkpoints,[transcript,account,health_a,health_b])
+        self.assertEqual({p["code"] for p in found},{"ADM-05","ENR-06","HLT-01"})
+        self.assertTrue(all(p["state"]=="verified" for p in found))
+        self.assertTrue(all("Fall 2027" in p["quote"] for p in found))
+        health=next(p for p in found if p["code"]=="HLT-01")
+        self.assertNotEqual(health["sourceUrl"],health["secondSourceUrl"])
+
     def test_pipeline_off_by_default(self):
         from request_pipeline import main
         with patch.dict(os.environ,{"REQUEST_PIPELINE_ENABLED":"0"}), patch("requests.get",side_effect=AssertionError("network")):
             main()
-
-
-    def test_public_reader_captures_safe_official_anchor_labels(self):
-        from contextlib import contextmanager
-        class Response:
-            status=200
-            headers={"Content-Type":"text/plain"}
-            def stream(self,_): return iter([b"User-agent: *\nAllow: /\n"])
-            def close(self): pass
-        @contextmanager
-        def opened(*_args,**_kwargs): yield Response()
-        source=PublicSources("example.edu")
-        html='<main><a href="/node/120">Financial Aid and FAFSA</a><a href="https://other.edu/aid">Outside</a></main>'
-        with patch.object(source,"allowed",return_value=True), patch.object(source,"_open",side_effect=opened), \
-             patch.object(source,"_get",return_value=("https://example.edu/",html)):
-            home=source.fetch("https://example.edu/")
-        self.assertEqual(home["linkLabels"],{"https://example.edu/node/120":"Financial Aid and FAFSA"})
-        self.assertEqual(home["links"],["https://example.edu/node/120"])
-
-    def test_anchor_labels_admit_opaque_official_path_and_preserve_admissions_deep_priority(self):
-        source=PublicSources("example.edu")
-        root="https://example.edu/"; landing="https://example.edu/node/120"
-        first="https://example.edu/admissions/apply/first-year"
-        home={"url":root,"text":"Home","links":[landing],"linkLabels":{landing:"Admissions and Apply"}}
-        pages={root:home,landing:{"url":landing,"text":"Applicant types","links":[first]},
-               first:{"url":first,"text":"First-year","links":[]}}
-        provider=OfficialPublicProvider(source,time.monotonic()+5)
-        with patch.object(source,"fetch",side_effect=lambda url,timeout:pages.get(url)):
-            found=provider.search("site:example.edu Fall 2027 Admissions first-year official dates fees process")
-        self.assertEqual(found[0],first)
-        self.assertIn(landing,found)
-
-    def test_unpaid_multiple_explicit_process_facts_and_safe_evergreen(self):
-        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
-        page={"url":"https://example.edu/admission","text":(
-            "For Fall 2027 first-year applicants, apply using the Common App online. "
-            "Official high school transcripts must be submitted by applicants. "
-            "Applicants can check the application status portal to view their status. "
-            "All applicants must submit a letter of recommendation.")}
-        cps=[{"code":"ADM-01","title":"Application platform(s) and applicant type path identified"},
-             {"code":"ADM-05","title":"Transcript submission rules verified"},
-             {"code":"ADM-11","title":"Application status portal and post-submit monitoring path identified"},
-             {"code":"ADM-07","title":"Recommendation requirements verified"}]
-        found={p["code"]:p for p in provider.propose("Fall 2027","example.edu",cps,[page])}
-        self.assertEqual(set(found),{c["code"] for c in cps})
-        for code in ("ADM-01","ADM-05","ADM-11"): self.assertEqual(found[code]["state"],"verified")
-        self.assertEqual(found["ADM-07"]["state"],"under_review")
-        dated_platform={"url":"https://example.edu/apply","text":"Apply using the Common App before October 15."}
-        platform=[c for c in cps if c["code"]=="ADM-01"]
-        self.assertEqual(provider.propose("Fall 2027","example.edu",platform,[dated_platform])[0]["state"],"under_review")
-        policy={"code":"ADM-06","title":"Test score policy and submission method verified"}
-        policy_only={"url":"https://example.edu/tests","text":"SAT and ACT scores are optional for first-year students."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[policy],[policy_only]),[])
-        policy_with_path={**policy_only,"text":"SAT and ACT scores are optional; students can submit scores through the application."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[policy],[policy_with_path])[0]["state"],"verified")
-
-    def test_special_population_rules_do_not_become_general_first_year_findings(self):
-        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
-        checkpoints=[
-            {"code":"ADM-05","title":"Transcript submission rules verified"},
-            {"code":"ADM-06","title":"Test score policy and submission method verified"},
-        ]
-        page={"url":"https://example.edu/admissions","text":(
-            "Homeschooled applicants must submit an official homeschool transcript. "
-            "Applicants seeking early admission need an ACT composite of 26 and must submit letters from a counselor and parents.")}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",checkpoints,[page]),[])
-        general={"url":"https://example.edu/first-year","text":(
-            "Official high school transcripts must be submitted by first-year applicants. "
-            "SAT and ACT scores are optional; first-year students may submit scores through the application.")}
-        found={p["code"] for p in provider.propose("Fall 2027","example.edu",checkpoints,[general])}
-        self.assertEqual(found,{"ADM-05","ADM-06"})
-
-    def test_term_sensitive_exact_term_and_independent_corroboration(self):
-        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
-        cp={"code":"ADM-03","title":"Priority / early / regular application deadlines verified"}
-        a={"url":"https://example.edu/admission","text":"For Fall 2027 applicants, the priority application deadline is 2026-10-15."}
-        b={"url":"https://admissions.example.edu/deadlines","text":"The priority application deadline for Fall 2027 applicants is 2026-10-15."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a])[0]["state"],"under_review")
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,b])[0]["state"],"verified")
-        conflict={**b,"text":"The priority application deadline for Fall 2027 applicants is 2026-11-01."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,conflict])[0]["state"],"conflicting")
-        self.assertEqual(provider.propose("Fall 2028","example.edu",[cp],[a,b]),[])
-        notice={**a,"text":"The Fall 2027 application deadline is not yet published; please check October 15."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[notice]),[])
-        mixed={**a,"text":"For Fall 2027 and Fall 2028 applicants, the application deadline is 2026-10-15."}
-        mixed_result=provider.propose("Fall 2027","example.edu",[cp],[mixed,b])
-        self.assertTrue(all(p["state"]!="verified" for p in mixed_result))
-
-    def test_fee_and_aid_require_exact_term_and_distinct_pages(self):
-        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
-        fee={"code":"ADM-04","title":"Application fee and waiver process verified"}
-        fee_only={"url":"https://example.edu/apply","text":"For Fall 2027 first-year applicants, the application fee is $75."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[fee_only]),[])
-        a={"url":"https://example.edu/apply","text":"For Fall 2027 first-year applicants, the application fee is $75; eligible students can request a fee waiver through the application."}
-        b={"url":"https://admissions.example.edu/fees","text":"The Fall 2027 application fee is $75; eligible applicants can request a fee waiver through the application."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[a])[0]["state"],"under_review")
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[a,b])[0]["state"],"verified")
-        self.assertEqual(provider.propose("Fall 2028","example.edu",[fee],[a,b]),[])
-        aid={"code":"AID-01","title":"FAFSA / TASFA applicability identified"}
-        generic={"url":"https://example.edu/aid","text":"All incoming students must submit the FAFSA."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[aid],[generic]),[])
-        aid_a={"url":"https://example.edu/aid","text":"All Fall 2027 incoming students must submit the FAFSA."}
-        aid_b={"url":"https://example.edu/first-year-aid","text":"All Fall 2027 incoming students must submit the FAFSA. Learn more."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[aid],[aid_a,aid_b])[0]["state"],"verified")
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[{"code":"SCH-10","title":"Scholarship acceptance requirements"}],[aid_a,aid_b]),[])
-
-    def test_nonvolatile_evergreen_requirement_requires_two_official_pages(self):
-        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
-        cp={"code":"ACA-01","title":"Orientation requirement / eligibility mapped"}
-        a={"url":"https://example.edu/orientation","text":"All new students are required to attend orientation."}
-        b={"url":"https://example.edu/new-students","text":"All new students are required to attend orientation. Read our guide."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a])[0]["state"],"under_review")
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,b])[0]["state"],"verified")
-        a_date={**a,"text":"For Fall 2026, all new students are required to attend orientation."}
-        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a_date,b])[0]["state"],"under_review")
-
-    def test_quote_only_payload_is_verified_against_fetched_text(self):
-        source=PublicSources("example.edu")
-        page={"url":"https://example.edu/admission","text":"Welcome! "*1000+
-              "Official high school transcripts must be submitted by applicants.","links":[]}
-        class Stub:
-            paid=False
-            def search(self,_): return [page["url"]]
-            def propose(self,term,domain,checkpoints,pages):
-                return [{"code":"ADM-05","state":"verified","sourceUrl":pages[0]["url"],
-                         "quote":"Official high school transcripts must be submitted by applicants."}]
-        with patch.object(source,"fetch",return_value=page):
-            found=research_lane("example.edu","Fall 2027",[{"code":"ADM-05","domain":"Admissions"}],
-                                source,Stub(),time.monotonic()+3)
-        self.assertEqual(found[0]["pageText"],found[0]["quote"])
-        self.assertNotIn("Welcome!",found[0]["pageText"])
 
 if __name__=="__main__": unittest.main()

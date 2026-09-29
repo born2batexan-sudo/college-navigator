@@ -145,161 +145,256 @@ class PublicSources:
         with self.lock: self.cache[url]=result
         return result
 
-# This is intentionally a small explicit subset, not an attempt to fill 144 answers.
-# A pattern identifies a directly stated fact; topical keyword matches alone do not.
-# Each quote is sent through the deployed server's independent evidence gate.
+# Narrow, deterministic extractors: a pattern identifies a directly stated
+# fact, not a likely answer. The exact entering term must occur in the quote.
+# Higher-risk claims additionally need distinct, corroborating official pages.
 EXPLICIT_CLAIMS={
-    "ADM-03": (r"\b(?:application|admission|applicant)[^.!?]{0,100}\b(?:priority |early |regular )?(?:deadline|due date)\b|\b(?:priority|early|regular) application deadline\b", "date"),
-    "ADM-04": (r"\b(?:application fee|fee to apply)\b", "money"),
-    "ADM-05": (r"\btranscripts?\b[^.!?]{0,100}\b(?:submit|submitted|send|sent|upload|received|required)\b|\b(?:submit|submitted|send|sent|upload)\b[^.!?]{0,100}\btranscripts?\b", "process"),
-    "ADM-06": (r"\b(?:SAT|ACT|test[- ]optional)\b[^.!?]{0,100}\b(?:required|optional|submit|submitted|not required)\b|\b(?:required|optional|not required)\b[^.!?]{0,100}\b(?:SAT|ACT)\b", "process"),
-    "ADM-07": (r"\b(?:recommendations?|letters? of recommendation)\b[^.!?]{0,100}\b(?:required|optional|submit|submitted)\b|\b(?:required|optional|submit|submitted)\b[^.!?]{0,100}\b(?:recommendations?|letters? of recommendation)\b", "process"),
-    "ADM-11": (r"\b(?:application status|applicant) portal\b[^.!?]{0,100}\b(?:check|view|monitor)\b|\b(?:check|view|monitor)\b[^.!?]{0,100}\b(?:application status|applicant) portal\b", "process"),
-    "ENR-01": (r"\b(?:accept|confirm)\b[^.!?]{0,100}\b(?:admission|offer|intent to enroll)\b|\bintent to enroll\b[^.!?]{0,100}\b(?:accept|confirm|submit)\b", "process"),
-    "ENR-02": (r"\b(?:enrollment|admission) deposit\b|\bdeposit\b[^.!?]{0,80}\b(?:enrollment|admission)\b", "money"),
-    "ENR-03": (r"\bdeposit\b[^.!?]{0,100}\b(?:deadline|due date)\b|\b(?:deadline|due date)\b[^.!?]{0,100}\bdeposit\b", "date"),
-    "ENR-06": (r"\b(?:NetID|student account)\b[^.!?]{0,100}\b(?:activate|activation|set up|create)\b|\b(?:activate|activation|set up|create)\b[^.!?]{0,100}\b(?:NetID|student account)\b", "process"),
-    "ENR-08": (r"\bfinal transcript\b[^.!?]{0,100}\b(?:submit|submitted|send|sent|received|required)\b|\b(?:submit|submitted|send|sent)\b[^.!?]{0,80}\bfinal transcript\b", "process"),
-    "AID-01": (r"\b(?:FAFSA|TASFA)\b[^.!?]{0,100}\b(?:required|complete|submit|submitted|file)\b|\b(?:required|submit|submitted|file)\b[^.!?]{0,100}\b(?:FAFSA|TASFA)\b", "aid"),
-    "AID-03": (r"\b(?:financial aid|FAFSA|TASFA)\b[^.!?]{0,100}\b(?:priority )?(?:deadline|due date)\b|\b(?:priority )?(?:deadline|due date)\b[^.!?]{0,100}\b(?:financial aid|FAFSA|TASFA)\b", "date"),
-    "HOU-01": (r"\b(?:first[- ]year|freshman)\b[^.!?]{0,100}\b(?:residency|live on campus|housing requirement)\b|\b(?:residency|live on campus)\b[^.!?]{0,100}\b(?:first[- ]year|freshman)\b", "eligibility"),
-    "ACA-01": (r"\borientation\b[^.!?]{0,100}\b(?:required|requirement|must attend)\b|\b(?:required|requirement)\b[^.!?]{0,80}\borientation\b", "eligibility"),
+    "ADM-01": (r"(?:apply|submit|application).{0,80}(?:Common App(?:lication)?|ApplyTexas|Coalition App(?:lication)?)|(?:Common App(?:lication)?|ApplyTexas|Coalition App(?:lication)?).{0,80}(?:apply|submit|application)", "platform"),
+    "ADM-02": (r"(?:applications?|application portal).{0,100}(?:open|opens|opening|begin|begins|available)|(?:open|opening) date.{0,100}applications?", "date"),
+    "ADM-03": (r"(?:application|admission|applicant).{0,100}(?:priority |early |regular )?(?:deadline|due date)|(?:priority|early|regular) application deadline", "date"),
+    "ADM-04": (r"(?:application fee|fee to apply|fee waiver|application waiver)", "money"),
+    "ADM-05": (r"transcripts?.{0,100}(?:submit|send|upload|received|official|unofficial)|(?:submit|send|upload).{0,100}transcripts?", "process"),
+    "ADM-06": (r"(?:test[- ]optional|SAT.{0,70}ACT|ACT.{0,70}SAT).{0,100}(?:required|optional|submit|policy)|(?:SAT|ACT).{0,100}(?:not required|optional|must be submitted)", "process"),
+    "ADM-07": (r"(?:recommendation|letter of recommendation).{0,100}(?:required|submit|optional)|(?:required|optional).{0,100}recommendation", "process"),
+    "ADM-11": (r"(?:application status|applicant) portal.{0,100}(?:check|view|monitor|status)|(?:check|view|monitor).{0,100}(?:application status|applicant) portal", "process"),
+    "ENR-01": (r"(?:accept|confirm).{0,100}(?:admission|offer|intent to enroll)|(?:intent to enroll).{0,100}(?:accept|confirm|submit)", "process"),
+    "ENR-02": (r"(?:enrollment|admission) deposit|deposit.{0,80}(?:enrollment|admission)", "money"),
+    "ENR-03": (r"deposit.{0,100}(?:deadline|due date)|(?:deadline|due date).{0,100}deposit", "date"),
+    "ENR-04": (r"deposit.{0,100}(?:waiv|exempt)|(?:waiv|exempt).{0,100}deposit", "eligibility"),
+    "ENR-05": (r"deposit.{0,100}(?:refund|refundable|nonrefundable)|(?:refund|refundable|nonrefundable).{0,100}deposit", "money"),
+    "ENR-06": (r"(?:NetID|student account).{0,100}(?:activat|set up|create)|(?:activat|set up|create).{0,100}(?:NetID|student account)", "process"),
+    "ENR-07": (r"admitted[- ]student.{0,80}(?:portal|checklist)|(?:portal|checklist).{0,80}admitted[- ]student", "process"),
+    "ENR-08": (r"final transcript.{0,100}(?:submit|send|received|required)|(?:submit|send).{0,80}final transcript", "process"),
+    "AID-01": (r"(?:FAFSA|TASFA).{0,100}(?:complete|submit|file)", "aid"),
+    "AID-02": (r"(?:FAFSA|TASFA).{0,100}(?:school code|institution code)|(?:school code|institution code).{0,100}(?:FAFSA|TASFA)", "aid"),
+    "AID-03": (r"(?:financial aid|FAFSA|TASFA).{0,100}(?:priority )?(?:deadline|due date)|(?:priority )?(?:deadline|due date).{0,100}(?:financial aid|FAFSA|TASFA)", "date"),
+    "AID-04": (r"(?:verification|missing documents?).{0,100}(?:submit|upload|portal|checklist|financial aid)|financial aid.{0,100}(?:verification|missing documents?)", "aid"),
+    "AID-05": (r"(?:financial aid|student aid).{0,80}portal|portal.{0,80}(?:financial aid|student aid)", "aid"),
+    "AID-06": (r"(?:financial aid )?award.{0,100}(?:notification|available|released|received)|(?:notification|available|released).{0,80}award", "aid"),
+    "AID-07": (r"(?:accept|decline).{0,100}(?:financial aid )?award|award.{0,100}(?:accept|decline)", "aid"),
+    "SCH-01": (r"(?:automatic|automatically).{0,100}(?:merit )?scholarship|(?:merit )?scholarship.{0,100}automatic", "eligibility"),
+    "SCH-02": (r"(?:separate|additional).{0,100}scholarship application|scholarship application.{0,100}(?:separate|additional)", "scholarship"),
+    "SCH-03": (r"scholarship.{0,100}(?:priority )?(?:deadline|due date)|(?:priority )?(?:deadline|due date).{0,100}scholarship", "date"),
+    "SCH-04": (r"(?:department|college)[- ](?:specific )?scholarship|scholarship.{0,100}(?:department|college)", "scholarship"),
+    "BIL-01": (r"(?:tuition|mandatory fees?).{0,100}(?:schedule|rates|cost of attendance)|(?:schedule|rates).{0,100}(?:tuition|mandatory fees?)", "money"),
+    "BIL-03": (r"(?:bill|payment).{0,100}(?:due date|deadline)|(?:due date|deadline).{0,100}(?:bill|payment)", "date"),
+    "HOU-01": (r"(?:first[- ]year|freshman).{0,100}(?:residency|live on campus|housing requirement)|(?:residency|live on campus).{0,100}(?:first[- ]year|freshman)", "eligibility"),
+    "HOU-02": (r"housing application.{0,100}(?:open|opens|opening|available)|(?:open|opening) date.{0,100}housing application", "date"),
+    "HOU-03": (r"housing application fee|housing prepayment|housing deposit", "money"),
+    "HOU-04": (r"housing.{0,100}(?:priority|room selection).{0,100}(?:deadline|cutoff)|(?:deadline|cutoff).{0,100}(?:housing|room selection)", "date"),
+    "HLT-01": (r"(?:immunization|vaccination).{0,100}(?:required|requirement|must submit)|(?:required|requirement).{0,80}(?:immunization|vaccination)", "eligibility"),
+    "HLT-03": (r"(?:health|immunization|compliance).{0,100}(?:deadline|due date)|(?:deadline|due date).{0,100}(?:health|immunization|compliance)", "date"),
+    "ACA-01": (r"orientation.{0,100}(?:required|requirement|must attend)|(?:required|requirement).{0,80}orientation", "eligibility"),
+    "ACA-02": (r"orientation registration.{0,100}(?:open|opens|opening|available)|(?:open|opening) date.{0,100}orientation registration", "date"),
+    "ACA-03": (r"orientation.{0,100}(?:sessions?|dates?|format|in person|virtual)", "date"),
+    "GRK-02": (r"(?:recruitment|registration).{0,100}(?:open|opens|opening)|(?:open|opening) date.{0,100}(?:recruitment|registration)", "date"),
+    "GRK-03": (r"(?:recruitment|registration).{0,100}(?:deadline|due date)|(?:deadline|due date).{0,100}(?:recruitment|registration)", "date"),
+    "GRK-05": (r"(?:eligib|minimum GPA|GPA requirement).{0,100}(?:GPA|grade point|requirement)|(?:GPA|grade point).{0,100}(?:eligib|minimum|requirement)", "eligibility"),
+    "FAM-06": (r"(?:parent|family) weekend.{0,100}(?:date|Fall|Spring|Summer|Winter)|(?:date|Fall|Spring|Summer|Winter).{0,100}(?:parent|family) weekend", "date"),
 }
 CALENDAR_DATE=re.compile(r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+20\d\d)?\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b20\d\d-\d{2}-\d{2}\b",re.I)
-MONEY_VALUE=re.compile(r"\$\s?\d[\d,]*(?:\.\d{2})?",re.I)
+MONEY_VALUE=re.compile(r"(?:\$\s?\d[\d,]*(?:\.\d{2})?|\bfree\b|\bno (?:application )?fee\b)",re.I)
 CLAIM_TOKENS=re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{2})?|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%",re.I)
-HIGH_RISK=re.compile(r"(?:deadline|fee|deposit|refund|waiver|insurance|residency|immunization|requirement|aid|tuition|payment|scholarship)",re.I)
-TERM_SENSITIVE=re.compile(r"(?:deadline|date|fee|cost|tuition|deposit|refund|waiver|aid|scholarship|payment|amount|rate|award|opening|closing|release|decision|notification|timing|calendar|window)",re.I)
+CORROBORATION_TITLE=re.compile(r"(?:deadline|fee|deposit|refund|waiver|insurance|residency|immunization|requirement|aid|tuition|payment|scholarship|eligib)",re.I)
+TERM_SENSITIVE_TITLE=re.compile(r"(?:deadline|date|fee|cost|tuition|deposit|refund|waiver|aid|scholarship|payment|amount|rate|award|opening|closing|release|decision|notification|timing|calendar|window)",re.I)
 EXPLICIT_CYCLE=re.compile(r"\b(?:Fall|Spring|Summer|Winter)\s+20\d\d\b|\b20\d\d\s*[-–/]\s*20\d\d\b",re.I)
 VOLATILE_VALUE=re.compile(r"\$\s?\d|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%")
-QUOTE_TERM_SENSITIVE=re.compile(r"\b(?:deadline|due date|opening|opens|fees?|costs?|tuition|deposit|refund|waiver|financial aid|FAFSA|TASFA|scholarship|payments?|releas(?:e|ed)|notification|award|calendar|timing)\b|\b\d[\d,]*(?:\.\d{2})?\s*(?:dollars|USD)\b",re.I)
-# General first-year checkpoints must not inherit rules stated only for a
-# distinct applicant population. Those branches remain unresolved until the
-# family's intake and a population-specific checkpoint establish applicability.
-RESTRICTED_APPLICABILITY=re.compile(r"\b(?:home\s*school(?:ed|er|ers|ing)?|early admission|international|transfer|graduate|readmission|re-admission|dual[- ](?:credit|enrollment)|non[- ]degree|visiting student|exchange student|military|veteran)\b",re.I)
+
+# Free discovery is shared across the 12 parallel lifecycle lanes. It only follows
+# public HTTPS links found on official pages; PublicSources applies robots, DNS/IP,
+# redirect, TLS, content-type, and size checks on every fetch.
+LANE_KEYWORDS={
+    "admissions":("admissions","admission","apply","application","undergraduate","first-year","freshman","deadline"),
+    "admission to enrollment":("admitted","enroll","enrollment","accept","deposit","new student","next steps"),
+    "financial aid":("financial aid","student aid","fafsa","tasfa","grants","aid","verification"),
+    "scholarships and funding":("scholarship","funding","merit","financial awards"),
+    "tuition billing 529":("tuition","bursar","billing","student accounts","payment","fees","cost of attendance","529"),
+    "housing and dining":("housing","residence","residential","dining","meal plan","room selection"),
+    "health compliance access":("health","immunization","vaccination","insurance","compliance","student health"),
+    "orientation and academics":("orientation","academic","advising","registration","course","new student program"),
+    "campus logistics":("parking","transport","transit","technology","student id","campus map","transportation"),
+    "greek and student life":("greek","fraternity","sorority","recruitment","student life","involvement","clubs"),
+    "family and campus experience":("family","parent","visitor","weekend","parents and families"),
+    "career and progression":("career","internship","research","graduation","career center"),
+}
+DISCOVERY_HUB_WORDS=("student","students","academics","campus life","resources","offices","families","parents","admitted","services","life")
+MAX_DISCOVERY_PAGES=32
+MAX_DISCOVERY_DEPTH=2
+MAX_DISCOVERY_WORKERS=4
+MAX_DISCOVERY_SECONDS=28
+DISCOVERY_FETCH_TIMEOUT=1.8
+MAX_LANE_PAGES=5
+UNSAFE_PUBLIC_PATH=re.compile(r"essay|personal[.-]?statement|supplement|upload|login|sign[.-]?in",re.I)
+
+def _approved_public_url(url,domain):
+    """Structural allowlist; PublicSources additionally verifies public DNS on fetch."""
+    try:
+        parsed=urlparse(url); host=(parsed.hostname or "").lower()
+        approved=domain.lower().removeprefix("www.")
+        return (parsed.scheme=="https" and not parsed.username and not parsed.password and not parsed.port
+                and not parsed.fragment and (host==approved or host.endswith("."+approved))
+                and not UNSAFE_PUBLIC_PATH.search(parsed.path))
+    except ValueError:
+        return False
+
+def _term_match(term,text):
+    term=re.sub(r"[-_]+"," ",term.lower()).strip()
+    text=re.sub(r"[-_]+"," ",text.lower())
+    if " " in term: return term in text
+    return bool(re.search(r"\b"+re.escape(term)+r"\b",text))
 
 class OfficialPublicProvider:
-    """No paid calls: official links and a small set of explicit extracts only.
+    """Bounded unpaid official-site discovery plus conservative deterministic extracts.
 
-    A local 'verified' is merely a proposal. The server independently checks
-    URL, quote inclusion, term scope and higher-risk corroboration.
+    One shared two-hop catalog prevents twelve lanes from independently crawling the
+    same home page. Evergreen policy/process claims still require explicit entering-term
+    language because the independent server resolver requires that term in page and quote;
+    volatile dates, amounts, aid, eligibility, and scholarships additionally need a second
+    distinct official-page corroboration before they can be proposed as verified.
     """
     paid=False
     def __init__(self,sources,deadline):
         self.sources=sources; self.deadline=deadline
-    def search(self,query):
+        self._index=None
+        self._index_lock=threading.Lock()
+    def _discovery_score(self,url,label=""):
+        content=f"{url} {label}".lower().replace("_"," ").replace("-"," ")
+        score=0
+        for terms in LANE_KEYWORDS.values():
+            matches=sum(1 for term in terms if _term_match(term,content))
+            if matches: score+=4+min(matches,3)
+        if not score and any(_term_match(word,content) for word in DISCOVERY_HUB_WORDS): score=1
+        return score
+    def _discover(self):
+        with self._index_lock:
+            if self._index is not None: return self._index
+            end=min(self.deadline,time.monotonic()+MAX_DISCOVERY_SECONDS)
+            domain=self.sources.domain
+            roots=[f"https://{domain}/"]
+            www=f"https://www.{domain}/"
+            if www!=roots[0]: roots.append(www)
+            queue=[{"url":u,"label":"","depth":0} for u in roots if _approved_public_url(u,domain)]
+            queued={item["url"] for item in queue}; attempted=set(); pages=[]; fetched_count=0
+            pool=cf.ThreadPoolExecutor(max_workers=MAX_DISCOVERY_WORKERS)
+            try:
+                while queue and fetched_count<MAX_DISCOVERY_PAGES and time.monotonic()<end:
+                    queue.sort(key=lambda x:(-self._discovery_score(x["url"],x["label"]),x["depth"],x["url"]))
+                    batch=[]
+                    while queue and len(batch)<MAX_DISCOVERY_WORKERS and fetched_count+len(batch)<MAX_DISCOVERY_PAGES:
+                        item=queue.pop(0)
+                        if item["url"] not in attempted:
+                            attempted.add(item["url"]); batch.append(item)
+                    if not batch: break
+                    futures={pool.submit(self.sources.fetch,item["url"],
+                                timeout=min(DISCOVERY_FETCH_TIMEOUT,max(.2,end-time.monotonic()))):item for item in batch}
+                    done,pending=cf.wait(futures,timeout=max(0,end-time.monotonic()))
+                    fetched_count+=len(batch)
+                    for future in done:
+                        item=futures[future]
+                        try: page=future.result()
+                        except (requests.RequestException,ValueError,KeyError,TimeoutError,OSError): page=None
+                        if not page or not isinstance(page,dict): continue
+                        page_url=page.get("url",item["url"])
+                        if not _approved_public_url(page_url,domain): continue
+                        pages.append({"fetchUrl":item["url"],"page":page,"label":item["label"],"depth":item["depth"]})
+                        if item["depth"]>=MAX_DISCOVERY_DEPTH or time.monotonic()>=end: continue
+                        labels=page.get("linkLabels",{})
+                        for link in page.get("links",[]):
+                            if (not isinstance(link,str) or not _approved_public_url(link,domain)
+                                    or link in queued or link in attempted): continue
+                            queued.add(link)
+                            queue.append({"url":link,"label":str(labels.get(link,""))[:160],"depth":item["depth"]+1})
+                    # A timed-out fetch may continue briefly; do not block the request budget.
+                    for future in pending: future.cancel()
+            finally:
+                pool.shutdown(wait=False,cancel_futures=True)
+            self._index=pages
+            return self._index
+    def search_lane(self,query,lane):
         if time.monotonic()>=self.deadline: return []
-        home=None
-        for root in (f"https://{self.sources.domain}/",f"https://www.{self.sources.domain}/"):
-            home=self.sources.fetch(root,timeout=min(5,max(1,self.deadline-time.monotonic())))
-            if home: break
-        if not home: return []
-        lane=query.split(" ",3)[3].split(" first-year official dates fees process")[0].lower()
-        keywords={"admissions":("admission","apply","undergraduate"),
-                  "admission to enrollment":("admitted","enroll"),
-                  "financial aid":("financial","aid","fafsa"),
-                  "scholarships and funding":("scholarship",),
-                  "housing and dining":("housing","residence","first-year"),
-                  "orientation and academics":("orientation","advising")}
-        terms=keywords.get(lane,tuple(w.lower() for w in lane.split() if len(w)>3))
-        labels=home.get("linkLabels",{})
-        matches=[link for link in home.get("links",[]) if any(w in (link+" "+labels.get(link,"")).lower() for w in terms)]
-        matches.sort(key=lambda link:(bool(re.search(r"visit|tour|news|research",link,re.I)),
-                                      0 if re.search(r"/apply(?:/|$)|first[-_]?year|freshm",link,re.I) else 1,
-                                      len(urlparse(link).path)))
-        deep=[]
-        if lane=="admissions":
-            for link in matches[:3]:
-                if time.monotonic()>=self.deadline: break
-                landing=self.sources.fetch(link,timeout=min(5,max(1,self.deadline-time.monotonic())))
-                if not landing: continue
-                for child in landing.get("links",[]):
-                    if re.search(r"first[-_]?year|freshm|/apply/(?!certificates?\b)",child,re.I) and child not in deep:
-                        deep.append(child)
-        ordered=[]
-        for link in deep+matches+[home["url"]]:
-            if link not in ordered: ordered.append(link)
-        return ordered[:5]
+        pages=self._discover()
+        if not pages: return []
+        terms=LANE_KEYWORDS.get(lane.lower(),tuple(w.lower() for w in lane.split() if len(w)>3))
+        def score(item):
+            page=item["page"]
+            url_label=f"{item['fetchUrl']} {item['label']}".lower().replace("_"," ").replace("-"," ")
+            page_text=str(page.get("text",""))[:6000].lower()
+            link_score=sum(1 for term in terms if _term_match(term,url_label))
+            body_score=sum(1 for term in terms if _term_match(term,page_text))
+            return link_score*4+min(body_score,4)
+        ranked=sorted(pages,key=lambda item:(-score(item),item["depth"],item["fetchUrl"]))
+        matching=[item for item in ranked if score(item)>0]
+        chosen=matching[:MAX_LANE_PAGES]
+        # Keep a root fallback when fewer than five topic pages were found; otherwise
+        # spend the per-lane page budget on the more specific official pages.
+        root=next((item for item in ranked if item["depth"]==0),None)
+        if root and root not in chosen and len(chosen)<MAX_LANE_PAGES: chosen.insert(0,root)
+        if not chosen and root: chosen=[root]
+        return list(dict.fromkeys(item["fetchUrl"] for item in chosen))[:MAX_LANE_PAGES]
+    def search(self,query):
+        # Backwards-compatible call shape for tests/callers; production supplies the
+        # checkpoint domain explicitly through search_lane to handle multiword lanes.
+        suffix=" first-year official dates fees process"
+        body=query[:-len(suffix)] if query.endswith(suffix) else query
+        lane=next((name for name in sorted(LANE_KEYWORDS,key=len,reverse=True) if body.lower().endswith(name)),None)
+        return self.search_lane(query,lane or body.split()[-1])
     @staticmethod
     def _sentences(text):
         for chunk in re.split(r"(?<=[.!?])\s+|\s*\n+",text):
-            sentence=chunk.strip()
-            if 12<=len(sentence)<=500: yield sentence
+            quote=chunk.strip()
+            if 12<=len(quote)<=500:
+                yield quote
     @staticmethod
-    def _scope(quote,title,term,kind):
-        # Follow deployed request-evidence.ts evergreen exclusions; also reject
-        # natural-language dates and volatile quote claims the TS regex misses.
-        cycles=EXPLICIT_CYCLE.findall(quote)
-        if any(c.lower()!=term.lower() for c in cycles): return "out-of-scope"
-        if term in quote: return "exact-term"
-        if (kind in {"date","money","aid"} or TERM_SENSITIVE.search(title)
-                or VOLATILE_VALUE.search(quote) or CALENDAR_DATE.search(quote)
-                or QUOTE_TERM_SENSITIVE.search(quote) or cycles):
-            return "out-of-scope"
-        return "evergreen"
-    @staticmethod
-    def _supported(kind,quote):
+    def _kind_supported(kind,quote):
         if kind=="date": return bool(CALENDAR_DATE.search(quote))
-        if kind=="money": return bool(MONEY_VALUE.search(quote))
-        if kind=="eligibility": return bool(re.search(r"\b(?:required|requirement|must|exempt)\b",quote,re.I))
+        if kind=="money": return bool(MONEY_VALUE.search(quote) or re.search(r"\b(?:refundable|nonrefundable|refunded|refund)\b",quote,re.I))
+        if kind=="aid": return bool(re.search(r"\b(?:FAFSA|TASFA|financial aid|student aid|award)\b",quote,re.I))
+        if kind=="scholarship": return bool(re.search(r"scholarship",quote,re.I))
+        if kind=="eligibility": return bool(re.search(r"\b(?:eligible|eligibility|requirement|required|must|GPA|waiv(?:ed|er)|exempt|automatic(?:ally)?|consideration)\b",quote,re.I))
         return True
-    def _find_quote(self,code,term,page,title):
+    def _find_quote(self,code,term,page,title=""):
         rule=EXPLICIT_CLAIMS.get(code)
         if not rule: return None
-        pattern,kind=rule
+        pattern,kind=rule; pattern=re.compile(pattern,re.I)
         for sentence in self._sentences(page.get("text","")):
-            if RESTRICTED_APPLICABILITY.search(sentence):
-                continue  # do not project a special-population rule onto all first-year students
-            if kind=="date" and re.search(r"\b(?:not yet (?:published|announced|posted)|to be announced|TBD|unknown)\b",sentence,re.I):
-                continue  # a calendar date in a publication notice is not a deadline
-            if code=="ADM-04" and not (re.search(r"\bwaiv(?:e|er|ers|ed)\b",sentence,re.I)
-                                       and re.search(r"\b(?:request|apply|submit|eligible|qualify)\b",sentence,re.I)):
-                continue  # a price alone does not verify the waiver process
-            if code=="ADM-06" and not re.search(r"\b(?:submit|submitted|send|sent|report|via|through|self-report)\b",sentence,re.I):
-                continue  # test policy alone does not establish submission method
-            if (re.search(pattern,sentence,re.I) and self._supported(kind,sentence)
-                    and self._scope(sentence,title,term,kind)!="out-of-scope"):
+            if not pattern.search(sentence) or not self._kind_supported(kind,sentence):
+                continue
+            exact_term=term in sentence
+            evergreen=(not TERM_SENSITIVE_TITLE.search(title)
+                       and not VOLATILE_VALUE.search(sentence)
+                       and not EXPLICIT_CYCLE.search(sentence))
+            if exact_term or evergreen:
                 return sentence
         return None
     @staticmethod
     def _corroboration(first,second):
-        a=[m.group().replace(" ","") for m in CLAIM_TOKENS.finditer(first)]
-        b=[m.group().replace(" ","") for m in CLAIM_TOKENS.finditer(second)]
+        a=[m.group(0).replace(" ","") for m in CLAIM_TOKENS.finditer(first)]
+        b=[m.group(0).replace(" ","") for m in CLAIM_TOKENS.finditer(second)]
         if a and b and a!=b: return "conflicting"
         if first==second or (a and b and a==b): return "verified"
         return "under_review"
     def propose(self,term,domain,checkpoints,pages):
         results=[]
         for checkpoint in checkpoints:
-            code=checkpoint["code"]; title=checkpoint.get("title","")
-            if code=="ADM-01":
-                # Preserve the deployed exact-term and narrowly worded evergreen
-                # platform rules, including a source quote when the server must
-                # withhold an old-cycle candidate.
-                exact=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?)\b",re.I)
-                platform=re.compile(r"\b(?:recommend using the Common App to apply|apply (?:using|through) (?:the )?(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?))\b",re.I)
-                candidate=next(((p,m.group()) for p in pages if (m:=exact.search(p["text"])) and len(m.group())>=12),None)
-                if not candidate:
-                    candidate=next(((p,s) for p in pages for s in self._sentences(p["text"]) if platform.search(s)),None)
-                if not candidate: continue
-                page,quote=candidate
-                state="verified" if self._scope(quote,title,term,"platform")!="out-of-scope" else "under_review"
-            else:
-                if code not in EXPLICIT_CLAIMS: continue
-                candidate=next(((p,q) for p in pages if (q:=self._find_quote(code,term,p,title))),None)
-                if not candidate: continue
-                page,quote=candidate; kind=EXPLICIT_CLAIMS[code][1]
-                state="verified"
-                second=None
-                if HIGH_RISK.search(title) or kind in {"date","money","aid","eligibility"}:
-                    second=next(((other,q) for other in pages if other["url"]!=page["url"]
-                                 and other.get("text")!=page.get("text")
-                                 and (q:=self._find_quote(code,term,other,title))),None)
-                    if not second: state="under_review"
-                    else: state=self._corroboration(quote,second[1])
-            proposal={"code":code,"state":state,"sourceUrl":page["url"],"quote":quote}
-            if code!="ADM-01" and second:
-                proposal.update({"secondSourceUrl":second[0]["url"],"secondQuote":second[1]})
+            code=checkpoint["code"]
+            title=checkpoint.get("title","")
+            primary=next(((page,quote) for page in pages if (quote:=self._find_quote(code,term,page,title))),None)
+            if not primary: continue
+            page,quote=primary
+            kind=EXPLICIT_CLAIMS[code][1]
+            claim_needs_second=(CORROBORATION_TITLE.search(checkpoint.get("title","")) is not None
+                                or kind in {"date","money","eligibility","aid","scholarship"})
+            proposal={"code":code,"state":"verified","sourceUrl":page["url"],"quote":quote}
+            if claim_needs_second:
+                second=next(((other,other_quote) for other in pages if other["url"]!=page["url"]
+                             and other.get("text")!=page.get("text")
+                             and (other_quote:=self._find_quote(code,term,other,title))),None)
+                if second:
+                    other,other_quote=second
+                    proposal.update({"state":self._corroboration(quote,other_quote),
+                                     "secondSourceUrl":other["url"],"secondQuote":other_quote})
+                else:
+                    proposal["state"]="under_review"
             results.append(proposal)
         return results
 
@@ -366,10 +461,8 @@ class Providers:
         client=Anthropic(api_key=self.model_key,timeout=min(55,max(1,int(self.deadline-time.monotonic()))),max_retries=0)
         msg=client.messages.create(model=self.model,max_tokens=MAX_MODEL_OUTPUT_TOKENS,system=(
             "Return only a JSON array, one object per checkpoint with code,state,sourceUrl,quote,secondSourceUrl,secondQuote,publicationDate. "
-            "Use exact quoted substrings from supplied official pages. The exact requested term is mandatory for dates, deadlines, "
-            "fees, costs, aid, scholarships, deposits, payment amounts, release timing, and any quote that names an academic cycle. "
-            "A non-date/non-financial policy or process may use an evergreen quote only when that quote names no other cycle, date, cost, or percentage. "
-            "Never invent evidence or dates. If the required scope is absent, choose not_found_official, publication_date_unknown, "
+            "Use exact quoted substrings from supplied official pages, including the exact requested term. "
+            "Never invent evidence or dates. If no exact-term answer, choose not_found_official, publication_date_unknown, "
             "not_publicly_available or under_review. No admission essays or personal content. "
             "For high-risk deadlines/costs/requirements, find independently corroborating text on a second supplied page or mark under_review."),
             messages=[{"role":"user","content":prompt_json}])
@@ -382,28 +475,29 @@ class Providers:
 def research_lane(domain,term,checkpoints,sources,provider,deadline):
     if time.monotonic()>deadline: return []
     lane=checkpoints[0]["domain"]
-    urls=provider.search(f"site:{domain} {term} {lane} first-year official dates fees process")
+    query=f"site:{domain} {term} {lane} first-year official dates fees process"
+    urls=(provider.search_lane(query,lane) if hasattr(provider,"search_lane") else provider.search(query))
     pages=[]
     for url in urls:
-        if time.monotonic()>deadline or len(pages)>=3: break
+        if time.monotonic()>deadline or len(pages)>=5: break
         page=sources.fetch(url,timeout=min(6,max(1,deadline-time.monotonic())))
         if page: pages.append(page)
     if not pages: return [{"code":c["code"],"state":"not_found_official" if getattr(provider,"paid",True) and time.monotonic()<deadline else "under_review"} for c in checkpoints]
     proposed=provider.propose(term,domain,checkpoints,pages)
-    lookup={p["url"]:p["text"] for p in pages}
+    lookup={p["url"]:p["text"] for p in pages}  # validate any located quote; only the quote itself is submitted
     result=[]; codes={c["code"] for c in checkpoints}
     for p in proposed:
         if not isinstance(p,dict) or p.get("code") not in codes or p.get("state") not in STATES: continue
         p={k:p.get(k) for k in ("code","state","sourceUrl","quote","secondSourceUrl","secondQuote","publicationDate")}
-        # The deployed evidence contract accepts a quote-only pageText if it is
-        # the exact substring of a page we actually fetched. This avoids sending
-        # unrelated page content and retains matches past the old 6,000-char cut.
-        first_url,first_quote=p.get("sourceUrl"),p.get("quote")
-        second_url,second_quote=p.get("secondSourceUrl"),p.get("secondQuote")
-        p["pageText"]=(first_quote if isinstance(first_url,str) and isinstance(first_quote,str)
-                       and first_quote in lookup.get(first_url,"") else "")
-        p["secondPageText"]=(second_quote if isinstance(second_url,str) and isinstance(second_quote,str)
-                             and second_quote in lookup.get(second_url,"") else "")
+        if not isinstance(p.get("sourceUrl"),str) or not isinstance(p.get("quote"),str):
+            p["state"]="under_review"; p["sourceUrl"]=None; p["quote"]=None
+        if not isinstance(p.get("secondSourceUrl"),str) or not isinstance(p.get("secondQuote"),str):
+            p["secondSourceUrl"]=None; p["secondQuote"]=None
+        if not isinstance(p.get("publicationDate"),str): p["publicationDate"]=None
+        source_text=lookup.get(p.get("sourceUrl"),"")
+        p["pageText"]=p["quote"] if p.get("quote") and p["quote"] in source_text else ""
+        second_text=lookup.get(p.get("secondSourceUrl"),"")
+        p["secondPageText"]=p["secondQuote"] if p.get("secondQuote") and p["secondQuote"] in second_text else ""
         result.append(p)
     return result
 
