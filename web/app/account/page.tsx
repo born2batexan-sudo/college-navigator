@@ -53,7 +53,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <input type="hidden" name="provider" value={p}/>
             <p className="font-medium">{p==='gmail'?'Google Gmail':'Microsoft 365 Outlook'}</p>
             <p className="mt-1 text-ink/60">{p==='gmail'?'Google gmail.readonly is needed for sender-scoped search; this is a restricted Google scope.':'Microsoft Mail.ReadBasic plus User.Read; the provider omits bodies, previews, and attachments.'} Account identity is verified by the provider; access can be revoked in provider settings.</p>
-            <label className="mt-2 flex gap-2"><input type="checkbox" name="consent" value="yes" required/> I consent to this provider&apos;s limited mail access and 30-day evidence retention.</label>
+            <label className="mt-2 flex gap-2"><input type="checkbox" name="consent" value="yes" required/> <span>{p==='gmail'?'I understand Google grants Campus Passage read access to my Gmail mailbox. Campus Passage limits its own requests to approved sender domains and stores only sender/time evidence—never bodies or attachments.':'I consent to Microsoft Mail.ReadBasic access. Campus Passage limits requests to approved sender domains and stores only sender/time evidence—never bodies, previews, or attachments.'} I consent to 30-day evidence retention.</span></label>
             <button className="mt-2 rounded bg-accent px-3 py-2 text-white">Connect {p==='gmail'?'Gmail':'Microsoft 365'}</button>
           </form>)}
         </>}
@@ -64,7 +64,8 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             {c.status!=='revoked'&&<form action={disconnectMailAction} className="inline-block"><input type="hidden" name="id" value={c.id}/><button className="underline">Disconnect and erase evidence</button></form>}
           </div>)}
           <p className="mt-3 text-xs text-ink/60">Microsoft does not provide per-app OAuth revocation under these least-privilege scopes. After disconnect, remove Campus Passage in <a className="underline" href="https://myapps.microsoft.com/">Microsoft My Apps</a>. If Google revocation fails, remove access in your Google account security settings. Local tokens and evidence are erased regardless.</p>
-          <form action={deleteMailAction} className="mt-3 flex gap-2 text-sm"><input name="confirm" placeholder="Type DELETE" aria-label="Type DELETE to erase connected mail" className="rounded border border-line px-2"/><button className="rounded border border-urgent/40 px-3 py-2 text-urgent">Delete all connected-mail data</button></form>
+          <form action={deleteMailAction} className="mt-3 flex gap-2 text-sm"><input name="confirm" placeholder="Type DELETE" aria-label="Type DELETE to erase connected mail" className="rounded border border-line px-2"/><button className="rounded border border-urgent/40 px-3 py-2 text-urgent">Delete connected-mail tokens and evidence</button></form>
+          <p className="mt-2 text-xs text-ink/60">Deletion immediately removes local provider tokens, connections, sync records, and retained mail evidence. A minimal deletion audit record—without tokens or message evidence—is retained for up to 90 days, then purged.</p>
       </section>}
       <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
         <h2 className="font-display text-xl font-semibold text-ink">Student profiles</h2>

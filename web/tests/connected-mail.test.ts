@@ -44,6 +44,7 @@ describe('connected mail OAuth and scoped transport',()=>{
   const row=await C.queryOne<any>('SELECT * FROM mail_connections WHERE household_id=$1',[owner.household.id]);
   assert.doesNotMatch(row.encrypted_tokens,/gmail-access|gmail-refresh/);
   assert.notEqual(row.account_hash,'google-sub-123');
+  assert.equal(row.consent_version,P.consent);
  });
  it('Gmail searches only approved sender domains and fetches header metadata, never body/attachments',async()=>{
   const time=now(), seen:string[]=[];
@@ -75,6 +76,11 @@ describe('connected mail OAuth and scoped transport',()=>{
   await C.exec('INSERT INTO institution_sender_policies(id,institution_id,sender_domain,curated_by,created_at) VALUES($1,$2,$3,$4,$5)',['mail-policy','mail-school','example.edu',actor.id,timestamp]);
   await C.exec('INSERT INTO verified_mail_senders(id,institution_id,domain,source_id,verified_at) VALUES($1,$2,$3,$4,$5)',['mail-sender','mail-school','example.edu','mail-source',timestamp]);
   const row=await C.queryOne<any>('SELECT * FROM mail_connections WHERE household_id=$1',[owner.household.id]);
+  const intruderActor={id:'other-mail-owner',email:'other-mail-owner@example.com'};
+  const intruder=await A.provisionAccount({authUserId:intruderActor.id,email:intruderActor.email});
+  await assert.rejects(M.disconnectMail(intruderActor,intruder.household.id,row.id,async()=>{throw Error('provider must not be called');}),/Connection unavailable/);
+  await M.deleteMailData(intruderActor,intruder.household.id,async()=>{throw Error('provider must not be called');});
+  assert.equal((await C.queryOne<any>('SELECT COUNT(*) AS n FROM mail_connections WHERE id=$1 AND household_id=$2',[row.id,owner.household.id])).n,1);
   // Existing expired grant triggers OAuth refresh before any inbox request.
   const Db=await import('../lib/db/connected-mail');
   await C.exec('UPDATE mail_connections SET encrypted_tokens=$1 WHERE id=$2',[Db.sealTokens({accessToken:'expired',refreshToken:'old-refresh',expiresAt:Date.now()-1000}),row.id]);

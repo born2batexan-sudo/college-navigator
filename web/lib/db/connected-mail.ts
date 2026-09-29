@@ -1,4 +1,4 @@
-// Review-only connected-mail contract; no OAuth callback or provider API calls are enabled.
+// Connected-mail storage contract. Provider OAuth and HTTP transports exist but remain disabled unless the reviewed feature flag and provider configuration are present.
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { exec, newId, nowIso, queryOne, queryRows, usingPostgres, withTransaction } from './client';
 import { RetryLater, ReconsentRequired } from '@/lib/mail/provider';
@@ -46,7 +46,7 @@ async function control(householdId:string,eventType:string,actor:string,detailCo
 /** Internal callback contract only: caller must be a reviewed OAuth server adapter,
  * never a browser form. Consent does not grant account sign-in or payment. */
 export async function storeConnectedMail(input: {householdId:string;actorId:string;provider:MailProvider;accountId:string;tokens:StoredTokens;consentVersion:string}) {
- if (!['gmail','microsoft'].includes(input.provider) || input.consentVersion !== 'connected-mail-2026-09-v1' || !input.accountId || input.accountId.length>200) throw new Error('Explicit consent and verified account required');
+ if (!['gmail','microsoft'].includes(input.provider) || input.consentVersion !== 'connected-mail-2026-09-v2' || !input.accountId || input.accountId.length>200) throw new Error('Explicit consent and verified account required');
  await assertOwner(input.householdId,input.actorId);
  const sealed=sealTokens(input.tokens), id=newId('mail'), now=nowIso();
  await withTransaction(async()=>{
@@ -68,7 +68,7 @@ export async function approvedMailSenders(): Promise<{institutionId:string;domai
 /** Future verified OAuth callback only: renewed explicit consent, never a browser token form. */
 export async function reconsentConnectedMail(input:{householdId:string;actorId:string;connectionId:string;accountId:string;tokens:StoredTokens;consentVersion:string}) {
  await assertOwner(input.householdId,input.actorId);
- if(input.consentVersion!=='connected-mail-2026-09-v1') throw new Error('Explicit consent required');
+ if(input.consentVersion!=='connected-mail-2026-09-v2') throw new Error('Explicit consent required');
  const sealed=sealTokens(input.tokens), hash=digest(input.accountId);
  await withTransaction(async()=>{
   const row=await queryOne<any>(`SELECT * FROM mail_connections WHERE id=$1 AND household_id=$2${usingPostgres?' FOR UPDATE':''}`,[input.connectionId,input.householdId]);

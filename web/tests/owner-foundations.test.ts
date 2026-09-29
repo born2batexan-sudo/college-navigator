@@ -76,14 +76,14 @@ describe('owner review foundations',()=>{
   assert.equal((await C.queryOne<any>('SELECT revoked_at FROM cycle_entitlements WHERE order_id=$1',[id])).revoked_at!==null,true);
  });
  it('mail consent is owner-scoped, tokens sealed; nonallowlisted messages discarded; revoke and delete purge',async()=>{
-  await assert.rejects(M.storeConnectedMail({householdId:family.household.id,actorId:'stranger',provider:'gmail',accountId:'abc',tokens:{accessToken:'token',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v1'}));
-  const id=await M.storeConnectedMail({householdId:family.household.id,actorId:'family-auth',provider:'gmail',accountId:'abc',tokens:{accessToken:'token',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v1'});
+  await assert.rejects(M.storeConnectedMail({householdId:family.household.id,actorId:'stranger',provider:'gmail',accountId:'abc',tokens:{accessToken:'token',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v2'}));
+  const id=await M.storeConnectedMail({householdId:family.household.id,actorId:'family-auth',provider:'gmail',accountId:'abc',tokens:{accessToken:'token',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v2'});
   assert.doesNotMatch((await C.queryOne<any>('SELECT encrypted_tokens FROM mail_connections WHERE id=$1',[id])).encrypted_tokens,/token|refresh/);
   assert.deepEqual(await M.syncConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,adapter:{provider:'gmail',async listMinimalMetadata(){throw new Error('No provider calls expected without allowlist')}}}),{accepted:0,quarantined:0});
   await M.revokeConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id});
   assert.equal((await C.queryOne<any>('SELECT encrypted_tokens FROM mail_connections WHERE id=$1',[id])).encrypted_tokens,'revoked');
-  await assert.rejects(M.reconsentConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,accountId:'wrong',tokens:{accessToken:'new',refreshToken:'new'},consentVersion:'connected-mail-2026-09-v1'}));
-  await M.reconsentConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,accountId:'abc',tokens:{accessToken:'new',refreshToken:'new'},consentVersion:'connected-mail-2026-09-v1'});
+  await assert.rejects(M.reconsentConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,accountId:'wrong',tokens:{accessToken:'new',refreshToken:'new'},consentVersion:'connected-mail-2026-09-v2'}));
+  await M.reconsentConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,accountId:'abc',tokens:{accessToken:'new',refreshToken:'new'},consentVersion:'connected-mail-2026-09-v2'});
   assert.equal((await C.queryOne<any>('SELECT status FROM mail_connections WHERE id=$1',[id])).status,'active');
   await M.deleteConnectedMail({householdId:family.household.id,actorId:'family-auth'});
   assert.equal((await C.queryOne<any>('SELECT COUNT(*) AS n FROM mail_connections WHERE household_id=$1',[family.household.id])).n,0);
@@ -114,7 +114,7 @@ describe('owner review foundations',()=>{
   await C.exec('UPDATE sources SET last_verified=$1 WHERE id=$2',[now,'source_cite']);
   await C.exec('INSERT INTO institution_sender_policies(id,institution_id,sender_domain,curated_by,created_at) VALUES($1,$2,$3,$4,$5)',['policy_cite','school_cite','example.edu',actor.id,now]);
   await C.exec('INSERT INTO verified_mail_senders(id,institution_id,domain,source_id,verified_at) VALUES($1,$2,$3,$4,$5)',['vendor_cite','school_cite','example.edu','source_cite',now]);
-  const id=await M.storeConnectedMail({householdId:family.household.id,actorId:'family-auth',provider:'microsoft',accountId:'account',tokens:{accessToken:'access',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v1'});
+  const id=await M.storeConnectedMail({householdId:family.household.id,actorId:'family-auth',provider:'microsoft',accountId:'account',tokens:{accessToken:'access',refreshToken:'refresh'},consentVersion:'connected-mail-2026-09-v2'});
   const adapter={provider:'microsoft' as const,async listMinimalMetadata(scope:any){assert.deepEqual(scope.domains,['example.edu']);return {nextCheckpoint:'cursor1',envelopes:[{id:'m1',senderDomain:'spam.example.com',observedAt:now,authenticated:true},{id:'m2',senderDomain:'example.edu',observedAt:now,authenticated:true}]};}};
   assert.deepEqual(await M.syncConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,adapter}),{accepted:1,quarantined:0});
   assert.deepEqual(await M.syncConnectedMail({householdId:family.household.id,actorId:'family-auth',connectionId:id,adapter}),{accepted:0,quarantined:0});

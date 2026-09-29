@@ -4,7 +4,7 @@ import type { ConnectedMailAdapter, MailProvider, MailScope, MinimalEnvelope } f
 
 export type MailTokens = { accessToken:string; refreshToken:string; expiresAt?:number };
 export type Transport = typeof fetch;
-const consent = 'connected-mail-2026-09-v1';
+const consent = 'connected-mail-2026-09-v2';
 export { consent };
 const cfg = (provider:MailProvider) => provider==='gmail' ? {
  clientId:process.env.MAIL_GOOGLE_CLIENT_ID, secret:process.env.MAIL_GOOGLE_CLIENT_SECRET,
