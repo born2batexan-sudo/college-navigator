@@ -156,7 +156,7 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(all(x["state"]=="under_review" for x in submitted["candidates"]))
         self.assertEqual(calls[3][2]["outcome"],"review")
         self.assertEqual(calls[3][2]["costCents"],0)
-    def test_extracts_only_explicit_term_first_year_platform(self):
+    def test_extracts_exact_term_or_evergreen_first_year_platform(self):
         sources=PublicSources("example.edu")
         text="For Fall 2027 first-year applicants, apply using the Common App online."
         provider=OfficialPublicProvider(sources,time.monotonic()+5)
@@ -164,7 +164,11 @@ class PipelineTest(unittest.TestCase):
         matching=provider.propose("Fall 2027","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}])
         self.assertEqual(matching[0]["code"],"ADM-01")
         self.assertIn("Fall 2027",matching[0]["quote"])
-        self.assertEqual(provider.propose("Fall 2028","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}]),[])
+        prior=provider.propose("Fall 2028","example.edu",admissions,[{"url":"https://example.edu/admission","text":text}])
+        self.assertIn("Fall 2027",prior[0]["quote"],"server must see and withhold the competing cycle")
+        evergreen="We recommend using the Common App to apply, but you can also apply using the Apply Texas application."
+        evergreen_result=provider.propose("Fall 2027","example.edu",admissions,[{"url":"https://example.edu/admission","text":evergreen}])
+        self.assertEqual(evergreen_result[0]["quote"],evergreen)
         self.assertEqual(provider.propose("Fall 2027","example.edu",[{"code":"ENR-01","domain":"Admission to Enrollment"}],[{"url":"https://example.edu/admission","text":text}]),[])
     def test_official_home_link_proposes_exact_excerpt_without_provider(self):
         source=PublicSources("example.edu")

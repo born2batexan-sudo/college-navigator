@@ -6,7 +6,15 @@ export type EvidenceState = typeof EVIDENCE_STATES[number];
 export type Candidate = { code: string; state: EvidenceState; sourceUrl?: string; quote?: string; pageText?: string; secondSourceUrl?: string; secondQuote?: string; secondPageText?: string; explanation?: string; publicationDate?: string; checkedAt?: string; nextCheckAt?: string };
 export type Resolution = { code: string; state: EvidenceState; sourceUrl: string | null; quote: string | null; explanation: string; fingerprint: string | null; checkedAt: string; nextCheckAt: string };
 const HIGH_RISK = /(?:deadline|fee|deposit|refund|waiver|insurance|residency|immunization|requirement|aid|tuition|payment|scholarship)/i;
+const TERM_SENSITIVE = /(?:deadline|date|fee|cost|tuition|deposit|refund|waiver|aid|scholarship|payment|amount|rate|award|opening|closing|release|decision|notification|timing|calendar|window)/i;
+const EXPLICIT_CYCLE = /\b(?:Fall|Spring|Summer|Winter)\s+20\d\d\b|\b20\d\d\s*[-–/]\s*20\d\d\b/i;
+const VOLATILE_VALUE = /\$\s?\d|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}\/\d{1,2}(?:\/20\d\d)?\b|\b\d+(?:\.\d+)?%/;
 const CP = new Map(ALL_CHECKPOINTS.map(c => [c.code, c]));
+function evidenceScope(quote: string, title: string, term: string): "exact-term" | "evergreen" | "out-of-scope" {
+  if (quote.includes(term)) return "exact-term";
+  if (TERM_SENSITIVE.test(title) || VOLATILE_VALUE.test(quote) || EXPLICIT_CYCLE.test(quote)) return "out-of-scope";
+  return "evergreen";
+}
 export function officialUrl(url: string, domain: string): boolean {
   try {
     const u = new URL(url), d = domain.toLowerCase().replace(/^www\./, "");
@@ -36,15 +44,18 @@ export function resolveCandidate(candidate: Candidate | undefined, code: string,
   let state: EvidenceState = candidate && EVIDENCE_STATES.includes(candidate.state) && candidate.code === code ? candidate.state : "under_review";
   const url = candidate?.sourceUrl ?? "", text = candidate?.pageText ?? "", quote = candidate?.quote?.trim() ?? "";
   const hasEvidence = officialUrl(url, domain) && quote.length >= 12 && text.includes(quote) && text.length <= 200000;
-  // Never treat an undated/prior-cycle page as proof of the exact entering term.
-  const currentTerm = text.includes(term) && quote.includes(term);
+  const title = CP.get(code)!.title;
+  const scope = evidenceScope(quote, title, term);
+  // Dates, money, aid, scholarships, deposits, release timing, and any quote naming a cycle
+  // still require the requested term. Only non-volatile policy/process facts may be evergreen.
   if (["verified", "not_applicable", "not_yet_published"].includes(state)) {
-    if (!hasEvidence || !currentTerm) state = "withheld";
-    else if (state === "not_yet_published" && !/(not yet (?:published|posted|available|open)|will (?:be )?(?:published|posted|available)|publication (?:is )?expected)/i.test(quote)) state = "under_review";
+    if (!hasEvidence || scope === "out-of-scope") state = "withheld";
+    else if (state === "not_yet_published" && (scope !== "exact-term" || !/(not yet (?:published|posted|available|open)|will (?:be )?(?:published|posted|available)|publication (?:is )?expected)/i.test(quote))) state = "under_review";
     else if (state === "not_applicable" && !/(not required|does not apply|not applicable|exempt|no .*required)/i.test(quote)) state = "under_review";
-    else if (state === "verified" && HIGH_RISK.test(CP.get(code)!.title)) {
-      const second = candidate?.secondSourceUrl ?? "", secondText = candidate?.secondPageText ?? "", secondQuote = candidate?.secondQuote ?? "";
-      if (!officialUrl(second, domain) || second === url || secondQuote.length < 12 || !secondText.includes(secondQuote) || !secondQuote.includes(term)) state = "under_review";
+    else if (state === "verified" && HIGH_RISK.test(title)) {
+      const second = candidate?.secondSourceUrl ?? "", secondText = candidate?.secondPageText ?? "", secondQuote = candidate?.secondQuote?.trim() ?? "";
+      const secondScope = evidenceScope(secondQuote, title, term);
+      if (!officialUrl(second, domain) || second === url || secondQuote.length < 12 || !secondText.includes(secondQuote) || secondScope === "out-of-scope") state = "under_review";
       else {
         const claims=(s:string)=>[...s.matchAll(/\$\s?\d+(?:,\d{3})*(?:\.\d{2})?|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}\/\d{1,2}(?:\/20\d\d)?\b|\b\d+(?:\.\d+)?%/g)].map(m=>m[0].replaceAll(' ',''));
         const a=claims(quote),b=claims(secondQuote);
@@ -53,12 +64,12 @@ export function resolveCandidate(candidate: Candidate | undefined, code: string,
       }
     }
   }
-  if (state === "not_publicly_available" && (!hasEvidence || !currentTerm)) state = "not_found_official";
+  if (state === "not_publicly_available" && (!hasEvidence || scope !== "exact-term")) state = "not_found_official";
   // Claim that publication has not occurred must itself be supported by an explicit institutional statement.
   const safe = state === "verified" || state === "not_applicable" || state === "not_yet_published";
   const checkedAt = now.toISOString();
   return { code, state, sourceUrl: safe ? url : null, quote: safe ? quote.slice(0, 500) : null,
-    explanation: safe ? "Exact-term official evidence checked" : "No independently validated exact-term public evidence", 
+    explanation: safe ? (scope === "exact-term" ? "Exact-term official evidence checked" : "Evergreen official policy checked; scheduled for recheck") : "No independently validated in-scope public evidence", 
     fingerprint: safe ? createHash("sha256").update(text).digest("hex") : null, checkedAt,
     nextCheckAt: nextCheck(state, now, candidate?.publicationDate, term) };
 }

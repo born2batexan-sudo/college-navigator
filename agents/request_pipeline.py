@@ -147,9 +147,10 @@ class PublicSources:
 class OfficialPublicProvider:
     """No paid discovery/model calls. Shallow, bounded official-link crawl only.
 
-    The one extractive rule is deliberately narrow: a first-year application
-    platform explicitly tied to the entering term. Everything else remains
-    under_review; lack of pages is not proof a college did not publish them.
+    The extractive rules are deliberately narrow: an exact-term first-year
+    application platform or an evergreen official application-platform sentence
+    with no competing cycle/date/cost claim. Everything else remains under_review;
+    lack of pages is not proof a college did not publish them.
     """
     paid=False
     def __init__(self,sources,deadline):
@@ -169,11 +170,16 @@ class OfficialPublicProvider:
         return [home["url"]]+matches[:3]
     def propose(self,term,domain,checkpoints,pages):
         if checkpoints[0]["domain"]!="Admissions": return []
-        pattern=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|ApplyTexas|Coalition App(?:lication)?)\b",re.I)
+        exact=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?)\b",re.I)
+        platform=re.compile(r"\b(?:recommend using the Common App to apply|apply (?:using|through) (?:the )?(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?))\b",re.I)
         for page in pages:
-            match=pattern.search(page["text"])
+            match=exact.search(page["text"])
             if match and len(match.group())>=12:
                 return [{"code":"ADM-01","state":"verified","sourceUrl":page["url"],"quote":match.group()}]
+        for page in pages:
+            for sentence in re.split(r"(?<=[.!?])\s+",page["text"]):
+                if 12<=len(sentence)<=500 and platform.search(sentence):
+                    return [{"code":"ADM-01","state":"verified","sourceUrl":page["url"],"quote":sentence}]
         return []
 
 def official_search_urls(message,domain):
@@ -239,8 +245,10 @@ class Providers:
         client=Anthropic(api_key=self.model_key,timeout=min(55,max(1,int(self.deadline-time.monotonic()))),max_retries=0)
         msg=client.messages.create(model=self.model,max_tokens=MAX_MODEL_OUTPUT_TOKENS,system=(
             "Return only a JSON array, one object per checkpoint with code,state,sourceUrl,quote,secondSourceUrl,secondQuote,publicationDate. "
-            "Use exact quoted substrings from supplied official pages, including the exact requested term. "
-            "Never invent evidence or dates. If no exact-term answer, choose not_found_official, publication_date_unknown, "
+            "Use exact quoted substrings from supplied official pages. The exact requested term is mandatory for dates, deadlines, "
+            "fees, costs, aid, scholarships, deposits, payment amounts, release timing, and any quote that names an academic cycle. "
+            "A non-date/non-financial policy or process may use an evergreen quote only when that quote names no other cycle, date, cost, or percentage. "
+            "Never invent evidence or dates. If the required scope is absent, choose not_found_official, publication_date_unknown, "
             "not_publicly_available or under_review. No admission essays or personal content. "
             "For high-risk deadlines/costs/requirements, find independently corroborating text on a second supplied page or mark under_review."),
             messages=[{"role":"user","content":prompt_json}])

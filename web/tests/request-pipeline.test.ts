@@ -33,6 +33,13 @@ describe("bounded first view evidence",()=>{
   assert.equal(resolveCandidate(candidate,"ADM-01","Fall 2028",domain).state,"withheld");
   assert.equal(resolveCandidate({...candidate,sourceUrl:"https://evil-example.edu/a"},"ADM-01",term,domain).state,"withheld");
   assert.equal(resolveCandidate({...candidate,quote:`Imagined ${term} answer`},"ADM-01",term,domain).state,"withheld");
+  const evergreenQuote="First-year students may apply using the Common Application";
+  const evergreen={code:"ADM-01",state:"verified" as const,sourceUrl:url,quote:evergreenQuote,pageText:`Admissions. ${evergreenQuote}.`};
+  assert.equal(resolveCandidate(evergreen,"ADM-01",term,domain).state,"verified");
+  assert.match(resolveCandidate(evergreen,"ADM-01",term,domain).explanation,/Evergreen/);
+  assert.equal(resolveCandidate({...evergreen,quote:"Fall 2026 first-year students may apply using the Common Application",pageText:"Fall 2026 first-year students may apply using the Common Application"},"ADM-01",term,domain).state,"withheld");
+  assert.equal(resolveCandidate({...evergreen,code:"ADM-02"},"ADM-02",term,domain).state,"withheld","opening dates remain exact-term only");
+  assert.equal(resolveCandidate({...evergreen,quote:"The application costs $75",pageText:"The application costs $75"},"ADM-01",term,domain).state,"withheld","volatile values remain exact-term only");
   assert.equal(resolveCandidate({...candidate,code:"ADM-03"},"ADM-03",term,domain).state,"under_review");
   const dated={code:"ADM-03",state:"verified" as const,sourceUrl:url,quote:`${term} deadline is 2027-02-01`,pageText:`${term} deadline is 2027-02-01`,secondSourceUrl:`https://${domain}/calendar`,secondQuote:`${term} deadline is 2027-03-01`,secondPageText:`${term} deadline is 2027-03-01`};
   assert.equal(resolveCandidate(dated,"ADM-03",term,domain).state,"conflicting");
