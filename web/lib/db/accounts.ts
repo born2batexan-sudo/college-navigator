@@ -16,7 +16,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { exec, queryOne, queryRows, newId, nowIso, usingPostgres, withTransaction } from "./client";
 import { listStudentsForHousehold, upsertStudent } from "./repo";
 import type { Household, Person, Student } from "./types";
-import type { IntakeAnswers } from "../intake";
 import { REQUEST_DDL, REQUEST_TABLES } from "./requests";
 import { EMAIL_VALIDATION_DDL, EMAIL_VALIDATION_TABLES } from "./email-validation";
 import { DEMO_ACCESS_DDL, DEMO_ACCESS_TABLES } from "./demo-access-schema";
@@ -408,23 +407,6 @@ export async function updateStudentAttributes(ctx: HouseholdContext, patch: Reco
   let current: Record<string, unknown> = {};
   try { current = JSON.parse(ctx.student.attributes || "{}"); } catch { current = {}; }
   await exec("UPDATE students SET attributes = $1 WHERE id = $2 AND household_id = $3", [JSON.stringify({ ...current, ...patch }), ctx.student.id, ctx.household.id]);
-}
-
-/** Re-read the selected student's attributes under lock so saving an intake never
- * replaces a newer entering term or another student's answers. */
-export async function updateStudentIntake(ctx: HouseholdContext & { student: Student }, answers: IntakeAnswers): Promise<void> {
-  await requireWritableHousehold(ctx);
-  await withTransaction(async () => {
-    const lock = usingPostgres ? " FOR UPDATE" : "";
-    const row = await queryOne<{ attributes: string }>(`SELECT attributes FROM students WHERE id=$1 AND household_id=$2${lock}`, [ctx.student.id, ctx.household.id]);
-    if (!row) throw new Error("Student profile not found");
-    let attributes: Record<string, unknown> = {};
-    try {
-      const value: unknown = JSON.parse(row.attributes || "{}");
-      if (value && typeof value === "object" && !Array.isArray(value)) attributes = value as Record<string, unknown>;
-    } catch { /* preserve a valid answer even if legacy attributes were malformed */ }
-    await exec("UPDATE students SET attributes=$1 WHERE id=$2 AND household_id=$3", [JSON.stringify({ ...attributes, intake: answers }), ctx.student.id, ctx.household.id]);
-  });
 }
 
 // ---------- Ownership checks (deny by default) ----------

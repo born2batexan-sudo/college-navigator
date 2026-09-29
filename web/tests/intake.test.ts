@@ -80,13 +80,14 @@ describe("persisted student intake and isolation", () => {
     const r2 = await R.upsertRelationship({ studentId: profiles[1].id, institutionId: inst.id });
     const f = fullForm(); f.set("campusLife", "yes");
     const ctx = { ...owner, student: profiles[0] };
-    await assert.rejects(() => A.updateStudentIntake({ ...other, student: profiles[0] }, parseIntakeForm(f)), /Student profile not found/);
-    await A.updateStudentIntake(ctx, parseIntakeForm(f));
+    await A.updateStudentAttributes({ ...other, student: profiles[0] }, { intake: parseIntakeForm(f) });
+    assert.deepEqual(readIntake((await R.getStudent(profiles[0].id))!), {}, "cross-household write changes no row");
+    await A.updateStudentAttributes(ctx, { intake: parseIntakeForm(f) });
     await materializeActionsForRelationship(r1.id); await materializeActionsForRelationship(r2.id);
     assert.ok(await R.findActionInstance(r1.id, conditional.id));
     assert.ok(await R.findActionInstance(r2.id, conditional.id), "unanswered remains visible");
     f.set("campusLife", "no");
-    await A.updateStudentIntake(ctx, parseIntakeForm(f));
+    await A.updateStudentAttributes(ctx, { intake: parseIntakeForm(f) });
     const active = await R.listRelationshipsForStudent(profiles[0].id);
     await Promise.all(active.map(r => materializeActionsForRelationship(r.id)));
     assert.equal((await R.findActionInstance(r1.id, conditional.id))?.state, "not_applicable");
