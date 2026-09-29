@@ -205,4 +205,119 @@ class PipelineTest(unittest.TestCase):
         with patch.dict(os.environ,{"REQUEST_PIPELINE_ENABLED":"0"}), patch("requests.get",side_effect=AssertionError("network")):
             main()
 
+
+    def test_public_reader_captures_safe_official_anchor_labels(self):
+        from contextlib import contextmanager
+        class Response:
+            status=200
+            headers={"Content-Type":"text/plain"}
+            def stream(self,_): return iter([b"User-agent: *\nAllow: /\n"])
+            def close(self): pass
+        @contextmanager
+        def opened(*_args,**_kwargs): yield Response()
+        source=PublicSources("example.edu")
+        html='<main><a href="/node/120">Financial Aid and FAFSA</a><a href="https://other.edu/aid">Outside</a></main>'
+        with patch.object(source,"allowed",return_value=True), patch.object(source,"_open",side_effect=opened), \
+             patch.object(source,"_get",return_value=("https://example.edu/",html)):
+            home=source.fetch("https://example.edu/")
+        self.assertEqual(home["linkLabels"],{"https://example.edu/node/120":"Financial Aid and FAFSA"})
+        self.assertEqual(home["links"],["https://example.edu/node/120"])
+
+    def test_anchor_labels_admit_opaque_official_path_and_preserve_admissions_deep_priority(self):
+        source=PublicSources("example.edu")
+        root="https://example.edu/"; landing="https://example.edu/node/120"
+        first="https://example.edu/admissions/apply/first-year"
+        home={"url":root,"text":"Home","links":[landing],"linkLabels":{landing:"Admissions and Apply"}}
+        pages={root:home,landing:{"url":landing,"text":"Applicant types","links":[first]},
+               first:{"url":first,"text":"First-year","links":[]}}
+        provider=OfficialPublicProvider(source,time.monotonic()+5)
+        with patch.object(source,"fetch",side_effect=lambda url,timeout:pages.get(url)):
+            found=provider.search("site:example.edu Fall 2027 Admissions first-year official dates fees process")
+        self.assertEqual(found[0],first)
+        self.assertIn(landing,found)
+
+    def test_unpaid_multiple_explicit_process_facts_and_safe_evergreen(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        page={"url":"https://example.edu/admission","text":(
+            "For Fall 2027 first-year applicants, apply using the Common App online. "
+            "Official high school transcripts must be submitted by applicants. "
+            "Applicants can check the application status portal to view their status. "
+            "All applicants must submit a letter of recommendation.")}
+        cps=[{"code":"ADM-01","title":"Application platform(s) and applicant type path identified"},
+             {"code":"ADM-05","title":"Transcript submission rules verified"},
+             {"code":"ADM-11","title":"Application status portal and post-submit monitoring path identified"},
+             {"code":"ADM-07","title":"Recommendation requirements verified"}]
+        found={p["code"]:p for p in provider.propose("Fall 2027","example.edu",cps,[page])}
+        self.assertEqual(set(found),{c["code"] for c in cps})
+        for code in ("ADM-01","ADM-05","ADM-11"): self.assertEqual(found[code]["state"],"verified")
+        self.assertEqual(found["ADM-07"]["state"],"under_review")
+        dated_platform={"url":"https://example.edu/apply","text":"Apply using the Common App before October 15."}
+        platform=[c for c in cps if c["code"]=="ADM-01"]
+        self.assertEqual(provider.propose("Fall 2027","example.edu",platform,[dated_platform])[0]["state"],"under_review")
+        policy={"code":"ADM-06","title":"Test score policy and submission method verified"}
+        policy_only={"url":"https://example.edu/tests","text":"SAT and ACT scores are optional for first-year students."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[policy],[policy_only]),[])
+        policy_with_path={**policy_only,"text":"SAT and ACT scores are optional; students can submit scores through the application."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[policy],[policy_with_path])[0]["state"],"verified")
+
+    def test_term_sensitive_exact_term_and_independent_corroboration(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        cp={"code":"ADM-03","title":"Priority / early / regular application deadlines verified"}
+        a={"url":"https://example.edu/admission","text":"For Fall 2027 applicants, the priority application deadline is 2026-10-15."}
+        b={"url":"https://admissions.example.edu/deadlines","text":"The priority application deadline for Fall 2027 applicants is 2026-10-15."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a])[0]["state"],"under_review")
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,b])[0]["state"],"verified")
+        conflict={**b,"text":"The priority application deadline for Fall 2027 applicants is 2026-11-01."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,conflict])[0]["state"],"conflicting")
+        self.assertEqual(provider.propose("Fall 2028","example.edu",[cp],[a,b]),[])
+        notice={**a,"text":"The Fall 2027 application deadline is not yet published; please check October 15."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[notice]),[])
+        mixed={**a,"text":"For Fall 2027 and Fall 2028 applicants, the application deadline is 2026-10-15."}
+        mixed_result=provider.propose("Fall 2027","example.edu",[cp],[mixed,b])
+        self.assertTrue(all(p["state"]!="verified" for p in mixed_result))
+
+    def test_fee_and_aid_require_exact_term_and_distinct_pages(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        fee={"code":"ADM-04","title":"Application fee and waiver process verified"}
+        fee_only={"url":"https://example.edu/apply","text":"For Fall 2027 first-year applicants, the application fee is $75."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[fee_only]),[])
+        a={"url":"https://example.edu/apply","text":"For Fall 2027 first-year applicants, the application fee is $75; eligible students can request a fee waiver through the application."}
+        b={"url":"https://admissions.example.edu/fees","text":"The Fall 2027 application fee is $75; eligible applicants can request a fee waiver through the application."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[a])[0]["state"],"under_review")
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[fee],[a,b])[0]["state"],"verified")
+        self.assertEqual(provider.propose("Fall 2028","example.edu",[fee],[a,b]),[])
+        aid={"code":"AID-01","title":"FAFSA / TASFA applicability identified"}
+        generic={"url":"https://example.edu/aid","text":"All incoming students must submit the FAFSA."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[aid],[generic]),[])
+        aid_a={"url":"https://example.edu/aid","text":"All Fall 2027 incoming students must submit the FAFSA."}
+        aid_b={"url":"https://example.edu/first-year-aid","text":"All Fall 2027 incoming students must submit the FAFSA. Learn more."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[aid],[aid_a,aid_b])[0]["state"],"verified")
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[{"code":"SCH-10","title":"Scholarship acceptance requirements"}],[aid_a,aid_b]),[])
+
+    def test_nonvolatile_evergreen_requirement_requires_two_official_pages(self):
+        provider=OfficialPublicProvider(PublicSources("example.edu"),time.monotonic()+5)
+        cp={"code":"ACA-01","title":"Orientation requirement / eligibility mapped"}
+        a={"url":"https://example.edu/orientation","text":"All new students are required to attend orientation."}
+        b={"url":"https://example.edu/new-students","text":"All new students are required to attend orientation. Read our guide."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a])[0]["state"],"under_review")
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a,b])[0]["state"],"verified")
+        a_date={**a,"text":"For Fall 2026, all new students are required to attend orientation."}
+        self.assertEqual(provider.propose("Fall 2027","example.edu",[cp],[a_date,b])[0]["state"],"under_review")
+
+    def test_quote_only_payload_is_verified_against_fetched_text(self):
+        source=PublicSources("example.edu")
+        page={"url":"https://example.edu/admission","text":"Welcome! "*1000+
+              "Official high school transcripts must be submitted by applicants.","links":[]}
+        class Stub:
+            paid=False
+            def search(self,_): return [page["url"]]
+            def propose(self,term,domain,checkpoints,pages):
+                return [{"code":"ADM-05","state":"verified","sourceUrl":pages[0]["url"],
+                         "quote":"Official high school transcripts must be submitted by applicants."}]
+        with patch.object(source,"fetch",return_value=page):
+            found=research_lane("example.edu","Fall 2027",[{"code":"ADM-05","domain":"Admissions"}],
+                                source,Stub(),time.monotonic()+3)
+        self.assertEqual(found[0]["pageText"],found[0]["quote"])
+        self.assertNotIn("Welcome!",found[0]["pageText"])
+
 if __name__=="__main__": unittest.main()

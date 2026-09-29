@@ -124,7 +124,7 @@ class PublicSources:
         if final!=url: return self.fetch(final,timeout,depth+1)  # re-evaluate destination robots
         soup=BeautifulSoup(body,"html.parser")
         for tag in soup(["script","style","form","input","textarea","footer"]): tag.decompose()
-        links=[]
+        links=[]; link_labels={}
         for a in soup.find_all("a",href=True):
             link=urljoin(final,a["href"]).split("#",1)[0]
             parsed=urlparse(link)
@@ -133,6 +133,7 @@ class PublicSources:
                     and not parsed.port and (host==self.domain or host.endswith("."+self.domain))
                     and not re.search(r"essay|personal.statement|supplement|upload|login|sign.in",link,re.I)):
                 links.append(link)
+                link_labels[link]=" ".join(a.stripped_strings)[:160]
             if len(links)>=80: break
         for tag in soup(["nav"]): tag.decompose()
         text=" ".join(soup.stripped_strings)[:200000]
@@ -140,17 +141,44 @@ class PublicSources:
         # A public policy page is not discarded merely because it states that a personal
         # statement may be required; the provider is separately forbidden to reproduce
         # applicant-authored content.
-        result={"url":final,"text":text,"links":links}
+        result={"url":final,"text":text,"links":links,"linkLabels":link_labels}
         with self.lock: self.cache[url]=result
         return result
 
-class OfficialPublicProvider:
-    """No paid discovery/model calls. Shallow, bounded official-link crawl only.
+# This is intentionally a small explicit subset, not an attempt to fill 144 answers.
+# A pattern identifies a directly stated fact; topical keyword matches alone do not.
+# Each quote is sent through the deployed server's independent evidence gate.
+EXPLICIT_CLAIMS={
+    "ADM-03": (r"\b(?:application|admission|applicant)[^.!?]{0,100}\b(?:priority |early |regular )?(?:deadline|due date)\b|\b(?:priority|early|regular) application deadline\b", "date"),
+    "ADM-04": (r"\b(?:application fee|fee to apply)\b", "money"),
+    "ADM-05": (r"\btranscripts?\b[^.!?]{0,100}\b(?:submit|submitted|send|sent|upload|received|required)\b|\b(?:submit|submitted|send|sent|upload)\b[^.!?]{0,100}\btranscripts?\b", "process"),
+    "ADM-06": (r"\b(?:SAT|ACT|test[- ]optional)\b[^.!?]{0,100}\b(?:required|optional|submit|submitted|not required)\b|\b(?:required|optional|not required)\b[^.!?]{0,100}\b(?:SAT|ACT)\b", "process"),
+    "ADM-07": (r"\b(?:recommendations?|letters? of recommendation)\b[^.!?]{0,100}\b(?:required|optional|submit|submitted)\b|\b(?:required|optional|submit|submitted)\b[^.!?]{0,100}\b(?:recommendations?|letters? of recommendation)\b", "process"),
+    "ADM-11": (r"\b(?:application status|applicant) portal\b[^.!?]{0,100}\b(?:check|view|monitor)\b|\b(?:check|view|monitor)\b[^.!?]{0,100}\b(?:application status|applicant) portal\b", "process"),
+    "ENR-01": (r"\b(?:accept|confirm)\b[^.!?]{0,100}\b(?:admission|offer|intent to enroll)\b|\bintent to enroll\b[^.!?]{0,100}\b(?:accept|confirm|submit)\b", "process"),
+    "ENR-02": (r"\b(?:enrollment|admission) deposit\b|\bdeposit\b[^.!?]{0,80}\b(?:enrollment|admission)\b", "money"),
+    "ENR-03": (r"\bdeposit\b[^.!?]{0,100}\b(?:deadline|due date)\b|\b(?:deadline|due date)\b[^.!?]{0,100}\bdeposit\b", "date"),
+    "ENR-06": (r"\b(?:NetID|student account)\b[^.!?]{0,100}\b(?:activate|activation|set up|create)\b|\b(?:activate|activation|set up|create)\b[^.!?]{0,100}\b(?:NetID|student account)\b", "process"),
+    "ENR-08": (r"\bfinal transcript\b[^.!?]{0,100}\b(?:submit|submitted|send|sent|received|required)\b|\b(?:submit|submitted|send|sent)\b[^.!?]{0,80}\bfinal transcript\b", "process"),
+    "AID-01": (r"\b(?:FAFSA|TASFA)\b[^.!?]{0,100}\b(?:required|complete|submit|submitted|file)\b|\b(?:required|submit|submitted|file)\b[^.!?]{0,100}\b(?:FAFSA|TASFA)\b", "aid"),
+    "AID-03": (r"\b(?:financial aid|FAFSA|TASFA)\b[^.!?]{0,100}\b(?:priority )?(?:deadline|due date)\b|\b(?:priority )?(?:deadline|due date)\b[^.!?]{0,100}\b(?:financial aid|FAFSA|TASFA)\b", "date"),
+    "HOU-01": (r"\b(?:first[- ]year|freshman)\b[^.!?]{0,100}\b(?:residency|live on campus|housing requirement)\b|\b(?:residency|live on campus)\b[^.!?]{0,100}\b(?:first[- ]year|freshman)\b", "eligibility"),
+    "ACA-01": (r"\borientation\b[^.!?]{0,100}\b(?:required|requirement|must attend)\b|\b(?:required|requirement)\b[^.!?]{0,80}\borientation\b", "eligibility"),
+}
+CALENDAR_DATE=re.compile(r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+20\d\d)?\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b20\d\d-\d{2}-\d{2}\b",re.I)
+MONEY_VALUE=re.compile(r"\$\s?\d[\d,]*(?:\.\d{2})?",re.I)
+CLAIM_TOKENS=re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{2})?|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%",re.I)
+HIGH_RISK=re.compile(r"(?:deadline|fee|deposit|refund|waiver|insurance|residency|immunization|requirement|aid|tuition|payment|scholarship)",re.I)
+TERM_SENSITIVE=re.compile(r"(?:deadline|date|fee|cost|tuition|deposit|refund|waiver|aid|scholarship|payment|amount|rate|award|opening|closing|release|decision|notification|timing|calendar|window)",re.I)
+EXPLICIT_CYCLE=re.compile(r"\b(?:Fall|Spring|Summer|Winter)\s+20\d\d\b|\b20\d\d\s*[-–/]\s*20\d\d\b",re.I)
+VOLATILE_VALUE=re.compile(r"\$\s?\d|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}(?:/20\d\d)?\b|\b\d+(?:\.\d+)?%")
+QUOTE_TERM_SENSITIVE=re.compile(r"\b(?:deadline|due date|opening|opens|fees?|costs?|tuition|deposit|refund|waiver|financial aid|FAFSA|TASFA|scholarship|payments?|releas(?:e|ed)|notification|award|calendar|timing)\b|\b\d[\d,]*(?:\.\d{2})?\s*(?:dollars|USD)\b",re.I)
 
-    The extractive rules are deliberately narrow: an exact-term first-year
-    application platform or an evergreen official application-platform sentence
-    with no competing cycle/date/cost claim. Everything else remains under_review;
-    lack of pages is not proof a college did not publish them.
+class OfficialPublicProvider:
+    """No paid calls: official links and a small set of explicit extracts only.
+
+    A local 'verified' is merely a proposal. The server independently checks
+    URL, quote inclusion, term scope and higher-risk corroboration.
     """
     paid=False
     def __init__(self,sources,deadline):
@@ -166,9 +194,12 @@ class OfficialPublicProvider:
         keywords={"admissions":("admission","apply","undergraduate"),
                   "admission to enrollment":("admitted","enroll"),
                   "financial aid":("financial","aid","fafsa"),
-                  "scholarships and funding":("scholarship",)}
+                  "scholarships and funding":("scholarship",),
+                  "housing and dining":("housing","residence","first-year"),
+                  "orientation and academics":("orientation","advising")}
         terms=keywords.get(lane,tuple(w.lower() for w in lane.split() if len(w)>3))
-        matches=[link for link in home.get("links",[]) if any(w in link.lower() for w in terms)]
+        labels=home.get("linkLabels",{})
+        matches=[link for link in home.get("links",[]) if any(w in (link+" "+labels.get(link,"")).lower() for w in terms)]
         matches.sort(key=lambda link:(bool(re.search(r"visit|tour|news|research",link,re.I)),
                                       0 if re.search(r"/apply(?:/|$)|first[-_]?year|freshm",link,re.I) else 1,
                                       len(urlparse(link).path)))
@@ -185,19 +216,86 @@ class OfficialPublicProvider:
         for link in deep+matches+[home["url"]]:
             if link not in ordered: ordered.append(link)
         return ordered[:5]
+    @staticmethod
+    def _sentences(text):
+        for chunk in re.split(r"(?<=[.!?])\s+|\s*\n+",text):
+            sentence=chunk.strip()
+            if 12<=len(sentence)<=500: yield sentence
+    @staticmethod
+    def _scope(quote,title,term,kind):
+        # Follow deployed request-evidence.ts evergreen exclusions; also reject
+        # natural-language dates and volatile quote claims the TS regex misses.
+        cycles=EXPLICIT_CYCLE.findall(quote)
+        if any(c.lower()!=term.lower() for c in cycles): return "out-of-scope"
+        if term in quote: return "exact-term"
+        if (kind in {"date","money","aid"} or TERM_SENSITIVE.search(title)
+                or VOLATILE_VALUE.search(quote) or CALENDAR_DATE.search(quote)
+                or QUOTE_TERM_SENSITIVE.search(quote) or cycles):
+            return "out-of-scope"
+        return "evergreen"
+    @staticmethod
+    def _supported(kind,quote):
+        if kind=="date": return bool(CALENDAR_DATE.search(quote))
+        if kind=="money": return bool(MONEY_VALUE.search(quote))
+        if kind=="eligibility": return bool(re.search(r"\b(?:required|requirement|must|exempt)\b",quote,re.I))
+        return True
+    def _find_quote(self,code,term,page,title):
+        rule=EXPLICIT_CLAIMS.get(code)
+        if not rule: return None
+        pattern,kind=rule
+        for sentence in self._sentences(page.get("text","")):
+            if kind=="date" and re.search(r"\b(?:not yet (?:published|announced|posted)|to be announced|TBD|unknown)\b",sentence,re.I):
+                continue  # a calendar date in a publication notice is not a deadline
+            if code=="ADM-04" and not (re.search(r"\bwaiv(?:e|er|ers|ed)\b",sentence,re.I)
+                                       and re.search(r"\b(?:request|apply|submit|eligible|qualify)\b",sentence,re.I)):
+                continue  # a price alone does not verify the waiver process
+            if code=="ADM-06" and not re.search(r"\b(?:submit|submitted|send|sent|report|via|through|self-report)\b",sentence,re.I):
+                continue  # test policy alone does not establish submission method
+            if (re.search(pattern,sentence,re.I) and self._supported(kind,sentence)
+                    and self._scope(sentence,title,term,kind)!="out-of-scope"):
+                return sentence
+        return None
+    @staticmethod
+    def _corroboration(first,second):
+        a=[m.group().replace(" ","") for m in CLAIM_TOKENS.finditer(first)]
+        b=[m.group().replace(" ","") for m in CLAIM_TOKENS.finditer(second)]
+        if a and b and a!=b: return "conflicting"
+        if first==second or (a and b and a==b): return "verified"
+        return "under_review"
     def propose(self,term,domain,checkpoints,pages):
-        if checkpoints[0]["domain"]!="Admissions": return []
-        exact=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?)\b",re.I)
-        platform=re.compile(r"\b(?:recommend using the Common App to apply|apply (?:using|through) (?:the )?(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?))\b",re.I)
-        for page in pages:
-            match=exact.search(page["text"])
-            if match and len(match.group())>=12:
-                return [{"code":"ADM-01","state":"verified","sourceUrl":page["url"],"quote":match.group()}]
-        for page in pages:
-            for sentence in re.split(r"(?<=[.!?])\s+",page["text"]):
-                if 12<=len(sentence)<=500 and platform.search(sentence):
-                    return [{"code":"ADM-01","state":"verified","sourceUrl":page["url"],"quote":sentence}]
-        return []
+        results=[]
+        for checkpoint in checkpoints:
+            code=checkpoint["code"]; title=checkpoint.get("title","")
+            if code=="ADM-01":
+                # Preserve the deployed exact-term and narrowly worded evergreen
+                # platform rules, including a source quote when the server must
+                # withhold an old-cycle candidate.
+                exact=re.compile(r"\b"+re.escape(term)+r"\b.{0,120}\bfirst[- ]year\b.{0,120}\b(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?)\b",re.I)
+                platform=re.compile(r"\b(?:recommend using the Common App to apply|apply (?:using|through) (?:the )?(?:Common App(?:lication)?|Apply\s*Texas|Coalition App(?:lication)?))\b",re.I)
+                candidate=next(((p,m.group()) for p in pages if (m:=exact.search(p["text"])) and len(m.group())>=12),None)
+                if not candidate:
+                    candidate=next(((p,s) for p in pages for s in self._sentences(p["text"]) if platform.search(s)),None)
+                if not candidate: continue
+                page,quote=candidate
+                state="verified" if self._scope(quote,title,term,"platform")!="out-of-scope" else "under_review"
+            else:
+                if code not in EXPLICIT_CLAIMS: continue
+                candidate=next(((p,q) for p in pages if (q:=self._find_quote(code,term,p,title))),None)
+                if not candidate: continue
+                page,quote=candidate; kind=EXPLICIT_CLAIMS[code][1]
+                state="verified"
+                second=None
+                if HIGH_RISK.search(title) or kind in {"date","money","aid","eligibility"}:
+                    second=next(((other,q) for other in pages if other["url"]!=page["url"]
+                                 and other.get("text")!=page.get("text")
+                                 and (q:=self._find_quote(code,term,other,title))),None)
+                    if not second: state="under_review"
+                    else: state=self._corroboration(quote,second[1])
+            proposal={"code":code,"state":state,"sourceUrl":page["url"],"quote":quote}
+            if code!="ADM-01" and second:
+                proposal.update({"secondSourceUrl":second[0]["url"],"secondQuote":second[1]})
+            results.append(proposal)
+        return results
 
 def official_search_urls(message,domain):
     """Extract only HTTPS URLs on the approved school domain from Anthropic search blocks/citations."""
@@ -286,13 +384,20 @@ def research_lane(domain,term,checkpoints,sources,provider,deadline):
         if page: pages.append(page)
     if not pages: return [{"code":c["code"],"state":"not_found_official" if getattr(provider,"paid",True) and time.monotonic()<deadline else "under_review"} for c in checkpoints]
     proposed=provider.propose(term,domain,checkpoints,pages)
-    lookup={p["url"]:p["text"][:6000] for p in pages}
+    lookup={p["url"]:p["text"] for p in pages}
     result=[]; codes={c["code"] for c in checkpoints}
     for p in proposed:
         if not isinstance(p,dict) or p.get("code") not in codes or p.get("state") not in STATES: continue
         p={k:p.get(k) for k in ("code","state","sourceUrl","quote","secondSourceUrl","secondQuote","publicationDate")}
-        p["pageText"]=lookup.get(p.get("sourceUrl"),"")
-        p["secondPageText"]=lookup.get(p.get("secondSourceUrl"),"")
+        # The deployed evidence contract accepts a quote-only pageText if it is
+        # the exact substring of a page we actually fetched. This avoids sending
+        # unrelated page content and retains matches past the old 6,000-char cut.
+        first_url,first_quote=p.get("sourceUrl"),p.get("quote")
+        second_url,second_quote=p.get("secondSourceUrl"),p.get("secondQuote")
+        p["pageText"]=(first_quote if isinstance(first_url,str) and isinstance(first_quote,str)
+                       and first_quote in lookup.get(first_url,"") else "")
+        p["secondPageText"]=(second_quote if isinstance(second_url,str) and isinstance(second_quote,str)
+                             and second_quote in lookup.get(second_url,"") else "")
         result.append(p)
     return result
 
