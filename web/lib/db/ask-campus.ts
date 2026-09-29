@@ -9,6 +9,9 @@ export type Answer = { kind: 'fact' | 'unknown'; text: string; citations: Citati
 export interface EvidenceSelector { select(input: { question: string; evidence: readonly { id: string; title: string; quote: string; term: string }[] }): Promise<EvidenceSelection> }
 const REFUSAL = 'I cannot answer this from current, certified official sources for this student and term. Please verify directly with the school.';
 const MAX_DAILY_QUESTIONS = 20, MAX_DAILY_COST = 100, RESERVED_CENTS = 5;
+// Ten included colleges can legitimately produce 1,440 action rows. Keep the
+// retrieval bounded, but do not make an ordinary full plan impossible to ask about.
+const MAX_RESEARCH_ROWS = 5_000;
 const DAY_MS = 86_400_000;
 export const assistantEnabled = () => process.env.ASSISTANT_ENABLED === '1';
 const unknown = (text = REFUSAL): Answer => ({ kind: 'unknown', text, citations: [] });
@@ -89,7 +92,7 @@ export async function askCampus(input: { householdId: string; actorId: string; s
       JOIN action_instances a ON a.relationship_id=ir.id JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=ir.institution_id
       LEFT JOIN sources s ON s.id=ru.source_id AND s.institution_id=ir.institution_id
       LEFT JOIN research_versions rv ON rv.institution_id=ir.institution_id AND rv.research_term=ru.research_term
-      WHERE ir.student_id=$1 AND ir.active=1 AND ru.research_term=$2 LIMIT 101`, [student.id, term]) : [];
+      WHERE ir.student_id=$1 AND ir.active=1 AND ru.research_term=$2 LIMIT ${MAX_RESEARCH_ROWS + 1}`, [student.id, term]) : [];
     // Topic selection is intentionally conservative: one matching rule, one tracked institution.
     // An ambiguous, stale, unpublished, conflicting or truncated set never yields a partial answer.
     const words = tokens(question);
@@ -99,7 +102,7 @@ export async function askCampus(input: { householdId: string; actorId: string; s
     const explicitUntrackedSchool = /\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\s+(?:College|University)\b/.test(question) && namedSchools.length === 0;
     const matches = rows.filter(r => words.some(w => tokens(`${r.title} ${r.domain} ${r.checkpoint_code}`).includes(w)));
     const relevant = namedSchools.length === 1 ? matches.filter(r => namedSchools[0].id === r.relationship_id) : matches;
-    const selected = rows.length < 101 && words.length && !explicitUntrackedSchool && namedSchools.length < 2 &&
+    const selected = rows.length <= MAX_RESEARCH_ROWS && words.length && !explicitUntrackedSchool && namedSchools.length < 2 &&
       relevant.length === 1 && directlySupported(question, relevant[0].evidence_quote ?? '') &&
       eligible(relevant[0], student, Date.now()) ? relevant[0] : null;
     const usageId = newId('ask');

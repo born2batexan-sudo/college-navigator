@@ -33,6 +33,13 @@ describe('Ask Campus Passage grounded assistant', () => {
    await C.exec('INSERT INTO institution_relationships(id,student_id,institution_id,created_at) VALUES($1,$2,$3,$4)', [id === 'school_a' ? 'rel_a' : 'rel_b', studentId, id, now()]);
   }
   await source('HOUSING', 'Housing', 'school_a', { quote: 'Housing applications open in spring for Fall 2027.' });
+  // A normal 144-checkpoint plan must not be mistaken for a truncated query.
+  for (let i = 0; i < 110; i++) {
+   const stamp = now();
+   await C.exec(`INSERT INTO rules(id,institution_id,checkpoint_code,domain,title,requirement,created_at,updated_at)
+    VALUES($1,'school_a',$2,'Other',$3,'Unresolved.',$4,$5)`, [`rule_NOISE_${i}`, `NOISE-${i}`, `Unrelated checkpoint ${i}`, stamp, stamp]);
+   await C.exec('INSERT INTO action_instances(id,relationship_id,rule_id,applicability_reason,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6)', [`act_NOISE_${i}`, 'rel_a', `rule_NOISE_${i}`, 'unresolved', stamp, stamp]);
+  }
   await C.exec('UPDATE research_versions SET certified_at=$1,updated_at=$2 WHERE institution_id=$3', [now(),now(),'school_a']);
  });
  it('is default off and never logs a disabled request', async () => {
