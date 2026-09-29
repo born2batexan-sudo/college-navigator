@@ -25,19 +25,23 @@ function machineRouteEnabled(scope: AgentScope): boolean {
   return false;
 }
 
+function privateError(status: number, error: string): NextResponse {
+  return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
 /** Machine credentials are narrowly scoped; queue and monitor tokens cannot fabricate rules. */
 export function requireAgentAuth(req: NextRequest, scope: AgentScope = "general"): NextResponse | null {
   // Machine-key routes have no signed-in household entitlement. Production app
   // routes stay closed; monitoring can open only on a non-production deployment
   // with both explicit gates on and family delivery explicitly off.
   if (process.env.NODE_ENV === "production" && !machineRouteEnabled(scope)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return privateError(404, "Not found");
   }
   const envName=ENV_BY_SCOPE[scope],expected=process.env[envName];
-  if(!expected)return NextResponse.json({error:`${envName} is not configured on the server`},{status:500});
+  if(!expected)return privateError(500, `${envName} is not configured on the server`);
   const auth=req.headers.get("authorization")||"",token=auth.startsWith("Bearer ")?auth.slice(7):"";
   const a=Buffer.from(token),b=Buffer.from(expected);const valid=a.length===b.length&&timingSafeEqual(a,b);
-  if(!valid)return NextResponse.json({error:"Unauthorized"},{status:401});
+  if(!valid)return privateError(401, "Unauthorized");
   return null;
 }
 

@@ -22,7 +22,9 @@ describe("staging monitor machine authorization", () => {
         MONITOR_API_KEY: "monitor-secret",
       });
       assert.equal(requireAgentAuth(request("monitor-secret"), "monitor"), null);
-      assert.equal(requireAgentAuth(request("wrong"), "monitor")?.status, 401);
+      const wrong = requireAgentAuth(request("wrong"), "monitor");
+      assert.equal(wrong?.status, 401);
+      assert.equal(wrong?.headers.get("cache-control"), "no-store");
       process.env.MONITORING_DELIVERY_ENABLED = "1";
       assert.equal(requireAgentAuth(request("monitor-secret"), "monitor")?.status, 404);
       process.env.MONITORING_DELIVERY_ENABLED = "0";
