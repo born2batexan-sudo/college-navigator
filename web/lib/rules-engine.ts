@@ -14,6 +14,7 @@
 
 import type { Rule, InstitutionRelationship, Student } from "./db/types";
 import { parseDateStatus } from "./date-status";
+import { intakeRuleDefaults, readIntake } from "./intake";
 
 // Order matters: used to test "has the relationship reached at least X".
 const LIFECYCLE_ORDER = [
@@ -28,23 +29,31 @@ const LIFECYCLE_ORDER = [
 ] as const;
 
 const TERMINAL_STATES = new Set(["declined"]);
+const PREFERENCE_POPULATIONS = new Set([
+  "campus_housing", "greek_pnm", "disability_accommodation", "bringing_car",
+  "education_savings", "school_scholarships", "outside_scholarships",
+  "financial_aid", "campus_visits", "orientation", "program_needs", "family_travel",
+]);
 
 export type StudentAttributes = {
   gpaBand?: string;
   housingPlan?: "on_campus" | "off_campus" | "commuter" | "undecided";
-  greekInterest?: boolean;
-  disabilityAccommodation?: boolean;
+  greekInterest?: boolean | null;
+  disabilityAccommodation?: boolean | null;
   outOfStatePayer529?: boolean;
-  bringingCar?: boolean;
+  bringingCar?: boolean | null;
   [key: string]: unknown;
 };
 
 export function parseAttributes(student: Student): StudentAttributes {
+  let existing: StudentAttributes = {};
   try {
-    return JSON.parse(student.attributes || "{}");
-  } catch {
-    return {};
-  }
+    const parsed: unknown = JSON.parse(student.attributes || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) existing = parsed as StudentAttributes;
+  } catch { /* bad legacy JSON must not hide possible steps */ }
+  // Saved intake defaults beat old student-level answers; an explicitly
+  // answered school's questionnaire still beats both in resolveAttributes().
+  return { ...existing, ...intakeRuleDefaults(readIntake(student)) };
 }
 
 /** Same shape as parseAttributes(), scoped to one school's relationship —
@@ -79,13 +88,23 @@ export function evaluatePopulation(rule: Rule, attrs: StudentAttributes, student
     case "out_of_state":
       return student.residency === "out_of_state" || student.residency === "international";
     case "campus_housing":
-      return attrs.housingPlan === "on_campus" || attrs.housingPlan === "undecided";
+      return !attrs.housingPlan || attrs.housingPlan === "on_campus" || attrs.housingPlan === "undecided";
     case "greek_pnm":
-      return attrs.greekInterest === true;
+      return attrs.greekInterest !== false;
     case "disability_accommodation":
-      return attrs.disabilityAccommodation === true;
+      return attrs.disabilityAccommodation !== false;
     case "bringing_car":
-      return attrs.bringingCar === true;
+      return attrs.bringingCar !== false;
+    // These segments are ready for future verified rules. Existing school-wide
+    // rules use "all" and cannot be hidden by intake preferences.
+    case "education_savings": return attrs.educationSavings !== false;
+    case "school_scholarships": return attrs.schoolScholarships !== false;
+    case "outside_scholarships": return attrs.outsideScholarships !== false;
+    case "financial_aid": return attrs.financialAid !== false;
+    case "campus_visits": return attrs.visits !== false;
+    case "orientation": return attrs.orientation !== false;
+    case "program_needs": return attrs.programNeeds !== false;
+    case "family_travel": return attrs.familyTravel !== false;
     default:
       // Unknown population segment: fail closed, don't silently surface a
       // rule we can't confirm applies.
@@ -163,7 +182,11 @@ export function evaluateRule(
     };
   }
 
-  if (!evaluatePopulation(rule, attrs, student)) {
+  // A preference can set aside only noncritical population-specific work.
+  // Critical school checkpoints, including a housing requirement in conflict
+  // with a commute preference, remain visible for checking against official policy.
+  const populationMatches = evaluatePopulation(rule, attrs, student);
+  if (!populationMatches && !(rule.critical && PREFERENCE_POPULATIONS.has(rule.population))) {
     return {
       applicable: false,
       reason: `Student population does not match rule segment "${rule.population}"`,
@@ -174,7 +197,9 @@ export function evaluateRule(
   // date from older information.
   const dueAt = dateStatus.kind === "awaiting" ? null : resolveDeadline(rule, relationship);
   const priority = computePriority(rule, dueAt);
-  const reasonParts = [`Applies to population "${rule.population}"`];
+  const reasonParts = [populationMatches
+    ? `Applies to population "${rule.population}"`
+    : "Critical school checkpoint retained despite a conflicting preference; verify the school's official instructions"];
   if (rule.trigger) reasonParts.push(`triggered by reaching "${rule.trigger}"`);
   if (rule.critical) reasonParts.push("critical checkpoint");
 

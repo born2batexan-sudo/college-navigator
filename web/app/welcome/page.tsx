@@ -39,7 +39,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
       <h1 className="mt-2 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">Schools to track</h1>
       <p className="mt-2 max-w-2xl text-ink/60">Each student has an independent school list and preferences. Changes here affect only {student.name}&apos;s plan — never another student&apos;s.</p>
       {isDemo && <p className="mt-3 rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="font-semibold text-accent">Private Preview</strong> · School settings are shown for context; changes are disabled.</p>}
-      <p className="mt-3 text-sm text-ink/40">Currently tracking {trackedCount} of {schools.length} schools · <Link href={`/dashboard?student=${student.id}`} className="underline">Back to {student.name}&apos;s dashboard</Link></p>
+      <p className="mt-3 text-sm text-ink/40">Currently tracking {trackedCount} of {schools.length} schools · <Link href={`/dashboard?student=${student.id}`} className="underline">Back to {student.name}&apos;s dashboard</Link> · <Link href={`/intake?student=${encodeURIComponent(student.id)}`} className="underline">Edit plan preferences</Link></p>
     </header>
 
     <StudentSwitcher students={students} selectedStudentId={student.id} hrefFor={studentUrl} />
