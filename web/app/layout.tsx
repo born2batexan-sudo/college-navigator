@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], display
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.campuspassage.com"),
   title: {
-    default: "College Application Tracker for Parents",
+    default: "Your College Journey Tracker",
     template: "%s | Campus Passage",
   },
   description: "Track college application deadlines, verified next steps, financial aid dates, and move-in planning in one plan per student. Built for parents. No portal passwords.",
