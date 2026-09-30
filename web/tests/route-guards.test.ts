@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 import { isPublicPath } from "../lib/auth/env";
+import { isApplicationProtectedPath } from "../lib/auth/protected-routes";
 
 const ROOT = process.cwd();
 const APP = path.join(ROOT, "app");
@@ -29,7 +30,7 @@ const PUBLIC_PAGES = new Set(["app/page.tsx", "app/sample-plan/page.tsx", "app/l
 // Server-action files whose functions may run without sign-in (signing in itself or submitting a generic demo request).
 const PUBLIC_ACTIONS = new Set(["app/login/actions.ts", "app/request-access/actions.ts"]);
 // Route handlers that authenticate some other way.
-const PUBLIC_ROUTES = new Set(["app/auth/callback/route.ts", "app/api/stripe/webhook/route.ts", "app/api/mail/maintenance/route.ts"]); // Stripe route verifies raw signed body and is disabled by default
+const PUBLIC_ROUTES = new Set(["app/auth/callback/route.ts", "app/api/stripe/webhook/route.ts", "app/api/resend/inbound/route.ts", "app/api/mail/maintenance/route.ts"]); // Webhook routes verify raw signed bodies and are disabled by default
 const GUARDED_ROUTES = new Set(["app/api/ask/route.ts", "app/api/mail/callback/[provider]/route.ts"]);
 
 describe("route guards", () => {
@@ -106,15 +107,20 @@ describe("route guards", () => {
     }
   });
 
-  it("the proxy denies by default and its public list is the reviewed one", () => {
+  it("authenticates reviewed private routes and lets unknown paths reach the app 404", () => {
     const env = read(path.join(ROOT, "lib", "auth", "env.ts"));
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/stripe/webhook", "/auth/callback", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
+    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/resend/inbound", "/api/stripe/webhook", "/auth/callback", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
     assert.match(env, /pathname === "\/"/);
     assert.match(env, /pathname === "\/sample-plan"/);
     assert.doesNotMatch(block, /"\/sample-plan"/, "the sample page must be an exact-match exception, not a public prefix");
-    assert.match(read(path.join(ROOT, "proxy.ts")), /!isPublicPath\(pathname\)/);
+    const proxy = read(path.join(ROOT, "proxy.ts"));
+    assert.match(proxy, /isApplicationProtectedPath\(pathname\)/);
+    assert.match(proxy, /if \(isPublic \|\| !isProtected\) return response/);
+    assert.equal(isApplicationProtectedPath("/dashboard"), true);
+    assert.equal(isApplicationProtectedPath("/does-not-exist"), false);
+    assert.equal(isApplicationProtectedPath("/dashboard/extra"), false);
   });
 
   it("opens only the exact fictional sample path, not adjacent private routes", () => {
@@ -123,6 +129,8 @@ describe("route guards", () => {
     assert.equal(isPublicPath("/sample-plan-other"), false);
     assert.equal(isPublicPath('/api/stripe/webhook'),true);
     assert.equal(isPublicPath('/api/stripe/webhook-other'),false);
+    assert.equal(isPublicPath('/api/resend/inbound'),true);
+    assert.equal(isPublicPath('/api/resend/inbound/other'),false);
     assert.equal(isPublicPath('/auth/callback'),true);
     assert.equal(isPublicPath('/auth/callback/other'),false);
     assert.equal(isPublicPath('/api/debug/unknown'),false);

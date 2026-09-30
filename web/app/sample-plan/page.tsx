@@ -5,9 +5,10 @@ import SamplePlan from "@/components/SamplePlan";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "Sample College Plan: See Every Deadline in One Place",
-  description: "Try a free sample plan: see how Campus Passage organizes college application, financial aid, and housing deadlines for one student or several.",
+  title: "Explore a fictional sample plan",
+  description: "Try a read-only example for one student or a same-cycle household. Fictional names, schools, dates, and source labels; no private data.",
   alternates: { canonical: "/sample-plan" },
+  robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false, noimageindex: true } },
 };
 
 export default function SamplePlanPage() {
