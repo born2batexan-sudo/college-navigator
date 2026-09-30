@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Request founding-family beta access",
-  description: "Request owner-approved complimentary beta access for your real household plan. No payment or marketing subscription required.",
+  title: "Request Founding-Family Access",
+  description: "Request founding-family access to Campus Passage. Submitting the form does not purchase access or subscribe you to marketing.",
   alternates: { canonical: "/request-access" },
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: false },
 };
 
 export default function RequestAccessLayout({ children }: { children: React.ReactNode }) {

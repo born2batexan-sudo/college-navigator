@@ -1,5 +1,4 @@
-<!-- PROVISIONAL Route mark (File B, small). Owner brief geometry, unmodified. Not legally cleared as final identity. Keep this small-size mark text-free. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Campus Passage">
   <rect width="48" height="48" rx="11" fill="#123B55"/>
   <g transform="translate(10 10) scale(0.28)">
     <path d="M18,82 L40,64 L58,40 L84,20" fill="none" stroke="#FBF9F4" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>

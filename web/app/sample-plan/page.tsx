@@ -5,8 +5,8 @@ import SamplePlan from "@/components/SamplePlan";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "Explore a fictional sample plan",
-  description: "Try a read-only example for one student or a same-cycle household. Fictional names, schools, dates, and source labels; no private data.",
+  title: "Sample College Plan: See Every Deadline in One Place",
+  description: "Try a free sample plan: see how Campus Passage organizes college application, financial aid, and housing deadlines for one student or several.",
   alternates: { canonical: "/sample-plan" },
 };
 

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="Campus Passage">
+  <rect width="140" height="140" rx="28" fill="#123B55"/>
+  <g transform="translate(28 28) scale(0.84)">
+    <path d="M18,82 L40,64 L58,40 L84,20" fill="none" stroke="#FBF9F4" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="18" cy="82" r="5" fill="#FBF9F4"/>
+    <circle cx="40" cy="64" r="6" fill="#FBF9F4"/>
+    <circle cx="58" cy="40" r="7" fill="#FBF9F4"/>
+    <circle cx="84" cy="20" r="9" fill="#E8875B"/>
+  </g>
+</svg>

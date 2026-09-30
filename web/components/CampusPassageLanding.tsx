@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import FaqAccordion, { type FaqItem } from "@/components/FaqAccordion";
+import MarketingFooter from "@/components/MarketingFooter";
 import MarketingHeader from "@/components/MarketingHeader";
 
 const essentials = [
@@ -9,87 +11,220 @@ const essentials = [
   ["What's at stake", "Why this step matters, without invented urgency."],
 ] as const;
 
+const pills = ["Application deadlines", "FAFSA & CSS Profile", "Scholarships", "Housing & dorms", "Deposits", "Immunization records", "Orientation", "Meal plans", "Parking permits", "Greek life recruitment", "Move-in day", "The first bill"] as const;
+
+const steps = [
+  ["Add your student and schools.", "Add the colleges on each student's list, each tagged by application path: Common App, direct, or both. 10 unique colleges are included; each additional college is $19."],
+  ["Connect an inbox, if you choose.", "When enabled for an invited household, sender-scoped college updates can be added with explicit consent. You can disconnect and delete connected-mail data anytime."],
+  ["Get one clear plan.", "Public school and sponsor information, plus your own updates, become one list of next steps, each with its source."],
+] as const;
+
+/** The 12² Standard: 4 phases x 3 themes, each "up to 12 checks". Example checks are the mockup's three per theme. */
+const phases = [
+  { name: "Getting in", tiles: [
+    { t: "Admissions", b: "Published deadlines by application path.", items: ["Deadline by application path", "Test policy", "Final transcript requirement"] },
+    { t: "Aid", b: "Priority dates and paperwork, before they cost you.", items: ["FAFSA / CSS Profile priority date", "Verification document requests", "Aid appeal process"] },
+    { t: "Scholarships", b: "Scholarship dates and renewal information.", items: ["Institutional scholarship deadline", "Separate application required", "Renewal requirements"] },
+  ] },
+  { name: "Choosing and paying", tiles: [
+    { t: "Enrollment", b: "Deposits, reply dates, and placement tests, in order.", items: ["Deposit deadline and refundability", "Commitment / reply date", "Placement test requirements"] },
+    { t: "Billing and 529", b: "Know when the first bill lands, and how to pay it.", items: ["First bill release and due date", "Payment plan enrollment window", "529 / third-party payment instructions"] },
+    { t: "Housing", b: "Dorm applications and deposits, on time.", open: true, items: ["First-year residence requirement", "Housing application window and deposit", "Room / roommate selection timeline"] },
+  ] },
+  { name: "Getting started", tiles: [
+    { t: "Health and access", b: "Immunization forms, insurance waivers, accommodations.", items: ["Immunization records deadline", "Health insurance waiver deadline", "Accommodations registration"] },
+    { t: "Orientation", b: "Sign-ups and advising, before registration opens.", items: ["Orientation session registration", "Advising before course registration", "Family orientation program"] },
+    { t: "Campus logistics", b: "Parking permits, ID photos, and move-in day.", items: ["Student ID photo upload", "Parking permit process", "Move-in time-slot sign-up"] },
+  ] },
+  { name: "Belonging and beyond", tiles: [
+    { t: "Student life", b: "Meal plans, Greek recruitment, and finding their people.", items: ["Meal plan selection", "Greek life recruitment timeline", "Learning community application"] },
+    { t: "Family experience", b: "Your access, your weekends, your updates.", items: ["FERPA / parent proxy access", "Family weekend dates", "Parent communications sign-up"] },
+    { t: "Career and progression", b: "Majors, internships, and what comes next.", items: ["Career center onboarding", "Major declaration timeline", "Internship / co-op eligibility timing"] },
+  ] },
+] as const;
+
+/**
+ * All ten FAQs from the approved mockup. Commercial wording follows the owner-confirmed model: $199 per qualifying
+ * household per application cycle, 10 unique colleges included, $19 per additional college, same-cycle eligible students.
+ */
+const faqItems: readonly FaqItem[] = [
+  { id: "faq-track", question: "How do I keep track of college application deadlines for my student?", answer: "Add each school your student is considering. Campus Passage organizes verified application, financial aid, scholarship, housing, and enrollment information in one plan, shows whose move each step is, and labels what is still under review or not yet published." },
+  { id: "faq-spreadsheet", question: "Is this better than a college application spreadsheet?", answer: "A spreadsheet only knows what you type into it. Campus Passage reviews up to 144 checks per school and links verified findings to official sources, while unresolved checks remain clearly labeled." },
+  { id: "faq-accepted", question: "What do we need to do after my student is accepted?", answer: "Enrollment deposits, housing applications, financial aid verification, immunization records, orientation, and the first bill may all matter. Campus Passage keeps the applicable verified steps together through move-in planning." },
+  { id: "faq-missing", question: "How will I know if something is missing from my student's application?", answer: "When optional inbox support is enabled for an invited household, sender-scoped college notices can surface a status update for review. School portals and official instructions remain the authority." },
+  { id: "faq-portal", question: "Do you need my student's school portal login?", answer: "No. Never. Campus Passage doesn't sign into school portals." },
+  { id: "faq-submit", question: "Does it apply, submit, or pay anything for me?", answer: "No. You stay in control, and the school's official instructions are always the authority." },
+  { id: "faq-schools", question: "Which schools can I add, and can I track more than one student?", answer: "A household plan includes 10 unique colleges, and each additional college is $19. Eligible students sharing the same high-school graduation year and application cycle can be in one household. Every student, school, and term stays separate, and review depth is shown honestly." },
+  { id: "faq-cost", question: "What does it cost?", answer: "$199 per qualifying household per application cycle, including 10 unique colleges, plus $19 for each additional college. For a limited time, approved founding families pay $99 per household per application cycle." },
+  { id: "faq-counselor", question: "Does it replace our school counselor?", answer: "No. It helps your family bring better questions to your counselor." },
+  { id: "faq-data", question: "What happens to my data if I leave?", answer: "Connected inbox access can be disconnected, and connected-mail data can be deleted, even after product access ends." },
+];
+
 export default function CampusPassageLanding() {
   return (
     <div className="campus-page">
       <a className="skip-link" href="#main">Skip to main content</a>
       <MarketingHeader current="overview" />
       <main id="main">
-        <section id="top" className="hero-cinematic" aria-labelledby="hero-title">
-          <div className="hero-media" aria-hidden="true">
-            <Image src="/images/campus-passage-hero.webp" alt="" fill priority sizes="100vw" className="hero-media-img" />
-            <div className="hero-scrim" />
+        <section id="top" className="hero" aria-labelledby="hero-title">
+          <div className="hero-media">
+            <Image src="/images/campus-passage-hero.webp" alt="Illustrative campus photography — not a specific school." fill priority sizes="100vw" className="hero-media-img" />
           </div>
-          <span className="photo-caption hero-photo-caption">Illustrative campus photography — not a specific school.</span>
           <div className="site-shell hero-inner">
             <div className="hero-copy">
-              <p className="eyebrow">Campus Passage · from interest to move-in.</p>
-              <h1 id="hero-title" className="display hero-title">Protect the opportunity.</h1>
-              <p className="lede">A college choice takes shape across school pages, sponsor notices, letters, and decisions at home. A personalized student plan can bring the relevant steps forward without losing the source behind them.</p>
-              <div className="actions"><Link className="button button-primary" href="/sample-plan">Explore the sample plan</Link><a className="button button-secondary" href="#why-it-matters">Why it matters</a></div>
-              <p className="hero-proof"><span>No school-portal passwords</span><span>Official-source context</span><span>Student- and term-specific</span></p>
+              <p className="eyebrow">College application &amp; deadline tracker for parents</p>
+              <h1 id="hero-title" className="display hero-title">Be their parent, not their project manager.</h1>
+              <p className="hero-subhead display">Every college step, in one plan, with whose move it is.</p>
+              <p className="lede">From the first application to move-in day, Campus Passage brings verified dates, school-side waits, and family next steps into one clear plan.</p>
+              <div className="actions"><Link className="button button-primary" href="/request-access">Request founding-family access</Link><Link className="button button-secondary" href="/sample-plan">Try the sample plan →</Link></div>
+              <ul className="chips" aria-label="What to expect"><li className="chip">No portal passwords</li><li className="chip">Official sources on verified findings</li><li className="chip">Up to 144 checks per school</li><li className="chip">Per student, per school, per term</li></ul>
             </div>
             <aside className="hero-plan-card" aria-label="Illustrative example of different kinds of updates">
-              <p className="hero-plan-eyebrow">A clearer view, illustrated</p>
               <ol className="hero-plan-list">
                 <li><span className="hero-plan-dot dot-action" aria-hidden="true" /><span className="hero-plan-text"><strong>Transcript</strong><small>Family action</small></span></li>
-                <li><span className="hero-plan-dot dot-waiting" aria-hidden="true" /><span className="hero-plan-text"><strong>Housing date</strong><small>Waiting on school</small></span></li>
-                <li><span className="hero-plan-dot dot-aware" aria-hidden="true" /><span className="hero-plan-text"><strong>Scholarship listing</strong><small>Awareness, not an eligibility decision</small></span></li>
+                <li><span className="hero-plan-dot dot-date" aria-hidden="true" /><span className="hero-plan-text"><strong>Housing date</strong><small>Date window</small></span></li>
+                <li><span className="hero-plan-dot dot-waiting" aria-hidden="true" /><span className="hero-plan-text"><strong>Waiting on school</strong><small>School-side wait</small></span></li>
+                <li><span className="hero-plan-dot dot-aware" aria-hidden="true" /><span className="hero-plan-text"><strong>Scholarship listing</strong><small>Awareness</small></span></li>
               </ol>
-              <p className="hero-plan-caption">Fictional examples, not a real household or school record.</p>
+              <p className="hero-plan-caption">Illustrative example</p>
             </aside>
           </div>
         </section>
 
-        <section id="why-it-matters" className="chapter chapter-question" aria-labelledby="why-title">
-          <div className="site-shell chapter-inner">
+        <section id="why-it-matters" className="section" aria-labelledby="why-title">
+          <div className="site-shell">
             <p className="eyebrow">Why it matters</p>
-            <div className="section-head"><h2 id="why-title" className="display">The important step is not always in the same place.</h2><p>A school may post a date on one page, send a letter about aid, and update a status elsewhere. Families still have to decide which detail applies, whose turn it is, and whether anything has changed.</p></div>
-            <div className="stakes-line"><strong>A missed step can narrow a choice.</strong><span>But a school-side wait is not a family deadline. The difference deserves to be clear.</span></div>
+            <h2 id="why-title" className="display">Senior year shouldn&apos;t feel like a second job.</h2>
+            <p className="lead">It&apos;s 11 p.m. You&apos;re checking a portal, searching an inbox, and updating a spreadsheet no one else touches. Did the housing deposit go in? Is that scholarship renewable? When does parking open?</p>
+            <p className="lead">Every school has dozens of steps, and they&apos;re never in the same place twice. Multiply that by every school on the list.</p>
+            <ul className="pills" aria-label="Steps families track">{pills.map((pill) => <li key={pill} className="pill">{pill}</li>)}</ul>
+            <div className="callout"><b>A missed step can cost a housing choice, an aid window, or a deposit.</b> And a wait on the school&apos;s side isn&apos;t your deadline. You should be able to tell the difference at a glance.</div>
           </div>
         </section>
 
-        <section id="how-it-helps" className="chapter chapter-method" aria-labelledby="how-title">
-          <div className="site-shell chapter-inner">
-            <div className="section-head"><div><p className="eyebrow">A better way to keep track</p><h2 id="how-title" className="display">One next step, with its context intact.</h2></div><p>Campus Passage connects what schools, sponsors, and vendors publish to your family&apos;s own plan—so the next meaningful step is clear. Broad research can be filtered by each student&apos;s choices: a commuter need not sift through optional dorm steps, while school requirements stay visible. The original instructions remain the authority.</p></div>
-            <figure className="guidance-panel">
-              <div className="guidance-panel-frame"><Image src="/images/campus-passage-guidance.webp" alt="A parent and student reviewing a laptop together at a table" width={1536} height={864} sizes="(min-width: 860px) 480px, 100vw" className="guidance-panel-img" /></div>
-              <figcaption className="guidance-panel-note"><p className="guidance-kicker">Keep the conversation</p><p>A shared view helps a family ask the right question. It does not replace a school counselor or the school&apos;s instructions.</p></figcaption>
-            </figure>
-            <h3 className="essentials-title">At a glance, every item answers:</h3>
-            <ol className="essentials-grid">{essentials.map(([title, text], index) => <li key={title}><span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{title}</h4><p>{text}</p></li>)}</ol>
-            <p className="essentials-foot">Student, school, term, source, and freshness stay with the full item in the <Link href="/sample-plan">sample plan</Link>.</p>
+        <section id="how" className="section" aria-labelledby="how-title">
+          <div className="site-shell">
+            <p className="eyebrow">How it works</p>
+            <h2 id="how-title" className="display">How to keep track of college deadlines in one place.</h2>
+            <ol className="grid3">{steps.map(([title, text], index) => <li key={title} className="card"><span className="num" aria-hidden="true">{index + 1}</span><h3>{title}</h3><p>{text}</p></li>)}</ol>
+            <figure className="guidance-panel"><Image src="/images/campus-passage-guidance.webp" alt="A parent and student reviewing a laptop together at a table" width={1536} height={864} sizes="(min-width: 860px) 720px, 100vw" className="guidance-panel-img" /></figure>
+            <h3 className="display subhead">Every step answers four questions.</h3>
+            <ol className="grid4">{essentials.map(([title, text], index) => <li key={title} className="card"><span className="card-num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{title}</h4><p>{text}</p></li>)}</ol>
+            <p className="fine">Only real dates. No invented urgency. The official source is always one click away.</p>
           </div>
         </section>
 
-        <section id="the-journey" className="chapter chapter-passage" aria-labelledby="journey-title">
-          <div className="site-shell chapter-inner">
-            <div className="section-head"><div><p className="eyebrow">The whole passage</p><h2 id="journey-title" className="display">From interest to move-in.</h2></div><p>Explore schools. Submit applications. Compare aid and decisions. Prepare for a bill and a new campus. The broader journey reaches academics, internships, graduation, and career preparation; this preview illustrates only the earlier steps. Each published step belongs in the right student&apos;s context.</p></div>
-            <figure className="passage-banner"><div className="passage-banner-frame"><Image src="/images/campus-passage-pathways.webp" alt="Students walking along different paths across a campus quad" width={1536} height={864} sizes="(min-width: 1180px) 1180px, 100vw" className="passage-banner-img" /><span className="photo-caption passage-banner-note">Illustrative campus photography — not a specific school.</span></div><figcaption className="passage-banner-caption"><p className="passage-banner-kicker">The same care, each path</p><p>One student or several: each school, term, and question stays distinct.</p></figcaption></figure>
-          </div>
-        </section>
-
-        <section id="sample" className="chapter chapter-example" aria-labelledby="sample-title">
-          <div className="site-shell chapter-inner example-inner"><div><p className="eyebrow">See an example</p><h2 id="sample-title" className="display">Try a plan before you request access.</h2><p>Choose Single Student or Multiple Students. Try a short, per-student intake: living plans, funding, and campus interests change what appears and what is set aside. An illustrated school requirement still takes priority. Fictional, read-only examples—not a live service. The two-student illustration is not a product limit.</p><Link className="button button-primary" href="/sample-plan">Open the sample plan</Link></div><div className="example-panel"><strong>Class of 2027 · Fall 2027</strong><p>Priya compares admissions and aid timing. Mateo explores visits and accessibility contacts. Both are fictional; neither plan uses a school portal or private household data.</p></div></div>
-        </section>
-
-        <section id="trust" className="chapter chapter-trust" aria-labelledby="trust-title">
-          <div className="site-shell chapter-inner">
-            <div className="section-head"><div><p className="eyebrow">Trust</p><h2 id="trust-title" className="display">Know what the plan knows—and what it doesn&apos;t.</h2></div><p>An unpublished date stays unpublished. A household action is not labeled complete just because someone pressed send. A school&apos;s own status and instructions stay in control.</p></div>
-            <div className="standard-callout" aria-label="The 12² Standard"><p className="eyebrow">The 12² Standard</p><p className="callout-line">144 checks. Every college. Every applicable term.</p><p className="caption">A named review discipline, not a published checklist or claim that every school is currently covered.</p></div>
-            <div className="capability-groups" aria-label="What is shown and what is not yet offered">
-              <section><h3>In the public sample</h3><p>Explore a fictional, read-only example with one or two students, different kinds of updates, and source labels. The sample is not a live school feed; approved families set up their own plans.</p></section>
-              <section><h3>In development</h3><p>School- and term-specific research, reviewed scholarship awareness, and clearer billing and 529 questions. No eligibility, award, or qualified-expense decision is made here.</p></section>
-              <section><h3>Planned</h3><p>Ask Campus Passage, optional message validation, Page Assist for supported public pages, and consent-based reminders. None is interactive or offered for purchase in this sample.</p></section>
+        <section id="standard" className="section" aria-labelledby="standard-title">
+          <div className="site-shell">
+            <p className="eyebrow">The 12² Standard</p>
+            <div className="big144" aria-hidden="true">Up to 144</div>
+            <h2 id="standard-title" className="display standard-title">Up to 144 checks per school, per term.</h2>
+            <p className="lead">We review each school across 12 parts of the college journey, from admissions and aid to housing, orientation, and career, with up to 12 checks in each. That&apos;s how the step buried on a housing page or in a billing FAQ still reaches your plan.</p>
+            <div className="callout"><b>Why &quot;up to&quot;?</b> Every campus is different. Some checks don&apos;t apply to a school, and some details haven&apos;t been published yet. When that happens, your plan says so plainly instead of guessing or padding the list.</div>
+            <div className="phases">
+              {phases.map((phase) => (
+                <div key={phase.name} className="phase">
+                  <h3 className="phase-name">{phase.name}</h3>
+                  {phase.tiles.map((tile) => (
+                    <details key={tile.t} className="tile" open={"open" in tile ? true : undefined}>
+                      <summary><span className="t">{tile.t}</span><span className="b">{tile.b}</span><span className="u">UP TO 12 CHECKS</span></summary>
+                      <ul>{tile.items.map((item) => <li key={item}>{item}</li>)}</ul>
+                    </details>
+                  ))}
+                </div>
+              ))}
             </div>
+            <div className="tally"><b>Nothing is padded or guessed.</b> Each check is shown as verified, under review, not yet published, not applicable, conflicting, or withheld.</div>
+            <p className="fine">A completed check means the item was reviewed against the school&apos;s official source. It is not a guarantee of eligibility, admission, aid, or any outcome.</p>
           </div>
         </section>
 
-        <section id="boundaries" className="chapter chapter-boundaries" aria-labelledby="boundaries-title"><div className="site-shell chapter-inner"><p className="eyebrow">Where the line is today</p><h2 id="boundaries-title" className="display">Your decisions and records stay yours.</h2><p>Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, pay a bill, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p></div></section>
+        <section id="the-journey" className="section" aria-labelledby="journey-title">
+          <div className="site-shell split">
+            <div><p className="eyebrow">Built around each student</p><h2 id="journey-title" className="display">One student or several. Every school stays distinct.</h2><p className="lead">Answers about housing, funding, and interests change what appears. A commuter doesn&apos;t wade through optional dorm steps, but a school&apos;s requirements always stay visible. Siblings, schools, and terms never blur together.</p></div>
+            <Image src="/images/campus-passage-pathways.webp" alt="Students walking along different paths across a campus quad. Illustrative campus photography — not a specific school." width={1536} height={864} sizes="(min-width: 1120px) 536px, 100vw" className="split-img" />
+          </div>
+        </section>
 
-        <section id="next-step" className="site-shell closing" aria-labelledby="closing-title"><p className="eyebrow">Take a look</p><h2 id="closing-title" className="display">See what a clearer next step could feel like.</h2><p>The public sample is fictional and read-only. Requests for complimentary founding-family access are reviewed by the owner; no availability or response time is promised.</p><div className="actions actions-centered"><Link className="button button-primary" href="/sample-plan">Explore the sample plan</Link><Link className="button button-secondary" href="/request-access">Request access</Link></div></section>
+        <section id="sample" className="section" aria-labelledby="sample-title">
+          <div className="site-shell">
+            <p className="eyebrow">See an example</p>
+            <h2 id="sample-title" className="display">Try a plan before you request access.</h2>
+            <p className="lead">Pick one student or two, answer a few quick questions, and watch the plan change: what&apos;s relevant, what&apos;s set aside, and whose move each step is.</p>
+            <p><Link className="button button-primary" href="/sample-plan">Open the sample plan →</Link></p>
+            <p className="fine">Meet Priya and Mateo, two fictional Class of 2027 students.</p>
+          </div>
+        </section>
+
+        <section id="trust" className="section" aria-labelledby="trust-title">
+          <div className="site-shell">
+            <p className="eyebrow">Trust</p>
+            <h2 id="trust-title" className="display">Know what the plan knows, and what it doesn&apos;t.</h2>
+            <p className="lead">An unpublished date stays unpublished. A household action is not labeled complete just because someone pressed send. A school&apos;s own status and instructions stay in control.</p>
+            <p className="lead">Your plan helps your family ask your school counselor better questions. It doesn&apos;t replace them.</p>
+          </div>
+        </section>
+
+        <section id="boundaries" className="section" aria-labelledby="boundaries-title">
+          <div className="site-shell">
+            <p className="eyebrow">Where the line is</p>
+            <h2 id="boundaries-title" className="display">Your decisions and records stay yours.</h2>
+            <p className="lead">Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, pay a bill, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p>
+            <p className="lead"><b>Your inbox, your control.</b> Inbox connection is optional and consent-based. We read only what&apos;s needed to build your plan, never use it for marketing, and you can disconnect and delete connected-mail data at any time.</p>
+          </div>
+        </section>
+
+        <section id="pricing" className="section" aria-labelledby="pricing-title">
+          <div className="site-shell center">
+            <p className="eyebrow">Pricing</p>
+            <h2 id="pricing-title" className="display">The simplest $199 you&apos;ll spend on college.</h2>
+            <p className="lead lead-centered">One price per household. Every eligible student in the same application cycle. No subscription.</p>
+            <p className="replaces">The spreadsheet. The sticky notes. The inbox searches. The 11 p.m. double-checks.</p>
+            <div className="price">
+              <span className="badge">LIMITED-TIME FOUNDING-FAMILY SPECIAL</span>
+              <div className="std">Standard price <s>$199</s> <span>per qualifying household, per application cycle</span></div>
+              <div className="p99"><span className="n">$99</span><span>per household, per application cycle</span></div>
+              <div className="elig">Founding families only · Limited time</div>
+              <p className="fine coverage">Covers the eligible students in a qualifying household who share the same high-school graduation year and application cycle. 10 unique colleges are included; each additional college is $19.</p>
+              <ul className="check"><li>Every eligible student in your household, same application cycle</li><li>10 unique colleges included; $19 per additional college</li><li>Up to 144 checks per school, per term</li><li>No subscription. No auto-renewal.</li></ul>
+              <Link className="button button-primary" href="/request-access">Claim the $99 founding price</Link>
+              <p className="fine price-foot">Founding families pay $99 per household, per application cycle, after approval. When the offer ends, the price is $199 per qualifying household, per application cycle.</p>
+            </div>
+            <div className="stats">
+              <div className="stat"><div className="n">Up to 144</div><div>checks per school</div></div>
+              <div className="stat"><div className="n">Up to 1,152</div><div>checks for a student weighing 8 schools</div></div>
+              <div className="stat"><div className="n">About 17¢</div><div>per check at $199 (under 9¢ at the founding price)</div></div>
+            </div>
+            <p className="fine">&quot;Up to&quot; because not every check applies at every school. 8 schools is an example: 10 unique colleges are included, and each additional college is $19. Per-check figures divide the price by 1,152 checks.</p>
+          </div>
+        </section>
+
+        <section id="founders" className="section" aria-labelledby="founders-title">
+          <div className="site-shell">
+            <p className="eyebrow">Who&apos;s behind it</p>
+            <h2 id="founders-title" className="display">Built by a small, independent team.</h2>
+            <p className="lead">Campus Passage is independently built and funded. A co-founder with a legal background reviews every public claim and boundary on this site, so the plan stays exact about what it knows and what it doesn&apos;t.</p>
+          </div>
+        </section>
+
+        <section id="faq" className="section" aria-labelledby="faq-title">
+          <div className="site-shell">
+            <p className="eyebrow">Questions</p>
+            <h2 id="faq-title" className="display">What parents ask us.</h2>
+            <FaqAccordion items={faqItems} />
+          </div>
+        </section>
+
+        <section id="next-step" className="section final" aria-labelledby="closing-title">
+          <div className="site-shell">
+            <p className="eyebrow">Your next step</p>
+            <h2 id="closing-title" className="display">Senior year happens once. Spend it with them.</h2>
+            <p className="lead">Let Campus Passage carry the checklist. Founding families pay $99 per household, per application cycle, for a limited time.</p>
+            <div className="actions"><Link className="button button-primary" href="/request-access">Request access</Link><Link className="button button-secondary" href="/sample-plan">Explore the sample plan</Link></div>
+          </div>
+        </section>
       </main>
-      <footer className="site-footer"><div className="site-shell footer-inner"><span>© 2026 Campus Passage concept</span><span>Illustrative examples · Not affiliated with or endorsed by schools</span></div></footer>
+      <MarketingFooter />
     </div>
   );
 }

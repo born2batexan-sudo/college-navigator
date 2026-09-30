@@ -10,11 +10,13 @@ const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8
 function visibleText(source: string) { return source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""); }
 
 describe("public copy boundaries", () => {
-  it("leads with the approved opportunity, not fear or household multiplicity", () => {
-    assert.match(overview, /<h1[^>]*>Protect the opportunity\.<\/h1>/);
+  it("leads with the owner-brief WHY headline and keeps the product-truth explanation", () => {
+    assert.match(overview, /<h1[^>]*>Be their parent, not their project manager\.<\/h1>/);
+    assert.match(overview, /Every college step, in one plan, with whose move it is\./);
+    assert.match(overview, /College application &amp; deadline tracker for parents/);
+    assert.doesNotMatch(overview + layout, /Protect the opportunity/);
     assert.doesNotMatch(overview, /Don&apos;t miss the moment|Don't miss the moment|two kids|two timelines/i);
-    assert.match(overview, /from interest to move-in\./i);
-    assert.match(overview, /Campus Passage connects what schools, sponsors, and vendors publish to your family&apos;s own plan—so the next meaningful step is clear/);
+    assert.match(overview, /From the first application to move-in day, Campus Passage brings verified dates, school-side waits, and family next steps into one clear plan/);
   });
   it("keeps four marketing essentials and all seven details inside each sample item", () => {
     assert.equal((overview.match(/\["(?:What it is|Whose move|By when|What's at stake)"/g) ?? []).length, 4);
@@ -22,20 +24,16 @@ describe("public copy boundaries", () => {
     for (const item of ["What it is", "Student, school, term", "Whose move", "By when", "Official source", "Freshness"]) assert.match(sample, new RegExp(`<dt>${item}</dt>`));
     assert.match(sample, /<dt>What&apos;s at stake<\/dt>/);
   });
-  it("groups capability claims by truth state without claiming operation", () => {
-    const labels = ["In the public sample", "In development", "Planned"];
-    const positions = labels.map((label) => overview.indexOf(`<h3>${label}</h3>`));
-    assert.ok(positions.every((idx) => idx >= 0));
-    assert.ok(positions[0] < positions[1] && positions[1] < positions[2]);
-    assert.match(overview, /not a live school feed/);
-    assert.match(overview, /None is interactive or offered for purchase/);
+  it("no longer carries roadmap sub-blocks or a claimed review standard", () => {
+    for (const label of ["In the public sample", "In development", "Planned"]) assert.doesNotMatch(overview, new RegExp(`<h3>${label}</h3>`));
+    assert.doesNotMatch(overview, /None is interactive or offered for purchase|No eligibility, award, or qualified-expense decision is made here/);
     assert.doesNotMatch(overview, /badge-live|tone="live"|>Live</);
   });
   it("preserves substantive boundaries, reserved phrase, and no synthetic video", () => {
-    assert.match(overview, /144 checks\. Every college\. Every applicable term\./);
+    assert.match(visibleText(overview), /Up to 144/, "approved up-to-144 public standard is shown");
     assert.doesNotMatch(overview, /checkpoint/i);
     for (const verb of ["apply", "submit", "decide", "pay", "change"]) assert.match(overview, new RegExp(verb, "i"));
-    assert.match(overview, /No school-portal passwords/);
+    assert.match(overview, /No portal passwords/);
     assert.doesNotMatch(overview + sample, /concierge|over the horizon|autofill|<video|product-story\.mp4/i);
     assert.doesNotMatch(overview + sample + header + layout, /CampusPassage(?!Landing|\.com)/);
   });

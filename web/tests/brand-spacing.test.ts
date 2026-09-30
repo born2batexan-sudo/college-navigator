@@ -10,7 +10,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const LANDING = readFileSync(path.join(ROOT, "components", "MarketingHeader.tsx"), "utf8");
+const LANDING = readFileSync(path.join(ROOT, "components", "RouteLogo.tsx"), "utf8");
 const APP_ICON = readFileSync(path.join(ROOT, "app", "icon.svg"), "utf8");
 const SKIP_DIRS = new Set(["node_modules", ".next", ".git"]);
 const SCAN_DIRS = ["app", "components", "lib"];
@@ -61,24 +61,32 @@ describe("brand name reads as two words", () => {
   });
 });
 
-describe("provisional Converging Routes identity", () => {
-  it("replaces the placeholder diamond with an accessible decorative route mark", () => {
+describe("provisional Route identity (owner brief File B)", () => {
+  it("renders the exact Route geometry as a decorative icon beside the accessible wordmark link", () => {
     assert.doesNotMatch(LANDING, /◇/, "the old placeholder diamond must not remain");
-    assert.match(LANDING, /function RouteMark\(\)/);
-    assert.match(LANDING, /<svg className="brand-mark brand-mark-svg"[^>]*aria-hidden="true"[^>]*focusable="false"/);
-    assert.match(LANDING, /className="brand-mark-boundary"/);
-    for (const route of ["coral", "gold", "teal", "violet"]) {
-      assert.match(LANDING, new RegExp(`brand-route-${route}`), `expected a ${route} route stroke`);
-    }
-    assert.match(LANDING, /aria-label="Campus Passage home"[^>]*>\s*<RouteMark \/>Campus Passage/);
+    assert.match(LANDING, /function RouteIcon\(/);
+    assert.match(LANDING, /<svg className="route-icon" viewBox="0 0 48 48"[^>]*aria-hidden="true"[^>]*focusable="false"/);
+    assert.match(LANDING, /<rect width="48" height="48" rx="11" fill="#123B55" \/>/);
+    assert.match(LANDING, /d="M18,82 L40,64 L58,40 L84,20"/);
+    assert.match(LANDING, /<circle cx="84" cy="20" r="10" fill="#E8875B" \/>/);
+    assert.match(LANDING, /aria-label="Campus Passage home"/);
+    assert.match(LANDING, /brand-wordmark">Campus Passage</);
+    assert.match(LANDING, /PROVISIONAL/);
   });
 
-  it("keeps the favicon as small-size vector geometry with no embedded text", () => {
-    assert.match(APP_ICON, /^<!--[^]*?-->/, "the icon should document its provisional status in a code comment");
-    assert.match(APP_ICON, /<svg\b[^>]*viewBox="0 0 64 64"/);
-    assert.match(APP_ICON, /<circle\b/);
+  it("keeps the favicon as small-size vector geometry with no embedded text, identical to the header icon", () => {
+    assert.match(APP_ICON, /^<!--[^]*?PROVISIONAL[^]*?-->/, "the icon should document its provisional status in a code comment");
+    assert.match(APP_ICON, /<svg\b[^>]*viewBox="0 0 48 48"/);
+    assert.match(APP_ICON, /<rect\b[^>]*fill="#123B55"/);
     assert.match(APP_ICON, /<path\b/);
     assert.doesNotMatch(APP_ICON, /<(?:text|image|foreignObject)\b/i);
-    assert.doesNotMatch(APP_ICON, /Campus Passage/);
+    assert.doesNotMatch(APP_ICON, /aria-label|role=/);
+  });
+
+  it("uses Epilogue only for the wordmark and retires the old circular mark", () => {
+    const css = readFileSync(path.join(ROOT, "app", "globals.css"), "utf8");
+    assert.equal((css.match(/--font-epilogue/g) ?? []).length, 1);
+    assert.doesNotMatch(css, /brand-route|brand-mark/);
+    assert.match(readFileSync(path.join(ROOT, "app", "layout.tsx"), "utf8"), /Epilogue\(\{ subsets: \["latin"\], weight: "600"/);
   });
 });

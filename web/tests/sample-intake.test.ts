@@ -86,10 +86,12 @@ describe("fictional adaptive intake", () => {
     assert.match(copy, /setEditingStudent\(entry.id\)/);
     assert.match(copy, /updateStudentAnswer\(current, editor, key, value\)/);
     assert.match(copy, /<details className="intake-more">/);
-    assert.match(copy, /No answers are submitted or saved/);
+    // Owner brief §4 deletes the standalone disclaimer; the intro now says answers stay in this browser.
+    assert.match(copy, /your answers stay in this browser/);
+    assert.doesNotMatch(copy, /fetch\(|action=|method="post"/i);
     assert.match(copy, /Fictional sample\. No live source checked/);
-    assert.match(overview, /commuter need not sift through optional dorm steps/);
-    assert.match(overview, /school requirements stay visible/);
+    assert.match(overview, /commuter doesn&apos;t wade through optional dorm steps/);
+    assert.match(overview, /school&apos;s requirements always stay visible/);
     assert.doesNotMatch(copy, /144|checkpoint|live personalized service[^.]*is available/i);
   });
 });

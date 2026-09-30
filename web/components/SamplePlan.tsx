@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import MarketingFooter from "@/components/MarketingFooter";
 import MarketingHeader from "@/components/MarketingHeader";
 import { demoStudents, studentById, type DemoSelection, type DemoStudentId } from "@/lib/landing-demo";
 import { initialIntake, personalizedPlan, updateStudentAnswer, type IntakeAnswers, type LivingPlan, type PlanItem, type TransportPlan } from "@/lib/sample-intake";
@@ -72,7 +73,7 @@ export default function SamplePlan() {
       <MarketingHeader current="sample" />
       <main id="main" className="sample-page site-shell">
         <Link className="sample-back" href="/">← Overview</Link>
-        <div className="sample-heading"><div><p className="eyebrow">Fictional, read-only example</p><h1 className="display">See how a meaningful next step comes into focus.</h1><p>Try a few choices to see how a student&apos;s plan changes. Your answers stay in this browser view; nothing reads a school portal, a live source, or a real household record.</p></div><span className="read-only">Illustrative · read-only</span></div>
+        <div className="sample-heading"><div><p className="eyebrow">Fictional, read-only example</p><h1 className="display">See how a meaningful next step comes into focus.</h1><p>Try a few choices and watch the plan change. Fictional students, fictional schools; your answers stay in this browser.</p></div><span className="read-only">Illustrative · read-only</span></div>
         <div className="pathway-selector" aria-label="Choose a pathway">
           <button type="button" aria-pressed={pathway === "single"} onClick={() => setPathway("single")}>Single Student</button>
           <button type="button" aria-pressed={pathway === "multiple"} onClick={() => setPathway("multiple")}>Multiple Students</button>
@@ -94,7 +95,6 @@ export default function SamplePlan() {
             <fieldset className="intake-group"><legend>Which funding paths should we consider?</legend><div className="intake-options">{fundingChoices.map(({ key, label }) => <label key={key} className="intake-choice"><input type="checkbox" checked={answers[key]} onChange={(event) => change(key, event.target.checked)} />{label}</label>)}</div><p>A listing is not an eligibility decision; the school, sponsor, or plan administrator remains the authority.</p></fieldset>
           </div>
           <details className="intake-more"><summary>More about campus days and support <span>Transport · access · visits · orientation · family</span></summary><div className="intake-grid intake-grid-more"><fieldset className="intake-group"><legend>How might {student.name.split(" ")[0]} get around?</legend><div className="intake-options">{transportChoices.map(({ value, label }) => <label key={value} className="intake-choice"><input type="radio" name={`transport-${editor}`} checked={answers.transport === value} onChange={() => change("transport", value)} />{label}</label>)}</div></fieldset><fieldset className="intake-group"><legend>What else is relevant?</legend><div className="intake-options">{campusChoices.map(({ key, label }) => <label key={key} className="intake-choice"><input type="checkbox" checked={answers[key]} onChange={(event) => change(key, event.target.checked)} />{label}</label>)}</div></fieldset></div></details>
-          <p className="intake-note">This is a short illustration, not a questionnaire or a live personalized service. No answers are submitted or saved.</p>
         </section>
         <p className="sample-count" aria-live="polite"><strong>{rows.length} relevant illustrated item{rows.length === 1 ? "" : "s"}</strong> · {setAside.length} optional item{setAside.length === 1 ? "" : "s"} set aside · {counts.dueThisWeek} family action{counts.dueThisWeek === 1 ? "" : "s"} · {counts.waiting} school-side wait{counts.waiting === 1 ? "" : "s"} · {counts.complete} complete · {counts.awareness} planning or awareness item{counts.awareness === 1 ? "" : "s"}</p>
         <div className="sample-grid">
@@ -103,10 +103,11 @@ export default function SamplePlan() {
             <section className="aside-work" aria-labelledby="aside-title"><h3 id="aside-title">Set aside for now · {setAside.length}</h3><p>Optional examples filtered by these answers; school requirements are never set aside. Change an answer to bring one back.</p><ul>{setAside.map((item) => <li key={`${item.student}-${item.title}`}><strong><StudentDot color={studentById(item.student).color} /> {studentById(item.student).name.split(" ")[0]} · {item.title}</strong><span>{item.reason}</span></li>)}</ul></section>
           </aside>
         </div>
+        <section className="sample-cta" aria-labelledby="sample-cta-title"><h2 id="sample-cta-title">Want this for your family?</h2><div className="actions"><Link className="button button-primary" href="/request-access">Request founding-family access</Link></div></section>
         <p className="sample-disclaimer">Every student, school, date, policy, and source label on this page is fictional. The source and freshness fields show how context would be presented, not a claim that any page was checked. Confirm actual steps with the school or sponsor.</p>
         <div className="sample-next"><h2>Want to understand the approach?</h2><div className="actions"><Link className="button button-secondary" href="/">Read the overview</Link><Link className="button button-primary" href="/request-access">Request access</Link></div></div>
       </main>
-      <footer className="site-footer"><div className="site-shell footer-inner"><span>© 2026 Campus Passage concept</span><span>Illustrative examples · Not affiliated with or endorsed by schools</span></div></footer>
+      <MarketingFooter />
     </div>
   );
 }

@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
+import { Epilogue, Inter } from "next/font/google";
 import "./globals.css";
+
+// Epilogue 600 is loaded (self-hosted from Google Fonts at build) for the logo wordmark ONLY.
+const epilogue = Epilogue({ subsets: ["latin"], weight: "600", display: "swap", variable: "--font-epilogue" });
+// Inter 400/500/600 is self-hosted at build and applied only to marketing pages.
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], display: "swap", variable: "--font-inter" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.campuspassage.com"),
   title: {
-    default: "Campus Passage — Protect the opportunity.",
+    default: "College Application Tracker for Parents",
     template: "%s | Campus Passage",
   },
-  description: "Campus Passage connects what schools, sponsors, and vendors publish to your family's own plan—so the next meaningful step is clear. Explore a fictional, read-only example from interest to move-in.",
+  description: "Track college application deadlines, verified next steps, financial aid dates, and move-in planning in one plan per student. Built for parents. No portal passwords.",
   alternates: { canonical: "/" },
   applicationName: "Campus Passage",
   keywords: [
@@ -22,13 +28,13 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "Campus Passage",
-    title: "Protect the opportunity.",
-    description: "A clearer next step for your family's college journey, from interest to move-in. Explore a fictional, read-only sample.",
+    title: "Be their parent, not their project manager.",
+    description: "One clear plan per student, from first look to move-in. Up to 144 checks per school. No portal passwords.",
   },
   twitter: {
     card: "summary",
-    title: "Campus Passage — Protect the opportunity.",
-    description: "A clearer next step for your family's college journey. Explore a fictional, read-only sample plan.",
+    title: "Be their parent, not their project manager.",
+    description: "One clear plan per student, from first look to move-in. Up to 144 checks per school. No portal passwords.",
   },
   robots: {
     index: false,
@@ -40,7 +46,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${epilogue.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );
