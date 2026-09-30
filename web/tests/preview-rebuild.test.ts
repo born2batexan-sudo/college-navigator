@@ -65,8 +65,9 @@ describe("approved public release copy", () => {
     assert.match(footer, /Log in/);
   });
 
-  it("keeps controlled public indexing and excludes analytics or real-school marketing claims", () => {
-    assert.match(layout, /index: false/);
+  it("indexes only the approved homepage and excludes analytics or real-school marketing claims", () => {
+    assert.match(layout, /index: true/);
+    assert.match(readFileSync(new URL("../app/sample-plan/page.tsx", import.meta.url), "utf8"), /index: false/);
     assert.doesNotMatch(all, /gtag\(|G-[A-Z0-9]{8,}|application\/ld\+json/);
     assert.doesNotMatch(all, /Michigan State|Grand Valley|Western Michigan|Texas State|University of Texas/);
   });

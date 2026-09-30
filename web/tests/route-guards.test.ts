@@ -111,7 +111,7 @@ describe("route guards", () => {
     const env = read(path.join(ROOT, "lib", "auth", "env.ts"));
     const block = env.slice(env.indexOf("PUBLIC_PATH_PREFIXES"), env.indexOf("];", env.indexOf("PUBLIC_PATH_PREFIXES")));
     const listed = [...block.matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]).sort();
-    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/resend/inbound", "/api/stripe/webhook", "/auth/callback", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
+    assert.deepEqual(listed, ["/_next/", "/api/agent/", "/api/stripe/webhook", "/auth/callback", "/favicon.ico", "/login", "/media/", "/request-access", "/robots.txt", "/sitemap.xml"]);
     assert.match(env, /pathname === "\/"/);
     assert.match(env, /pathname === "\/sample-plan"/);
     assert.doesNotMatch(block, /"\/sample-plan"/, "the sample page must be an exact-match exception, not a public prefix");
@@ -129,8 +129,6 @@ describe("route guards", () => {
     assert.equal(isPublicPath("/sample-plan-other"), false);
     assert.equal(isPublicPath('/api/stripe/webhook'),true);
     assert.equal(isPublicPath('/api/stripe/webhook-other'),false);
-    assert.equal(isPublicPath('/api/resend/inbound'),true);
-    assert.equal(isPublicPath('/api/resend/inbound/other'),false);
     assert.equal(isPublicPath('/auth/callback'),true);
     assert.equal(isPublicPath('/auth/callback/other'),false);
     assert.equal(isPublicPath('/api/debug/unknown'),false);
