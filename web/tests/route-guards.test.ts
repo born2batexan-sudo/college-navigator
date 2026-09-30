@@ -26,7 +26,7 @@ const read = (p: string) => readFileSync(p, "utf-8");
 const GUARD = /(?:require(?:Writable(?:Onboarded)?Household|WritableSelectedStudent|SelectedStudent|OnboardedHousehold|OnboardingHousehold|InvitationHousehold|Household|User|DemoOwner)|authorizedApiHousehold)\(/;
 
 // Pages that are allowed without sign-in.
-const PUBLIC_PAGES = new Set(["app/page.tsx", "app/sample-plan/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // overview, fixed fictional sample, and generic access request are public; debug is an inert 404 stub
+const PUBLIC_PAGES = new Set(["app/page.tsx", "app/sample-plan/page.tsx", "app/ask/page.tsx", "app/login/page.tsx", "app/request-access/page.tsx", "app/debug-page-check/page.tsx"]); // overview, fixed fictional sample, public product FAQ, and generic access request are public; debug is an inert 404 stub
 // Server-action files whose functions may run without sign-in (signing in itself or submitting a generic demo request).
 const PUBLIC_ACTIONS = new Set(["app/login/actions.ts", "app/request-access/actions.ts"]);
 // Route handlers that authenticate some other way.
@@ -119,6 +119,10 @@ describe("route guards", () => {
     assert.match(proxy, /isApplicationProtectedPath\(pathname\)/);
     assert.match(proxy, /if \(isPublic \|\| !isProtected\) return response/);
     assert.equal(isApplicationProtectedPath("/dashboard"), true);
+    assert.equal(isApplicationProtectedPath("/ask"), false);
+    assert.equal(isApplicationProtectedPath("/ask/research"), true);
+    assert.equal(isPublicPath("/ask"), true);
+    assert.equal(isPublicPath("/ask/research"), false);
     assert.equal(isApplicationProtectedPath("/does-not-exist"), false);
     assert.equal(isApplicationProtectedPath("/dashboard/extra"), false);
   });
