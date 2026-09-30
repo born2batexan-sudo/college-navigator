@@ -57,18 +57,22 @@ export const PUBLIC_PATH_PREFIXES = [
   "/media/", // reviewed public marketing media only
   "/robots.txt",
   "/sitemap.xml",
-  "/auth/",
-  "/api/agent/", // machine callers; each route checks its own bearer key
-  "/api/debug/", // retired stub, always 404
-  "/api/stripe/webhook", // signed server-to-server webhook; route verifies raw-body signature
+  "/auth/callback",
+  "/api/agent/", // machine callers; disabled in production in the first access slice
+  "/api/stripe/webhook", // signed server-to-server base-payment webhook; route verifies raw-body signature
+  "/api/stripe/addon-webhook", // separate signed staging/test add-on webhook
   "/_next/",
   "/favicon.ico",
 ];
 
 export function isPublicPath(pathname: string): boolean {
-  // Only this fixed fictional marketing page is public; do not open a prefix.
+  // OAuth response must reach its own signed-in/state/PKCE guard; do not put
+  // authorization codes into the generic proxy's login?next= redirect.
+  if (/^\/api\/mail\/callback\/(?:gmail|microsoft)$/.test(pathname) || pathname==='/api/mail/maintenance') return true;
   if (pathname === "/" || pathname === "/sample-plan") return true;
-  return PUBLIC_PATH_PREFIXES.some((p) => p === '/api/stripe/webhook'
-    ? pathname === p
-    : pathname === p.replace(/\/$/, "") || pathname.startsWith(p));
+  // Exact public pages; only explicit resource/callback prefixes may contain children.
+  return PUBLIC_PATH_PREFIXES.some((p) => {
+    if (["/login", "/request-access", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/auth/callback", "/api/stripe/webhook", "/api/stripe/addon-webhook"].includes(p)) return pathname === p;
+    return pathname === p.slice(0, -1) || pathname.startsWith(p);
+  });
 }
