@@ -1,7 +1,7 @@
 import HeaderNav from "@/components/HeaderNav";
 import RouteLockup from "@/components/RouteLogo";
 
-export default function MarketingHeader({ current }: { current: "overview" | "sample" }) {
+export default function MarketingHeader({ current }: { current: "overview" | "sample" | "ask" }) {
   return (
     <>
       <header className="site-header">
