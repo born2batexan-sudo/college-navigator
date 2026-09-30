@@ -8,6 +8,7 @@ import GrantPanel from './GrantPanel';
 import { accessSummary } from '@/lib/db/cycle-access';
 import { resendConfigured } from '@/lib/email/resend';
 import { listResearchExceptions } from '@/lib/db/request-pipeline';
+import { HouseholdLookup } from './HouseholdLookup';
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export default async function DemoAdminPage() {
 
       <section className="rounded-xl border border-line bg-white/70 p-4 text-sm" aria-label="Review summary"><h2 className="font-semibold">Review summary · built—not live</h2><p className="mt-2">Pending requests: {summary.requests} · Active complimentary grants: {summary.grants} · Verified payments: {summary.payments} · Order exceptions: {summary.exceptions.length} · Webhook exceptions: {summary.webhookExceptions.length}</p>{summary.exceptions.length > 0 && <ul className="mt-2 list-disc pl-5">{summary.exceptions.map(x => <li key={x.id}>Order {x.id} · household {x.household_id} · {x.cycle} · {x.status}</li>)}</ul>}{summary.webhookExceptions.length>0 && <ul className="mt-2 list-disc pl-5">{summary.webhookExceptions.map(x=><li key={x.event_id}>Webhook {x.event_id}: {x.detail_code}</li>)}</ul>}<p className="mt-2 text-xs text-ink/55">Provider fees and net cash remain unreconciled until actual processor fee data is imported and checked. Webhook exceptions require separate review.</p></section>
       <section aria-label="Research exceptions" className="rounded-xl border border-line bg-white/70 p-4 text-sm"><h2 className="font-semibold">Research exceptions · {researchExceptions.length}</h2><p className="text-xs text-ink/55">Only withheld/conflicting evidence or exhausted/blocked jobs appear here; routine unpublished or unchanged checks do not notify families or the owner.</p>{researchExceptions.length>0 && <ul className="mt-2 space-y-1">{researchExceptions.map((x,i)=><li key={`${x.unitid}-${x.term}-${x.code}-${i}`}>{x.name} ({x.unitid}, {x.term}) · {x.code} · {x.state} {x.checkedAt && `· ${x.checkedAt}`}</li>)}</ul>}</section>
+      <HouseholdLookup />
       <GrantPanel />
       <section aria-label="Demo access requests" className="overflow-hidden rounded-2xl border border-line bg-white/70 shadow-card">
         <div className="border-b border-line px-4 py-3 text-xs font-semibold uppercase tracking-[.12em] text-ink/45">Access requests</div>
