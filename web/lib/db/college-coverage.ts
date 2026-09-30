@@ -8,6 +8,7 @@ import {
   isCanonicalCollegeId, isCoverageCycle, isVerifiedAddonPayment, quoteAddonUnits,
   type BlockReason, type CoverageAccount, type VerifiedAddonPayment,
 } from '../payments/college-coverage';
+import { isAdministratorEmail } from '../auth/admin';
 
 type Env = Record<string, string | undefined>;
 const lock = usingPostgres ? ' FOR UPDATE' : '';
@@ -253,8 +254,7 @@ export async function recordAddonRefundForReview(input: { paymentIntentId: strin
 /** Explicit owner review outcome: keep granted capacity and already-started research, lift the
  * freeze. Revoking unused units is intentionally NOT implemented (needs a reviewed policy). */
 export async function releaseAddonRefundHold(input: { purchaseId: string; actor: { id: string; email: string }; reason: string }): Promise<boolean> {
-  const expected = process.env.DEMO_OWNER_EMAIL?.trim().toLowerCase();
-  if (!expected || input.actor.email?.trim().toLowerCase() !== expected || !await queryOne('SELECT 1 AS ok FROM auth_links WHERE auth_user_id=$1 AND role=$2', [input.actor.id, 'owner'])) throw new Error('Owner authorization required');
+  if (!isAdministratorEmail(input.actor.email) || !await queryOne('SELECT 1 AS ok FROM auth_links WHERE auth_user_id=$1 AND role=$2', [input.actor.id, 'owner'])) throw new Error('Owner authorization required');
   const reason = input.reason.trim();
   if (reason.length < 4 || reason.length > 200) throw new Error('Review reason required');
   return withTransaction(async () => {

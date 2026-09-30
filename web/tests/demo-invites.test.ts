@@ -11,6 +11,7 @@ const dir = mkdtempSync(path.join(tmpdir(), "cn-demo-"));
 process.env.DB_PATH = path.join(dir, "demo.sqlite3");
 delete process.env.DATABASE_URL;
 process.env.DEMO_OWNER_EMAIL = "owner@example.com";
+process.env.ADMIN_EMAILS = "owner@example.com, Marc@HydraOpCo.com";
 
 type Accounts = typeof import("../lib/db/accounts");
 type Repo = typeof import("../lib/db/repo");
@@ -78,9 +79,16 @@ describe("private preview invitations", () => {
   it("fails closed owner authorization when config is absent or mismatched", () => {
     assert.equal(A.isDemoOwnerEmail("owner@example.com"), true);
     assert.equal(A.isDemoOwnerEmail(" owner@example.com "), true);
+    assert.equal(A.isDemoOwnerEmail("marc@hydraopco.com"), true);
+    assert.equal(A.isDemoOwnerEmail(" MARC@HYDRAOPCO.COM "), true);
     assert.equal(A.isDemoOwnerEmail("other@example.com"), false);
-    const owner = process.env.DEMO_OWNER_EMAIL; delete process.env.DEMO_OWNER_EMAIL;
+    const owner = process.env.DEMO_OWNER_EMAIL;
+    const admins = process.env.ADMIN_EMAILS;
+    delete process.env.DEMO_OWNER_EMAIL;
+    delete process.env.ADMIN_EMAILS;
     assert.equal(A.isDemoOwnerEmail("owner@example.com"), false);
+    assert.equal(A.isDemoOwnerEmail("marc@hydraopco.com"), false);
     process.env.DEMO_OWNER_EMAIL = owner;
+    process.env.ADMIN_EMAILS = admins;
   });
 });

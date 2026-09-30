@@ -567,10 +567,8 @@ function demoTemplateId(): string {
   return value;
 }
 
-export function isDemoOwnerEmail(email: string | null): boolean {
-  const expected = process.env.DEMO_OWNER_EMAIL?.trim().toLowerCase();
-  return !!expected && !!email && email.trim().toLowerCase() === expected;
-}
+export { administratorEmails, isAdministratorEmail as isDemoOwnerEmail } from "../auth/admin";
+import { isAdministratorEmail as isDemoOwnerEmail } from "../auth/admin";
 
 export async function createDemoInvite(input: { createdBy: string; createdEmail: string }): Promise<{ token: string; expiresAt: string }> {
   const templateHouseholdId = demoTemplateId();
