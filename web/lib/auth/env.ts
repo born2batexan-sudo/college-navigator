@@ -59,7 +59,8 @@ export const PUBLIC_PATH_PREFIXES = [
   "/sitemap.xml",
   "/auth/callback",
   "/api/agent/", // machine callers; disabled in production in the first access slice
-  "/api/stripe/webhook", // signed server-to-server webhook; route verifies raw-body signature
+  "/api/stripe/webhook", // signed server-to-server base-payment webhook; route verifies raw-body signature
+  "/api/stripe/addon-webhook", // separate signed staging/test add-on webhook
   "/_next/",
   "/favicon.ico",
 ];
@@ -71,7 +72,7 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname === "/" || pathname === "/sample-plan") return true;
   // Exact public pages; only explicit resource/callback prefixes may contain children.
   return PUBLIC_PATH_PREFIXES.some((p) => {
-    if (["/login", "/request-access", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/auth/callback", "/api/stripe/webhook"].includes(p)) return pathname === p;
+    if (["/login", "/request-access", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/auth/callback", "/api/stripe/webhook", "/api/stripe/addon-webhook"].includes(p)) return pathname === p;
     return pathname === p.slice(0, -1) || pathname.startsWith(p);
   });
 }
