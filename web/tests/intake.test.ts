@@ -79,12 +79,17 @@ describe("persisted student intake and isolation", () => {
     const mandatory = await R.upsertRule({ institutionId: inst.id, checkpointCode: "INT-02", domain: "Admissions", title: "Required application", requirement: "Required application", critical: false, population: "all", status: "verified", confidence: "high", researchTerm: "Fall 2027", cycleState: "current", sourceId: src.id, evidenceQuote: "Required application" });
     const r1 = await R.upsertRelationship({ studentId: profiles[0].id, institutionId: inst.id });
     const r2 = await R.upsertRelationship({ studentId: profiles[1].id, institutionId: inst.id });
+    const overrideInst = await R.upsertInstitution({ name: "Intake Override College", slug: "intake-override", domains: ["override.example.edu"] });
+    const overrideSrc = await R.createSource({ institutionId: overrideInst.id, url: "https://override.example.edu/admissions", label: "Admissions" });
+    const overrideRule = await R.upsertRule({ institutionId: overrideInst.id, checkpointCode: "INT-03", domain: "Campus life", title: "School-specific recruitment", requirement: "Optional recruitment", critical: false, population: "greek_pnm", status: "verified", confidence: "high", researchTerm: "Fall 2027", cycleState: "current", sourceId: overrideSrc.id, evidenceQuote: "School-specific recruitment information" });
+    const r3 = await R.upsertRelationship({ studentId: profiles[0].id, institutionId: overrideInst.id });
+    await R.updateRelationshipAttributes(r3.id, { greekInterest: true });
     const f = fullForm(); f.set("campusLife", "yes");
     const ctx = { ...owner, student: profiles[0] };
     await A.updateStudentAttributes({ ...other, student: profiles[0] }, { intake: parseIntakeForm(f) });
     assert.deepEqual(readIntake((await R.getStudent(profiles[0].id))!), {}, "cross-household write changes no row");
     await A.updateStudentAttributes(ctx, { intake: parseIntakeForm(f) });
-    await materializeActionsForRelationship(r1.id); await materializeActionsForRelationship(r2.id);
+    await materializeActionsForRelationship(r1.id); await materializeActionsForRelationship(r2.id); await materializeActionsForRelationship(r3.id);
     assert.ok(await R.findActionInstance(r1.id, conditional.id));
     assert.ok(await R.findActionInstance(r2.id, conditional.id), "unanswered remains visible");
     f.set("campusLife", "no");
@@ -93,6 +98,7 @@ describe("persisted student intake and isolation", () => {
     await Promise.all(active.map(r => materializeActionsForRelationship(r.id)));
     assert.equal((await R.findActionInstance(r1.id, conditional.id))?.state, "not_applicable");
     assert.equal((await R.findActionInstance(r1.id, mandatory.id))?.state, "not_started");
+    assert.equal((await R.findActionInstance(r3.id, overrideRule.id))?.state, "not_started", "an explicit school-level preference overrides the conflicting student default only for that school");
     assert.equal((await R.findActionInstance(r2.id, conditional.id))?.state, "not_started");
     const after = await R.getStudent(profiles[0].id);
     assert.equal(JSON.parse(after!.attributes).enteringTerm, "Fall 2027");
