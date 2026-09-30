@@ -4,10 +4,13 @@ import { listFamilyRequests, markFamilyFirstView, searchDirectory } from "@/lib/
 import { requestSchool } from "./actions";
 import { familyResearchView } from "@/lib/db/request-pipeline";
 import { ALL_CHECKPOINTS } from "@/lib/checkpoints";
+import { addonUiReady, getAddonReturnStatus, getCollegeAddonOffer } from "@/lib/db/college-addon-offer";
+import { enteringTermFrom } from "@/lib/terms";
+import { startCollegeAddon } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Params = { q?: string; submitted?: string; error?: string };
+type Params = { q?: string; submitted?: string; error?: string; addon?: string; addon_checkout?: string; purchase?: string };
 const statusText: Record<string, string> = {
   queued: "In line — research has not started.",
   running: "Research in progress.",
@@ -18,9 +21,17 @@ const statusText: Record<string, string> = {
 
 export default async function RequestSchoolPage({ searchParams }: { searchParams: Promise<Params> }) {
   const query = await searchParams;
-  const { household, isDemo } = await requireOnboardedHousehold();
+  const ctx = await requireOnboardedHousehold();
+  const { household, isDemo } = ctx;
   const q = (query.q ?? "").trim().slice(0, 100);
   const [matches, requests] = await Promise.all([searchDirectory(q), listFamilyRequests(household.id)]);
+  const addonEnabled = addonUiReady();
+  const offer = addonEnabled && query.addon ? await getCollegeAddonOffer({ householdId: household.id,
+    authUserId: ctx.authUserId, isOwner: ctx.isOwner, isDemo,
+    cycle: enteringTermFrom(ctx.student), unitid: query.addon }) : null;
+  const returnStatus = addonEnabled && ctx.isOwner && !isDemo && query.purchase &&
+    (query.addon_checkout === "return" || query.addon_checkout === "canceled")
+    ? await getAddonReturnStatus(household.id, query.purchase) : null;
   const views = await Promise.all(requests.map(r => familyResearchView(household.id,r.unitid,r.term)));
   // Record the authenticated server render handoff only after all 144 states exist.
   // This is a durable latency marker, not proof that the browser painted the view.
@@ -36,6 +47,21 @@ export default async function RequestSchoolPage({ searchParams }: { searchParams
       {isDemo && <p className="rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="text-accent">Private Preview</strong> · You can explore the directory, but new research requests are disabled.</p>}
       {query.error && <p role="alert" className="rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">{query.error}</p>}
       {query.submitted && <p role="status" className="rounded-md border border-ok/30 bg-ok/10 p-3 text-sm text-ok">Your request is in line. We will update this page as safe official evidence is reviewed.</p>}
+      {returnStatus && <p role="status" className="rounded-md border border-line bg-white p-3 text-sm text-ink/75">
+        {returnStatus === "provisioned" ? "A signed payment event has verified your add-on capacity. The school request is not automatic; select Request again to submit it." :
+          returnStatus === "refund_review" ? "This add-on is held for refund review; no new purchased capacity can be used." :
+          returnStatus === "pending" ? query.addon_checkout === "canceled" ? "You returned from the checkout cancel page. The purchase remains pending and grants no capacity. If you submitted payment, wait for signed verification." : "Checkout returned, but add-on capacity has not been verified. A signed payment event is required; check back before requesting the school." :
+          "This add-on needs review; no new capacity has been confirmed."}
+      </p>}
+      {offer?.ownerRequired && <p role="status" className="rounded-md border border-line p-3 text-sm">This household has used its college allowance for this cycle. Ask the household owner to review additional college access.</p>}
+      {offer && !offer.ownerRequired && <section className="rounded-lg border border-accent/30 bg-white p-4">
+        <h2 className="font-semibold">Add one college for {offer.cycle}</h2>
+        <p className="mt-1 text-sm text-ink/70">The included allowance is full. {offer.schoolName} is not yet requested. One additional unique college costs ${ (offer.amountCents / 100).toFixed(2) } in staging test mode. This purchase does not submit the school request.</p>
+        {offer.pending && <p className="mt-2 text-sm text-ink/60">A one-unit checkout is pending. Continuing will reuse it; pending payment grants no capacity.</p>}
+        <form action={startCollegeAddon} className="mt-3"><input type="hidden" name="unitid" value={offer.unitid} /><button type="submit" className="rounded bg-accent px-3 py-2 text-sm font-medium text-white">Continue to Stripe-hosted test checkout</button></form>
+        <p className="mt-2 text-xs text-ink/55">Only a signed, matching paid test event grants capacity. After verification, return here and request the school again.</p>
+      </section>}
+      {addonEnabled && !isDemo && query.addon && !offer && <p role="status" className="rounded-md border border-line p-3 text-sm">No add-on checkout is available for this request. Review your access and request limits.</p>}
       <form method="get" className="flex gap-2">
         <label htmlFor="q" className="sr-only">Search schools</label>
         <input id="q" name="q" defaultValue={q} placeholder="School name, city, or state" minLength={2} className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-2 text-sm" />

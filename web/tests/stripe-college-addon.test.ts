@@ -86,6 +86,8 @@ describe('staging-only Stripe college add-on checkout boundary', () => {
     assert.equal(body.get('metadata[addon_purchase_id]'), purchase.id);
     assert.equal(body.get('metadata[household_id]'), household.id);
     assert.equal(body.get('metadata[cycle]'), 'Fall 2027');
+    assert.equal(body.get('success_url'), `https://staging.example.com/request?addon_checkout=return&purchase=${purchase.id}`);
+    assert.equal(body.get('cancel_url'), `https://staging.example.com/request?addon_checkout=canceled&purchase=${purchase.id}`);
     assert.equal((await K.getAddonPurchase(purchase.id))?.providerSessionId, 'cs_addon_1');
   });
 
