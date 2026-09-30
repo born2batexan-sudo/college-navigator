@@ -37,10 +37,9 @@ export const metadata: Metadata = {
     description: "One clear plan per student, from first look to move-in. Up to 144 checks per school. No portal passwords.",
   },
   robots: {
-    index: false,
-    follow: false,
-    nocache: true,
-    googleBot: { index: false, follow: false, noimageindex: true },
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
   },
 };
 

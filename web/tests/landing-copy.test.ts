@@ -6,6 +6,8 @@ const overview = readFileSync(new URL("../components/CampusPassageLanding.tsx", 
 const sample = readFileSync(new URL("../components/SamplePlan.tsx", import.meta.url), "utf8");
 const header = readFileSync(new URL("../components/MarketingHeader.tsx", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+const robots = readFileSync(new URL("../app/robots.ts", import.meta.url), "utf8");
+const sitemap = readFileSync(new URL("../app/sitemap.ts", import.meta.url), "utf8");
 
 function visibleText(source: string) { return source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""); }
 
@@ -47,5 +49,15 @@ describe("public copy boundaries", () => {
     assert.match(sample, /Fictional sample/);
     assert.match(overview + sample, /aria-live="polite"|aria-pressed=/);
     assert.match(overview, /className="skip-link"/);
+  });
+  it("allows indexing only for the approved public homepage", () => {
+    assert.match(layout, /index:\s*true/);
+    assert.match(layout, /follow:\s*true/);
+    assert.doesNotMatch(layout, /noindex|index:\s*false/);
+    assert.match(robots, /allow:\s*"\/"/);
+    assert.doesNotMatch(robots, /disallow:\s*"\/"/);
+    assert.match(robots, /https:\/\/www\.campuspassage\.com\/sitemap\.xml/);
+    assert.match(sitemap, /https:\/\/www\.campuspassage\.com\//);
+    assert.doesNotMatch(sitemap, /request-access|sample-plan|dashboard|login/);
   });
 });

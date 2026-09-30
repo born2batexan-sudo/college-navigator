@@ -1,6 +1,12 @@
 import type { MetadataRoute } from "next";
 
-/** The shareable sandbox is intentionally excluded from search indexing. */
+/** Only the approved public homepage is indexed; protected and preview routes stay excluded. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [];
+  return [
+    {
+      url: "https://www.campuspassage.com/",
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+  ];
 }
