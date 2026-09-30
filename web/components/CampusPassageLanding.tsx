@@ -59,6 +59,10 @@ const faqItems: readonly FaqItem[] = [
   { id: "faq-data", question: "What happens to my data if I leave?", answer: "Your household records remain subject to Campus Passage's privacy and deletion controls. If you choose the Coming Soon email connectivity feature later, you will have controls to disconnect inbox access and delete connected-mail data." },
 ];
 
+function SectionStart() {
+  return <div className="actions"><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link></div>;
+}
+
 export default function CampusPassageLanding() {
   return (
     <div className="campus-page">
@@ -98,6 +102,7 @@ export default function CampusPassageLanding() {
             <p className="lead">Every school has dozens of steps, and they&apos;re never in the same place twice. Multiply that by every school on the list.</p>
             <ul className="pills" aria-label="Steps families track">{pills.map((pill) => <li key={pill} className="pill">{pill}</li>)}</ul>
             <div className="callout"><b>A missed step can cost a housing choice, an aid window, or a deposit.</b> And a wait on the school&apos;s side isn&apos;t your deadline. You should be able to tell the difference at a glance.</div>
+            <SectionStart />
           </div>
         </section>
 
@@ -110,6 +115,7 @@ export default function CampusPassageLanding() {
             <h3 className="display subhead">Every step answers four questions.</h3>
             <ol className="grid4">{essentials.map(([title, text], index) => <li key={title} className="card"><span className="card-num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h4>{title}</h4><p>{text}</p></li>)}</ol>
             <p className="fine">Only real dates. No invented urgency. The official source is always one click away.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -135,6 +141,7 @@ export default function CampusPassageLanding() {
             </div>
             <div className="tally"><b>Nothing is padded or guessed.</b> Each check is shown as verified, under review, not yet published, not applicable, conflicting, or withheld.</div>
             <p className="fine">A completed check means the item was reviewed against the school&apos;s official source. It is not a guarantee of eligibility, admission, aid, or any outcome.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -142,6 +149,7 @@ export default function CampusPassageLanding() {
           <div className="site-shell split">
             <div><p className="eyebrow">Built around each student</p><h2 id="journey-title" className="display">One student or several. Every school stays distinct.</h2><p className="lead">Answers about housing, funding, and interests change what appears. A commuter doesn&apos;t wade through optional dorm steps, but a school&apos;s requirements always stay visible. Siblings, schools, and terms never blur together.</p></div>
             <Image src="/images/campus-passage-pathways.webp" alt="Students walking along different paths across a campus quad. Illustrative campus photography — not a specific school." width={1536} height={864} sizes="(min-width: 1120px) 536px, 100vw" className="split-img" />
+            <SectionStart />
           </div>
         </section>
 
@@ -152,6 +160,7 @@ export default function CampusPassageLanding() {
             <p className="lead">Pick one student or two, answer a few quick questions, and watch the plan change: what&apos;s relevant, what&apos;s set aside, and whose move each step is.</p>
             <p><Link className="button button-primary" href="/sample-plan">Open the sample plan →</Link></p>
             <p className="fine">Meet Priya and Mateo, two fictional Class of 2027 students.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -161,6 +170,7 @@ export default function CampusPassageLanding() {
             <h2 id="trust-title" className="display">Know what the plan knows, and what it doesn&apos;t.</h2>
             <p className="lead">An unpublished date stays unpublished. A household action is not labeled complete just because someone pressed send. A school&apos;s own status and instructions stay in control.</p>
             <p className="lead">Your plan helps your family ask your school counselor better questions. It doesn&apos;t replace them.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -170,6 +180,7 @@ export default function CampusPassageLanding() {
             <h2 id="boundaries-title" className="display">Your decisions and records stay yours.</h2>
             <p className="lead">Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, initiate a bill transaction, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p>
             <p className="lead"><b>Email Connectivity — Coming Soon.</b> An optional future feature may help families incorporate sender-scoped college updates into their plans—with explicit consent and controls to disconnect and delete connected-mail data.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -181,6 +192,7 @@ export default function CampusPassageLanding() {
             <p className="lead">We experienced firsthand how fragmented and overwhelming the college onboarding season can become. Important information was often difficult to find, easy to miss, and rarely organized around what a family actually needed to do next.</p>
             <p className="lead">So we built Campus Passage to bring greater clarity and order to the journey—helping families understand what matters, what&apos;s coming, and where to find the official information they need.</p>
             <p className="lead">We&apos;re not outside observers. We&apos;re families who faced the same confusion and believed there had to be a better way.</p>
+            <SectionStart />
           </div>
         </section>
 
@@ -189,6 +201,7 @@ export default function CampusPassageLanding() {
             <p className="eyebrow">Questions</p>
             <h2 id="faq-title" className="display">What parents ask us.</h2>
             <FaqAccordion items={faqItems} />
+            <SectionStart />
           </div>
         </section>
 
