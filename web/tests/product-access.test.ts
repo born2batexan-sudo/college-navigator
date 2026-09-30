@@ -102,7 +102,7 @@ describe("production product authorization", () => {
 
   it("keeps marketing and requests public but denies adjacent product paths", () => {
     for (const p of ["/", "/sample-plan", "/request-access", "/login"]) assert.equal(isPublicPath(p), true, p);
-    for (const p of ["/dashboard", "/account", "/api/ask", "/request-access/private", "/request-access-evil", "/ask"]) assert.equal(isPublicPath(p), false, p);
+    for (const p of ["/dashboard", "/account", "/api/ask", "/request-access/private", "/request-access-evil", "/ask/research"]) assert.equal(isPublicPath(p), false, p);
     const landing = readFileSync(path.join(process.cwd(), "app/page.tsx"), "utf8");
     assert.doesNotMatch(landing, /redirect\("\/dashboard"\)/, "signed-in visitors must also reach marketing");
     assert.match(readFileSync(path.join(process.cwd(), "app/request-access/actions.ts"), "utf8"), /submitDemoAccessRequest/);

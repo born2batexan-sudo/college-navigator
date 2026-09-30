@@ -10,7 +10,7 @@ export default function PublicAskForm() {
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Public Ask is intentionally offline and deterministic: it never calls /api/ask.
+    // Public Ask is intentionally offline and deterministic; it never calls the private API.
     setAnswer(answerPublicQuestion(question));
   }
 
