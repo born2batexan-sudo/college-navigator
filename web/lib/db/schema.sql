@@ -634,6 +634,53 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_events (
  event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('processed','exception')),
  detail_code TEXT NOT NULL, received_at TEXT NOT NULL
 );
+-- Durable household/cycle canonical-college coverage (review-only; see deploy/20260930-college-coverage.sql).
+-- One account row per household-cycle is the lock + capacity anchor. Coverage rows are append-only.
+CREATE TABLE IF NOT EXISTS college_coverage_accounts (
+ household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+ cycle TEXT NOT NULL CHECK(length(cycle)=9 AND substr(cycle,1,7)='Fall 20'),
+ included_units INTEGER NOT NULL DEFAULT 10 CHECK(included_units=10),
+ purchased_units INTEGER NOT NULL DEFAULT 0 CHECK(purchased_units>=0 AND purchased_units<=1000),
+ covered_units INTEGER NOT NULL DEFAULT 0 CHECK(covered_units>=0),
+ addon_hold INTEGER NOT NULL DEFAULT 0 CHECK(addon_hold IN (0,1)),
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ PRIMARY KEY(household_id,cycle),
+ CHECK(covered_units<=included_units+purchased_units)
+);
+CREATE TABLE IF NOT EXISTS college_coverage_colleges (
+ household_id TEXT NOT NULL, cycle TEXT NOT NULL,
+ college_id TEXT NOT NULL CHECK(length(college_id)>=1 AND length(college_id)<=100),
+ source TEXT NOT NULL CHECK(source IN ('included','addon')),
+ first_person_id TEXT, first_covered_at TEXT NOT NULL,
+ PRIMARY KEY(household_id,cycle,college_id),
+ FOREIGN KEY(household_id,cycle) REFERENCES college_coverage_accounts(household_id,cycle) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS college_addon_purchases (
+ id TEXT PRIMARY KEY, household_id TEXT REFERENCES households(id) ON DELETE SET NULL,
+ cycle TEXT NOT NULL CHECK(length(cycle)=9 AND substr(cycle,1,7)='Fall 20'),
+ entitlement_order_id TEXT REFERENCES cycle_orders(id),
+ units INTEGER NOT NULL CHECK(units>=1 AND units<=50),
+ amount_cents INTEGER NOT NULL CHECK(amount_cents=units*1900),
+ currency TEXT NOT NULL DEFAULT 'usd' CHECK(currency='usd'),
+ price_id TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('pending','provisioned','refund_review','exception')),
+ provider_session_id TEXT UNIQUE, provider_payment_id TEXT UNIQUE, provider_event_id TEXT UNIQUE,
+ refunded_cents INTEGER NOT NULL DEFAULT 0 CHECK(refunded_cents>=0 AND refunded_cents<=amount_cents),
+ idempotency_key TEXT NOT NULL UNIQUE,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, provisioned_at TEXT,
+ CHECK((status='pending' AND provider_payment_id IS NULL AND provider_event_id IS NULL AND provisioned_at IS NULL AND refunded_cents=0)
+  OR (status IN ('provisioned','refund_review') AND provider_payment_id IS NOT NULL AND provider_event_id IS NOT NULL AND provisioned_at IS NOT NULL)
+  OR status='exception')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_college_addon_one_pending ON college_addon_purchases(household_id,cycle) WHERE status='pending';
+CREATE TABLE IF NOT EXISTS college_capacity_events (
+ id TEXT PRIMARY KEY, household_id TEXT REFERENCES households(id) ON DELETE SET NULL,
+ cycle TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('addon_grant','refund_review','review_release')),
+ purchase_id TEXT REFERENCES college_addon_purchases(id),
+ units INTEGER NOT NULL DEFAULT 0, amount_cents INTEGER NOT NULL DEFAULT 0,
+ reference TEXT NOT NULL UNIQUE, actor TEXT NOT NULL, detail_code TEXT NOT NULL, created_at TEXT NOT NULL,
+ CHECK((kind='addon_grant' AND units>0 AND amount_cents>0) OR (kind<>'addon_grant' AND units=0))
+);
 -- Single-use, short-lived OAuth authorization; the PKCE verifier is encrypted at rest.
 CREATE TABLE IF NOT EXISTS mail_oauth_attempts (
  state_hash TEXT PRIMARY KEY, household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,

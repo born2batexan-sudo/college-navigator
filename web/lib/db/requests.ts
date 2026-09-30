@@ -1,6 +1,7 @@
 import { exec, newId, nowIso, queryOne, queryRows, usingPostgres, withTransaction } from "./client";
 import type { Institution } from "./types";
 import { isStartTerm } from "@/lib/terms";
+import { requireCollegeCoverage } from "./college-coverage";
 
 // Production schema comes only from versioned migrations. SQLite loads the
 // canonical schema.sql for local/test compatibility.
@@ -70,6 +71,8 @@ export async function createSchoolRequest(input:{householdId:string;personId?:st
   const created=await withTransaction(async()=>{
     if(usingPostgres)await exec("SELECT pg_advisory_xact_lock(hashtext($1))",[`request:${input.householdId}`]);
     if(!await getDirectorySchool(input.unitid))throw new Error("That school is not in the directory");
+    // Off unless COLLEGE_COVERAGE_ENFORCEMENT=1 in staging/test. Same transaction: any later failure rolls back the unit.
+    await requireCollegeCoverage({householdId:input.householdId,cycle:input.term,collegeId:input.unitid,personId:input.personId??null});
     const old=await queryOne<any>("SELECT id FROM school_requests WHERE household_id=$1 AND unitid=$2 AND term=$3",[input.householdId,input.unitid,input.term]);if(old)return false;
     if(input.personId){const owner=await queryOne("SELECT 1 AS ok FROM people WHERE id=$1 AND household_id=$2",[input.personId,input.householdId]);if(!owner)throw new Error("Requesting person does not belong to this household");}
     const month=nowIso().slice(0,7),count=await queryOne<any>("SELECT COUNT(*) AS n FROM school_requests WHERE household_id=$1 AND substr(created_at,1,7)=$2",[input.householdId,month]);if(Number(count?.n??0)>=MAX_FAMILY_REQUESTS_PER_MONTH)throw new Error("You can request up to three new schools per calendar month.");

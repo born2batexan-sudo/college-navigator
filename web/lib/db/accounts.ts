@@ -141,7 +141,9 @@ export const ALL_TABLES = [
   ...EMAIL_VALIDATION_TABLES,
   ...REMINDER_TABLES,
   'cycle_orders', 'cycle_entitlements', 'complimentary_invites', 'cycle_accounting_events',
-  'cycle_audit_events', 'stripe_webhook_events', 'mail_oauth_attempts', 'mail_connections', 'mail_sync_events',
+  'cycle_audit_events', 'stripe_webhook_events',
+  'college_coverage_accounts', 'college_coverage_colleges', 'college_addon_purchases', 'college_capacity_events',
+  'mail_oauth_attempts', 'mail_connections', 'mail_sync_events',
   'mail_control_audit', 'verified_mail_senders', 'connected_mail_evidence', 'assistant_usage',
 ];
 
