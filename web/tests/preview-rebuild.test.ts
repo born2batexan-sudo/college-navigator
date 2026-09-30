@@ -23,12 +23,11 @@ describe("approved public release copy", () => {
     assert.match(landing, /verified, under review, not yet published, not applicable, conflicting, or withheld/);
   });
 
-  it("publishes only approved commercial terms", () => {
-    assert.match(header, /\$99 per household, per application cycle/);
-    assert.match(landing, /Standard price <s>\$199<\/s>/);
-    assert.match(landing, /10 unique colleges are included; each additional college is \$19/);
-    assert.match(landing, /No subscription\. No auto-renewal\./);
-    assert.doesNotMatch(all, /unlimited|any number of schools|per semester|automatic renewal/i);
+  it("keeps prices and founding framing out of public copy", () => {
+    assert.doesNotMatch(all, /\$\d|founding.family|Request [Aa]ccess|id="pricing"|#pricing/i);
+    assert.match(landing, /Your College Journey Tracker/);
+    assert.match(landing, /Start Now/);
+    assert.doesNotMatch(all, /unlimited|automatic renewal/i);
   });
 
   it("removes preview artifacts, unsupported tallies, dead links, and uncleared comparison claims", () => {
@@ -41,27 +40,24 @@ describe("approved public release copy", () => {
   it("keeps product boundaries and evidence qualifications explicit", () => {
     assert.match(landing, /Official sources on verified findings/);
     assert.match(landing, /instead of guessing or padding the list/);
-    assert.match(landing, /does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, pay a bill/);
+    assert.match(landing, /does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, initiate a bill transaction/);
     assert.match(landing, /School portals and official instructions remain the authority/);
     assert.doesNotMatch(landing, /144 verified|guarantees eligibility|complete your application/i);
   });
 
-  it("makes request access non-purchasing and consent based", () => {
-    assert.match(request, /This form does not collect payment/);
-    assert.match(request, /Submitting this form does not purchase or guarantee access/);
-    assert.match(request, /I consent to Campus Passage using my name and email to review this access request/);
-    assert.match(request, /This does not subscribe you to marketing/);
-    assert.match(request, /Do not send passwords, payment details, application materials, school records, or financial information/);
+  it("routes the old request URL to verified-email self-service without a form", () => {
+    assert.match(request, /redirect\('\/login\?next=%2Fonboarding'\)/);
+    assert.doesNotMatch(request, /<form|requestDemoAccess/);
   });
 
   it("retains the approved page structure and navigation", () => {
-    for (const id of ["top", "why-it-matters", "how", "standard", "the-journey", "sample", "trust", "boundaries", "pricing", "founders", "faq", "next-step"]) {
+    for (const id of ["top", "why-it-matters", "how", "standard", "the-journey", "sample", "trust", "boundaries", "founders", "faq", "next-step"]) {
       assert.match(landing, new RegExp(`id="${id}"`));
     }
     assert.match(nav, /12² Standard/);
-    assert.match(nav, /Pricing/);
+    assert.doesNotMatch(nav, /Pricing/);
     assert.match(footer, /Email connectivity — Coming Soon/);
-    assert.match(footer, /Request access/);
+    assert.match(footer, /Start Now/);
     assert.match(footer, /Log in/);
   });
 

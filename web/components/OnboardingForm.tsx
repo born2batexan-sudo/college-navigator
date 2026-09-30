@@ -40,7 +40,7 @@ export function OnboardingForm({ betaCycle }: { betaCycle?: string }) {
             {terms.map((term) => <option key={term} value={term}>{term}</option>)}
           </select>
         </label>
-        <p className="-mt-1 text-xs text-ink/50">Every qualifying student under the purchaser&apos;s genuine caregiving responsibility in this plan shares that cycle. Each student still gets a separate school list, priorities, preferences, and action status. Use a first or preferred name only.</p>
+        <p className="-mt-1 text-xs text-ink/50">Every qualifying student under the household manager&apos;s genuine caregiving responsibility in this plan shares that cycle. Each student still gets a separate school list, priorities, preferences, and action status. Use a first or preferred name only.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {Array.from({ length: count }, (_, index) => (
             <div key={index} className="rounded-2xl border border-line border-t-4 bg-white/70 p-4 shadow-card" style={{ borderTopColor: ACCENT_HEX[index % ACCENT_HEX.length] }}>
@@ -66,7 +66,7 @@ export function OnboardingForm({ betaCycle }: { betaCycle?: string }) {
 
         <label className="flex gap-2 rounded-2xl border border-line bg-white/70 p-4 text-sm leading-relaxed text-ink/70 shadow-card">
           <input name="purchaserAttested" type="checkbox" value="yes" required className="mt-1" />
-          <span>I confirm I am authorized to purchase and manage this household plan for the students I add. Campus Passage does not use surnames as proof of relationship. If account-protection signals need attention, a person reviews them; we do not automatically reject families based on names, addresses, or protected traits.</span>
+          <span>I confirm I am authorized to manage this household plan for the students I add. Campus Passage does not use surnames as proof of relationship. If account-protection signals need attention, a person reviews them; we do not automatically reject families based on names, addresses, or protected traits.</span>
         </label>
       </fieldset>
 

@@ -41,7 +41,7 @@ describe("immersive overview and accessible presentation", () => {
     assert.match(css, /\.hero-plan-card \{ display: none; \}/, "the illustrative card is hidden at mobile widths, as in the mockup");
     assert.doesNotMatch(css, /\.hero-scrim|hero-kenburns|hero-card-float|backdrop-filter/, "the mockup has no scrim, drift, or blur");
     assert.match(source, /className="banner"|MarketingHeader/);
-    assert.match(header, /className="banner"/);
+    assert.doesNotMatch(header, /className="banner"/);
     assert.match(source, /className="section final"/);
     for (const color of ["#123B55", "#FBF9F4", "#E8875B"]) assert.match(logo, new RegExp(color));
     assert.match(logo, /PROVISIONAL/);

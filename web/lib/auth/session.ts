@@ -7,6 +7,7 @@ import { ensureAccountSchema, getStudentForHousehold, isDemoOwnerEmail, provisio
 import type { Student } from "@/lib/db/types";
 import { hasProductAccess } from "./product-access";
 import { hasBetaOnboardingAccess } from "@/lib/db/beta-access";
+import { canSelfServiceOnboard } from "@/lib/db/self-service-access";
 import { appOrigin } from "./origin";
 
 export type SessionUser = { id: string; email: string | null };
@@ -23,10 +24,12 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!supabaseConfigured) return null;
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) return null;
-  const email = typeof data.claims.email === "string" ? data.claims.email.toLowerCase() : null;
-  return { id: data.claims.sub, email };
+  // getUser contacts the auth server; a signed JWT's email claim alone does not
+  // prove email confirmation (or that the account is still active).
+  const { data, error } = await supabase.auth.getUser();
+  const auth = data?.user;
+  if (error || !auth?.id || !auth.email || !auth.email_confirmed_at) return null;
+  return { id: auth.id, email: auth.email.toLowerCase() };
 }
 
 /** Redirects to the sign-in page when nobody is signed in. */
@@ -52,7 +55,10 @@ export async function requireHousehold(opts?: { next?: string }): Promise<Househ
   const user = await requireUser(opts);
   await ensureAccountSchema();
   const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
-  if (!await hasProductAccess(user, ctx.household.id)) redirect("/request-access");
+  if (!await hasProductAccess(user, ctx.household.id)) {
+    if (await canSelfServiceOnboard({ ...ctx, email: user.email })) redirect("/onboarding");
+    redirect("/access-unavailable");
+  }
   return ctx;
 }
 
@@ -62,7 +68,8 @@ export async function requireOnboardingHousehold(): Promise<HouseholdContext> {
   await ensureAccountSchema();
   const ctx = await provisionAccount({ authUserId: user.id, email: user.email });
   if (!await hasProductAccess(user, ctx.household.id) &&
-      !await hasBetaOnboardingAccess(user, ctx.household.id)) redirect("/request-access");
+      !await hasBetaOnboardingAccess(user, ctx.household.id) &&
+      !await canSelfServiceOnboard({ ...ctx, email: user.email })) redirect("/dashboard");
   return { ...ctx, email: user.email };
 }
 

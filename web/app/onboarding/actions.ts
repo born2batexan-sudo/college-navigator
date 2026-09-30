@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireOnboardingHousehold } from "@/lib/auth/session";
 import { hasBetaOnboardingAccess, completeBetaOnboarding } from "@/lib/db/beta-access";
 import { hasProductAccess } from "@/lib/auth/product-access";
+import { canSelfServiceOnboard, completeSelfServiceOnboarding } from "@/lib/db/self-service-access";
 import { completeOnboarding } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
 
@@ -42,8 +43,10 @@ export async function saveOnboarding(formData: FormData): Promise<void> {
   };
   if (await hasBetaOnboardingAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id)) {
     await completeBetaOnboarding(ctx, ctx.email, input);
+  } else if (await canSelfServiceOnboard(ctx)) {
+    await completeSelfServiceOnboarding(ctx, input);
   } else if (await hasProductAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id)) {
     await completeOnboarding(ctx, input);
-  } else redirect("/request-access");
+  } else redirect("/access-unavailable");
   redirect("/dashboard");
 }

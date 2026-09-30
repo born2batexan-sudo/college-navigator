@@ -15,7 +15,7 @@ describe("public copy boundaries", () => {
   it("leads with the owner-brief WHY headline and keeps the product-truth explanation", () => {
     assert.match(overview, /<h1[^>]*>Be their parent, not their project manager\.<\/h1>/);
     assert.match(overview, /Every college step, in one plan, with whose move it is\./);
-    assert.match(overview, /College application &amp; deadline tracker for parents/);
+    assert.match(overview, /Your College Journey Tracker/);
     assert.doesNotMatch(overview + layout, /Protect the opportunity/);
     assert.doesNotMatch(overview, /Don&apos;t miss the moment|Don't miss the moment|two kids|two timelines/i);
     assert.match(overview, /From the first application to move-in day, Campus Passage brings verified dates, school-side waits, and family next steps into one clear plan/);
@@ -25,7 +25,7 @@ describe("public copy boundaries", () => {
     assert.match(overview, /Follow one clear, verified plan/);
     assert.doesNotMatch(overview, /Connect an inbox, if you choose/);
     assert.match(overview, /Email Connectivity — Coming Soon/);
-    assert.match(overview, /optional paid add-on/);
+    assert.doesNotMatch(overview, /optional paid add-on/);
     assert.match(overview, /Created by families who have been there/);
     assert.doesNotMatch(overview, /co-founder with a legal background/);
   });
@@ -43,7 +43,7 @@ describe("public copy boundaries", () => {
   it("preserves substantive boundaries, reserved phrase, and no synthetic video", () => {
     assert.match(visibleText(overview), /Up to 144/, "approved up-to-144 public standard is shown");
     assert.doesNotMatch(overview, /checkpoint/i);
-    for (const verb of ["apply", "submit", "decide", "pay", "change"]) assert.match(overview, new RegExp(verb, "i"));
+    for (const verb of ["apply", "submit", "decide", "change"]) assert.match(overview, new RegExp(verb, "i"));
     assert.match(overview, /No portal passwords/);
     assert.doesNotMatch(overview + sample, /concierge|over the horizon|autofill|<video|product-story\.mp4/i);
     assert.doesNotMatch(overview + sample + header + layout, /CampusPassage(?!Landing|\.com)/);

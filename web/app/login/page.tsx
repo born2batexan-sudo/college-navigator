@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false, noimageindex: true } },
 };
 
-type Search = { error?: string; step?: string; email?: string; next?: string; deleted?: string; out?: string };
+type Search = { error?: string; notice?: string; step?: string; email?: string; next?: string; deleted?: string; out?: string };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Search> }) {
   const query = await searchParams;
@@ -31,18 +31,23 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </div>
       <div className="rounded-2xl border border-line bg-white/85 p-6 shadow-card">
         <header>
-          <h1 className="font-display text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Welcome back"}</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">{codeStep ? "Check your email" : "Start your household plan"}</h1>
           <p className="mt-1 text-ink/60">
             {codeStep
               ? emailCodeEnabled
                 ? `We sent a code to ${query.email}. Type it below to open your household plan.`
                 : `We sent a sign-in link to ${query.email}. Open it on this same device and browser to finish signing in.`
-              : "Sign in to keep every student's plan in one place. Signing in does not buy access or grant inbox permission. Optional connected mail would require separate explicit consent and is not live."}
+              : "Verify your email to set up your household plan. Optional connected mail requires separate explicit consent and is not live."}
           </p>
         </header>
 
         {query.deleted && (
           <p className="mt-4 rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
+        )}
+        {query.notice === "email-confirmation" && (
+          <p role="status" className="mt-4 rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">
+            This link did not sign you in. If you just confirmed a new email address, that confirmation may have completed, but you still need to request a sign-in email below. Enter the same address and follow its sign-in instructions to continue. This return did not create a session.
+          </p>
         )}
         {query.error && (
           <p role="alert" className="mt-4 rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">

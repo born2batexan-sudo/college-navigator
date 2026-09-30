@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 import { safeNext, supabaseConfigured } from "@/lib/auth/env";
+import { callbackLoginLocation, isNoCodeSignupReturn } from "@/lib/auth/callback";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Where Google/Microsoft/Apple/Yahoo and the email link send the person back.
- * Trades the one-time code for a session cookie, then goes to `next`.
+ * Trades a valid one-time PKCE code for a session cookie, then goes to `next`.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
@@ -18,7 +19,11 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return NextResponse.redirect(new URL(next, origin));
   }
-  const fail = new URL("/login", origin);
-  fail.searchParams.set("error", "That sign-in link did not work. It may have expired or been opened on a different device. Please try again.");
-  return NextResponse.redirect(fail);
+
+  // A first-time signup confirmation can return without a PKCE code. Explain
+  // that distinction without treating it as authentication or exposing its
+  // query parameters. All other missing/failed-code returns remain generic.
+  return NextResponse.redirect(
+    callbackLoginLocation(origin, next, isNoCodeSignupReturn(searchParams)),
+  );
 }

@@ -14,7 +14,7 @@ const essentials = [
 const pills = ["Application deadlines", "FAFSA & CSS Profile", "Scholarships", "Housing & dorms", "Deposits", "Immunization records", "Orientation", "Meal plans", "Parking permits", "Greek life recruitment", "Move-in day", "The first bill"] as const;
 
 const steps = [
-  ["Add your students and schools.", "Create a separate path for each student and add the colleges they're considering. Ten unique colleges are included; each additional college is $19."],
+  ["Add your students and schools.", "Create a separate path for each student and add up to ten unique colleges to your household plan for the current admissions cycle."],
   ["Tell us what matters to your family.", "Answer a few questions about housing, commuting, financial aid, scholarships, accessibility, campus life, and other priorities. Campus Passage uses those answers to surface what is relevant without hiding school requirements."],
   ["Follow one clear, verified plan.", "Campus Passage researches official public sources and organizes the findings by student, school, and term—showing what needs attention, whose move it is, and where the information came from."],
 ] as const;
@@ -26,9 +26,9 @@ const phases = [
     { t: "Aid", b: "Priority dates and paperwork, before they cost you.", items: ["FAFSA / CSS Profile priority date", "Verification document requests", "Aid appeal process"] },
     { t: "Scholarships", b: "Scholarship dates and renewal information.", items: ["Institutional scholarship deadline", "Separate application required", "Renewal requirements"] },
   ] },
-  { name: "Choosing and paying", tiles: [
+  { name: "Choosing and planning", tiles: [
     { t: "Enrollment", b: "Deposits, reply dates, and placement tests, in order.", items: ["Deposit deadline and refundability", "Commitment / reply date", "Placement test requirements"] },
-    { t: "Billing and 529", b: "Know when the first bill lands, and how to pay it.", items: ["First bill release and due date", "Payment plan enrollment window", "529 / third-party payment instructions"] },
+    { t: "Billing and 529", b: "Know when the first school bill lands and what it covers.", items: ["First bill release and due date", "Tuition installment enrollment window", "529 / third-party billing instructions"] },
     { t: "Housing", b: "Dorm applications and deposits, on time.", open: true, items: ["First-year residence requirement", "Housing application window and deposit", "Room / roommate selection timeline"] },
   ] },
   { name: "Getting started", tiles: [
@@ -44,20 +44,19 @@ const phases = [
 ] as const;
 
 /**
- * All ten FAQs from the approved mockup. Commercial wording follows the owner-confirmed model: $199 per qualifying
- * household per application cycle, 10 unique colleges included, $19 per additional college, same-cycle eligible students.
+ * Public FAQs for the self-service journey.
  */
 const faqItems: readonly FaqItem[] = [
   { id: "faq-track", question: "How do I keep track of college application deadlines for my student?", answer: "Add each school your student is considering. Campus Passage organizes verified application, financial aid, scholarship, housing, and enrollment information in one plan, shows whose move each step is, and labels what is still under review or not yet published." },
   { id: "faq-spreadsheet", question: "Is this better than a college application spreadsheet?", answer: "A spreadsheet only knows what you type into it. Campus Passage reviews up to 144 checks per school and links verified findings to official sources, while unresolved checks remain clearly labeled." },
   { id: "faq-accepted", question: "What do we need to do after my student is accepted?", answer: "Enrollment deposits, housing applications, financial aid verification, immunization records, orientation, and the first bill may all matter. Campus Passage keeps the applicable verified steps together through move-in planning." },
-  { id: "faq-missing", question: "How will I know if something is missing from my student's application?", answer: "Campus Passage organizes findings from official public sources and clearly labels unresolved or unpublished information. School portals and official instructions remain the authority. Email connectivity is a Coming Soon optional paid add-on." },
+  { id: "faq-missing", question: "How will I know if something is missing from my student's application?", answer: "Campus Passage organizes findings from official public sources and clearly labels unresolved or unpublished information. School portals and official instructions remain the authority. Email connectivity is Coming Soon and requires separate consent." },
   { id: "faq-portal", question: "Do you need my student's school portal login?", answer: "No. Never. Campus Passage doesn't sign into school portals." },
-  { id: "faq-submit", question: "Does it apply, submit, or pay anything for me?", answer: "No. You stay in control, and the school's official instructions are always the authority." },
-  { id: "faq-schools", question: "Which schools can I add, and can I track more than one student?", answer: "A household plan includes 10 unique colleges, and each additional college is $19. Eligible students sharing the same high-school graduation year and application cycle can be in one household. Every student, school, and term stays separate, and review depth is shown honestly." },
-  { id: "faq-cost", question: "What does it cost?", answer: "$199 per qualifying household per application cycle, including 10 unique colleges, plus $19 for each additional college. For a limited time, approved founding families pay $99 per household per application cycle." },
+  { id: "faq-submit", question: "Does it apply or submit anything for me?", answer: "No. You stay in control, and the school's official instructions are always the authority." },
+  { id: "faq-schools", question: "Which schools can I add, and can I track more than one student?", answer: "A household plan supports up to 10 unique colleges for the current admissions cycle. Eligible students sharing the same high-school graduation year and application cycle can be in one household. Every student, school, and term stays separate, and review depth is shown honestly." },
+  { id: "faq-cost", question: "How do I get started?", answer: "Select Start Now, verify your email address, and set up your household. You can use the complete plan for the current admissions cycle without requesting an invitation." },
   { id: "faq-counselor", question: "Does it replace our school counselor?", answer: "No. It helps your family bring better questions to your counselor." },
-  { id: "faq-data", question: "What happens to my data if I leave?", answer: "Your household records remain subject to Campus Passage's privacy and deletion controls. The Coming Soon optional paid email-connectivity add-on will include controls to disconnect inbox access and delete connected-mail data." },
+  { id: "faq-data", question: "What happens to my data if I leave?", answer: "Your household records remain subject to Campus Passage's privacy and deletion controls. If you choose the Coming Soon email connectivity feature later, you will have controls to disconnect inbox access and delete connected-mail data." },
 ];
 
 export default function CampusPassageLanding() {
@@ -72,11 +71,11 @@ export default function CampusPassageLanding() {
           </div>
           <div className="site-shell hero-inner">
             <div className="hero-copy">
-              <p className="eyebrow">College application &amp; deadline tracker for parents</p>
+              <p className="eyebrow">Your College Journey Tracker</p>
               <h1 id="hero-title" className="display hero-title">Be their parent, not their project manager.</h1>
               <p className="hero-subhead display">Every college step, in one plan, with whose move it is.</p>
               <p className="lede">From the first application to move-in day, Campus Passage brings verified dates, school-side waits, and family next steps into one clear plan.</p>
-              <div className="actions"><Link className="button button-primary" href="/request-access">Request founding-family access</Link><Link className="button button-secondary" href="/sample-plan">Try the sample plan →</Link></div>
+              <div className="actions"><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link><Link className="button button-secondary" href="/sample-plan">Try the sample plan →</Link></div>
               <ul className="chips" aria-label="What to expect"><li className="chip">No portal passwords</li><li className="chip">Official sources on verified findings</li><li className="chip">Up to 144 checks per school</li><li className="chip">Per student, per school, per term</li></ul>
             </div>
             <aside className="hero-plan-card" aria-label="Illustrative example of different kinds of updates">
@@ -149,7 +148,7 @@ export default function CampusPassageLanding() {
         <section id="sample" className="section" aria-labelledby="sample-title">
           <div className="site-shell">
             <p className="eyebrow">See an example</p>
-            <h2 id="sample-title" className="display">Try a plan before you request access.</h2>
+            <h2 id="sample-title" className="display">Try a plan before you get started.</h2>
             <p className="lead">Pick one student or two, answer a few quick questions, and watch the plan change: what&apos;s relevant, what&apos;s set aside, and whose move each step is.</p>
             <p><Link className="button button-primary" href="/sample-plan">Open the sample plan →</Link></p>
             <p className="fine">Meet Priya and Mateo, two fictional Class of 2027 students.</p>
@@ -169,33 +168,8 @@ export default function CampusPassageLanding() {
           <div className="site-shell">
             <p className="eyebrow">Where the line is</p>
             <h2 id="boundaries-title" className="display">Your decisions and records stay yours.</h2>
-            <p className="lead">Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, pay a bill, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p>
-            <p className="lead"><b>Email Connectivity — Coming Soon.</b> An optional paid add-on will help invited families incorporate sender-scoped college updates into their plans—with explicit consent and controls to disconnect and delete connected-mail data.</p>
-          </div>
-        </section>
-
-        <section id="pricing" className="section" aria-labelledby="pricing-title">
-          <div className="site-shell center">
-            <p className="eyebrow">Pricing</p>
-            <h2 id="pricing-title" className="display">The simplest $199 you&apos;ll spend on college.</h2>
-            <p className="lead lead-centered">One price per household. Every eligible student in the same application cycle. No subscription.</p>
-            <p className="replaces">The spreadsheet. The sticky notes. The inbox searches. The 11 p.m. double-checks.</p>
-            <div className="price">
-              <span className="badge">LIMITED-TIME FOUNDING-FAMILY SPECIAL</span>
-              <div className="std">Standard price <s>$199</s> <span>per qualifying household, per application cycle</span></div>
-              <div className="p99"><span className="n">$99</span><span>per household, per application cycle</span></div>
-              <div className="elig">Founding families only · Limited time</div>
-              <p className="fine coverage">Covers the eligible students in a qualifying household who share the same high-school graduation year and application cycle. 10 unique colleges are included; each additional college is $19.</p>
-              <ul className="check"><li>Every eligible student in your household, same application cycle</li><li>10 unique colleges included; $19 per additional college</li><li>Up to 144 checks per school, per term</li><li>No subscription. No auto-renewal.</li></ul>
-              <Link className="button button-primary" href="/request-access">Claim the $99 founding price</Link>
-              <p className="fine price-foot">Founding families pay $99 per household, per application cycle, after approval. When the offer ends, the price is $199 per qualifying household, per application cycle.</p>
-            </div>
-            <div className="stats">
-              <div className="stat"><div className="n">Up to 144</div><div>checks per school</div></div>
-              <div className="stat"><div className="n">Up to 1,152</div><div>checks for a student weighing 8 schools</div></div>
-              <div className="stat"><div className="n">About 17¢</div><div>per check at $199 (under 9¢ at the founding price)</div></div>
-            </div>
-            <p className="fine">&quot;Up to&quot; because not every check applies at every school. 8 schools is an example: 10 unique colleges are included, and each additional college is $19. Per-check figures divide the price by 1,152 checks.</p>
+            <p className="lead">Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, initiate a bill transaction, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p>
+            <p className="lead"><b>Email Connectivity — Coming Soon.</b> An optional future feature may help families incorporate sender-scoped college updates into their plans—with explicit consent and controls to disconnect and delete connected-mail data.</p>
           </div>
         </section>
 
@@ -222,8 +196,8 @@ export default function CampusPassageLanding() {
           <div className="site-shell">
             <p className="eyebrow">Your next step</p>
             <h2 id="closing-title" className="display">Senior year happens once. Spend it with them.</h2>
-            <p className="lead">Let Campus Passage carry the checklist. Founding families pay $99 per household, per application cycle, for a limited time.</p>
-            <div className="actions"><Link className="button button-primary" href="/request-access">Request access</Link><Link className="button button-secondary" href="/sample-plan">Explore the sample plan</Link></div>
+            <p className="lead">Let Campus Passage carry the checklist. Verify your email, set up your household, and start planning.</p>
+            <div className="actions"><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link><Link className="button button-secondary" href="/sample-plan">Explore the sample plan</Link></div>
           </div>
         </section>
       </main>

@@ -14,6 +14,7 @@ import { requireWritableSelectedStudent } from "@/lib/auth/session";
 import { updateStudentAttributes } from "@/lib/db/accounts";
 import { enteringTermFrom, isStartTerm } from "@/lib/terms";
 import { assertBetaAccessCycle, requireBetaTrackedCollege } from "@/lib/db/college-coverage";
+import { assertSelfServiceAccessCycle } from "@/lib/db/self-service-access";
 import { withTransaction } from "@/lib/db/client";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 
@@ -65,7 +66,7 @@ export async function saveStartTerm(formData: FormData): Promise<void> {
   const ctx = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
   const term = String(formData.get("enteringTerm") ?? "");
   if (!isStartTerm(term)) throw new Error("Choose a valid start term");
-  await assertBetaAccessCycle(ctx.household.id, term);
+  if (!await assertSelfServiceAccessCycle(ctx.household.id, term)) await assertBetaAccessCycle(ctx.household.id, term);
   await updateStudentAttributes(ctx, { enteringTerm: term });
   // Rebuild each tracked school's actions from this exact term. If that term
   // has no certified rules yet, no other cycle is substituted.

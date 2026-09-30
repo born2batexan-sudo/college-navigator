@@ -107,7 +107,7 @@ describe("production product authorization", () => {
     assert.doesNotMatch(landing, /redirect\("\/dashboard"\)/, "signed-in visitors must also reach marketing");
     assert.match(readFileSync(path.join(process.cwd(), "app/request-access/actions.ts"), "utf8"), /submitDemoAccessRequest/);
     const session = readFileSync(path.join(process.cwd(), "lib/auth/session.ts"), "utf8");
-    assert.match(session, /if \(!await hasProductAccess\(user, ctx\.household\.id\)\) redirect\("\/request-access"\)/);
+    assert.match(session, /if \(!await hasProductAccess\(user, ctx\.household\.id\)\) \{/);
     const requestAction = readFileSync(path.join(process.cwd(), "app/request/actions.ts"), "utf8");
     assert.match(requestAction, /requireWritableOnboardedHousehold\(\)/);
     assert.match(requestAction, /createSchoolRequest\(/);

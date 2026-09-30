@@ -89,6 +89,6 @@ export function ReviewLab() {
       </Section>
     </div>
 
-    <footer className="flex flex-col gap-3 border-t border-line pt-5 text-sm text-ink/60 sm:flex-row sm:items-center sm:justify-between"><p>Internal owner review only · no production records or customer-facing claims are changed.</p><Link href="/request-access" className="font-semibold text-accent underline">Request Access</Link></footer>
+    <footer className="flex flex-col gap-3 border-t border-line pt-5 text-sm text-ink/60 sm:flex-row sm:items-center sm:justify-between"><p>Internal owner review only · no production records or customer-facing claims are changed.</p><Link href="/login?next=%2Fonboarding" className="font-semibold text-accent underline">Start Now</Link></footer>
   </main>;
 }

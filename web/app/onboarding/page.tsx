@@ -4,14 +4,15 @@ import { ENTERING_CLASS_YEAR } from "@/lib/db/accounts";
 import { OnboardingForm } from "@/components/OnboardingForm";
 import { hasBetaOnboardingAccess } from "@/lib/db/beta-access";
 import { currentAccessCycle } from "@/lib/db/cycle-access";
+import { canSelfServiceOnboard } from "@/lib/db/self-service-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const query = await searchParams;
   const ctx = await requireOnboardingHousehold();
-  if (ctx.student) redirect("/");
-  const betaCycle = await hasBetaOnboardingAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id) ? currentAccessCycle() : undefined;
+  if (ctx.student) redirect("/dashboard");
+  const betaCycle = (await hasBetaOnboardingAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id) || await canSelfServiceOnboard(ctx)) ? currentAccessCycle() : undefined;
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-7 pt-10">

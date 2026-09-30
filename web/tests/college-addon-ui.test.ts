@@ -93,18 +93,13 @@ describe('owner-only blocked-request add-on offer', () => {
     try { process.env.COLLEGE_COVERAGE_ENFORCEMENT = '0'; assert.equal(O.addonUiReady(), false); }
     finally { process.env.COLLEGE_COVERAGE_ENFORCEMENT = enabled; }
   });
-  it('wires explicit POST and safe return URLs, not a provider call during page render', () => {
+  it('keeps provider code but disconnects all add-on purchase UI/actions', () => {
     const action = readFileSync(path.join(process.cwd(), 'app/request/actions.ts'), 'utf8');
     const page = readFileSync(path.join(process.cwd(), 'app/request/page.tsx'), 'utf8');
     const stripe = readFileSync(path.join(process.cwd(), 'lib/db/stripe-college-addon.ts'), 'utf8');
-    assert.match(action, /error\.reason === "capacity_exhausted" && addonUiReady\(\)/);
-    assert.match(action, /export async function startCollegeAddon\(formData: FormData\)/);
-    assert.match(action, /getCollegeAddonOffer\(/);
-    assert.match(action, /createPendingAddonPurchase\(/);
-    assert.match(action, /createAddonCheckout\(/);
-    assert.match(page, /<form action=\{startCollegeAddon\}/);
-    assert.doesNotMatch(page, /createAddonCheckout\(/);
-    assert.match(stripe, /success_url: `\$\{origin\}\/request\?addon_checkout=return&purchase=/);
-    assert.match(stripe, /cancel_url: `\$\{origin\}\/request\?addon_checkout=canceled&purchase=/);
+    assert.match(action, /export async function startCollegeAddon/);
+    assert.doesNotMatch(action, /createPendingAddonPurchase\(|createAddonCheckout\(/);
+    assert.doesNotMatch(page, /startCollegeAddon|Stripe|checkout/);
+    assert.match(stripe, /createAddonCheckout/);
   });
 });

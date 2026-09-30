@@ -67,7 +67,8 @@ export async function reserveCollegeCoverage(input: { householdId: string; cycle
     // The beta invitation waives payment only; it never buys add-on capacity.
     const usableAccount = includedOnly ? { ...account, purchasedUnits: 0 } : account;
     const alreadyCovered = !!await queryOne('SELECT 1 AS ok FROM college_coverage_colleges WHERE household_id=$1 AND cycle=$2 AND college_id=$3', [input.householdId, input.cycle, input.collegeId]);
-    const entitlementActive = alreadyCovered || !!await activeEntitlement(input.householdId, input.cycle);
+    const entitlementActive = alreadyCovered || !!await activeEntitlement(input.householdId, input.cycle) ||
+      !!await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND cycle=$2 AND revoked_at IS NULL AND starts_at<=$3 AND expires_at>$4', [input.householdId, input.cycle, nowIso(), nowIso()]);
     const decision = decideReservation({ account: usableAccount, alreadyCovered, entitlementActive });
     if (decision.outcome === 'blocked') return { status: 'blocked', reason: decision.reason };
     if (decision.outcome === 'already_covered') return { status: 'covered', consumedUnit: false, source: 'existing', coveredUnits: account.coveredUnits, remainingUnits: Math.max(0, usableAccount.includedUnits + usableAccount.purchasedUnits - account.coveredUnits) };
@@ -109,7 +110,10 @@ export async function assertBetaAccessCycle(householdId: string, cycle: string):
  * canonical ID so tracking and research share a single unit. No research is
  * queued by tracking a school. The caller wraps this with the relationship write. */
 export async function requireBetaTrackedCollege(input: { householdId: string; cycle: string; institutionId: string }): Promise<void> {
-  if (!await assertBetaAccessCycle(input.householdId, input.cycle)) return;
+  const selfService = await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND revoked_at IS NULL AND starts_at<=$2 AND expires_at>$3', [input.householdId, nowIso(), nowIso()]);
+  if (selfService) {
+    if (!await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND cycle=$2 AND revoked_at IS NULL', [input.householdId, input.cycle])) throw new CollegeCoverageBlockedError('invalid_cycle');
+  } else if (!await assertBetaAccessCycle(input.householdId, input.cycle)) return;
   const directory = await queryOne<{ unitid: string }>('SELECT unitid FROM school_directory WHERE institution_id=$1 ORDER BY unitid LIMIT 1', [input.institutionId]);
   const result = await reserveCollegeCoverage({ householdId: input.householdId, cycle: input.cycle, collegeId: directory?.unitid ?? input.institutionId }, true);
   if (result.status === 'blocked') throw new CollegeCoverageBlockedError(result.reason);
@@ -120,9 +124,11 @@ export async function requireBetaTrackedCollege(input: { householdId: string; cy
  * colleges, even with Stripe and the payment experiment disabled. Call within the
  * request transaction so a later quota/validation failure rolls back the unit. */
 export async function requireCollegeCoverage(input: { householdId: string; cycle: string; collegeId: string; personId?: string | null }, env: Env = process.env): Promise<ReserveResult | null> {
-  const beta = await assertBetaAccessCycle(input.householdId, input.cycle);
-  if (!beta && !collegeCoverageEnforced(env)) return null;
-  const result = await reserveCollegeCoverage(input, beta);
+  const selfService = !!await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND revoked_at IS NULL AND starts_at<=$2 AND expires_at>$3', [input.householdId, nowIso(), nowIso()]);
+  if (selfService && !await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND cycle=$2 AND revoked_at IS NULL', [input.householdId, input.cycle])) throw new CollegeCoverageBlockedError('invalid_cycle');
+  const beta = selfService ? false : await assertBetaAccessCycle(input.householdId, input.cycle);
+  if (!beta && !selfService && !collegeCoverageEnforced(env)) return null;
+  const result = await reserveCollegeCoverage(input, beta || selfService);
   if (result.status === 'blocked') throw new CollegeCoverageBlockedError(result.reason);
   return result;
 }

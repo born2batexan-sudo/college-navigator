@@ -8,7 +8,7 @@ const root = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 const sampleRoute = readFileSync(new URL("../app/sample-plan/page.tsx", import.meta.url), "utf8");
 
 // Full approved-mockup section order (preview): #standard, #pricing and #founders are built.
-const sections = ["top", "why-it-matters", "how", "standard", "the-journey", "sample", "trust", "boundaries", "pricing", "founders", "faq", "next-step"];
+const sections = ["top", "why-it-matters", "how", "standard", "the-journey", "sample", "trust", "boundaries", "founders", "faq", "next-step"];
 
 describe("public routes and chapter sequence", () => {
   it("keeps why, stakes, better way, example, trust, and next step in order on the overview", () => {
@@ -29,12 +29,12 @@ describe("public routes and chapter sequence", () => {
   it("uses customer navigation, not internal authoring labels or old anchors", () => {
     const header = readFileSync(new URL("../components/MarketingHeader.tsx", import.meta.url), "utf8");
     const nav = readFileSync(new URL("../components/HeaderNav.tsx", import.meta.url), "utf8");
-    const labels = ["Overview", "How it works", "12² Standard", "Sample plan", "Pricing", "Trust", "Log in", "Request access"];
+    const labels = ["Overview", "How it works", "12² Standard", "Sample plan", "Trust", "Log in", "Start Now"];
     for (const label of labels) assert.match(nav, new RegExp(`>${label}<`));
-    const positions = labels.slice(0, 7).map((label) => nav.indexOf(`>${label}<`));
+    const positions = labels.slice(0, 6).map((label) => nav.indexOf(`>${label}<`));
     for (let i = 1; i < positions.length; i++) assert.ok(positions[i] > positions[i - 1], `${labels[i]} follows ${labels[i - 1]} (mockup nav order)`);
     assert.doesNotMatch(nav.replace(/\/\*[\s\S]*?\*\//g, ""), />Why it matters</);
-    for (const href of ["/#how", "/#standard", "/#pricing", "/#trust"]) assert.ok(nav.includes(`href="${href}"`), href);
+    for (const href of ["/#how", "/#standard", "/#trust"]) assert.ok(nav.includes(`href="${href}"`), href);
     assert.match(nav, /aria-expanded=\{open\}/);
     assert.match(header, /<RouteLockup variant="header" \/>/);
     assert.doesNotMatch(overview + sample + header, /id="problem"|id="proof"|>Public story<|>Family plan<|>Recognize<|>Reframe<|>Proof</);

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Request Founding-Family Access",
-  description: "Request founding-family access to Campus Passage. Submitting the form does not purchase access or subscribe you to marketing.",
+  title: "Start Now",
+  description: "Get started with Campus Passage by verifying your email and setting up your household.",
   alternates: { canonical: "/request-access" },
   robots: { index: false, follow: false },
 };

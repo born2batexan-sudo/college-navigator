@@ -5,8 +5,7 @@ import { listStudentsForHousehold } from "@/lib/db/repo";
 import { START_TERMS } from "@/lib/terms";
 import { StudentDot } from "@/components/StudentSwitcher";
 import { addStudent, deleteAccount, makeInvite, signOut } from "./actions";
-import { claimAccess, startCheckout } from './access-actions';
-import { stripeReady } from '@/lib/db/stripe-review';
+import { claimAccess } from './access-actions';
 import { configured, mailEnabled } from '@/lib/mail/provider';
 import { mailStatus } from '@/lib/mail/service';
 import { connectMail, syncMail, disconnectMailAction, deleteMailAction } from './mail-actions';
@@ -42,7 +41,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       {query.mail && <p role="status" className="rounded-xl border border-line p-3 text-sm">{query.mail}</p>}
       {ctx.isDemo && <p className="rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="font-semibold text-accent">Private Preview</strong> · This sample household is read-only. Changes are disabled.</p>}
 
-      {!ctx.isDemo && ctx.isOwner && <section className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6"><h2 className="font-display text-xl font-semibold">Household-cycle access · built—not live</h2><p className="mt-2 text-sm text-ink/60">Sign-in is separate from purchase. A complimentary invitation is for this household only, expires, and works once. Returning from checkout never grants access; only a verified payment event can do that.</p><form action={claimAccess} className="mt-3 flex gap-2"><input name="token" required placeholder="One-time invitation token" className="min-w-0 flex-1 rounded border border-line p-2 text-sm"/><button className="rounded bg-accent px-3 py-2 text-sm text-white">Claim</button></form>{stripeReady() ? <form action={startCheckout} className="mt-3"><button className="rounded bg-accent px-3 py-2 text-sm text-white">Continue to hosted checkout</button></form> : <p className="mt-3 text-xs text-ink/55">Checkout not enabled. No payment methods are connected.</p>}</section>}
+      {!ctx.isDemo && ctx.isOwner && <details className="rounded-2xl border border-line bg-white/80 p-5 text-sm"><summary className="cursor-pointer font-semibold">Have an existing administrator invitation?</summary><form action={claimAccess} className="mt-3 flex gap-2"><input name="token" required aria-label="One-time invitation token" placeholder="One-time invitation token" className="min-w-0 flex-1 rounded border border-line p-2"/><button className="rounded bg-accent px-3 py-2 text-white">Claim invitation</button></form></details>}
       {!ctx.isDemo && ctx.isOwner && <section className="rounded-2xl border border-line bg-white/80 p-5 shadow-card sm:p-6">
         <h2 className="font-display text-xl font-semibold">Connected mail</h2>
         <p className="mt-2 text-sm"><Link className="underline" href="/account/mail-privacy">Mail privacy controls remain available after access expires</Link></p>

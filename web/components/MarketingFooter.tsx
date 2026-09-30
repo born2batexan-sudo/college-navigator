@@ -10,7 +10,7 @@ export default function MarketingFooter() {
         <nav className="footer-links" aria-label="Footer">
           <Link href="/account/mail-privacy">Email connectivity — Coming Soon</Link>
           <span aria-hidden="true">·</span>
-          <Link href="/request-access">Request access</Link>
+          <Link href="/login?next=%2Fonboarding">Start Now</Link>
           <span aria-hidden="true">·</span>
           <Link href="/login?next=%2Fdashboard">Log in</Link>
         </nav>
