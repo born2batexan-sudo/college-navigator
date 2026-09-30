@@ -107,6 +107,9 @@ describe("post-commit request dispatch and durable first-view timing", () => {
     assert.equal((await metrics(result.request.id))?.first_visible_at,null,"143 states are not a complete first view");
     const last=rows.at(-1)!;
     await DB.exec("INSERT INTO request_subject_states(unitid,term,code,state,explanation,last_checked_at,next_check_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",["81005",term,last.code,last.state,last.explanation,now,last.nextCheckAt,now]);
+    await Q.markFamilyFirstView(result.request.householdId,result.request.id);
+    assert.equal((await metrics(result.request.id))?.first_visible_at,null,"144 unresolved states are not a first useful view");
+    await DB.exec("UPDATE request_subject_states SET state='verified',source_url=$1,evidence_quote=$2 WHERE unitid=$3 AND term=$4 AND code=$5",["https://school81005.edu/admissions","The university invites first-year applications.","81005",term,rows[0].code]);
     await Q.markFamilyFirstView("wrong-household",result.request.id);
     assert.equal((await metrics(result.request.id))?.first_visible_at,null);
     await Q.markFamilyFirstView(result.request.householdId,result.request.id);

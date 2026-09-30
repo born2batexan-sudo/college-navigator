@@ -90,9 +90,13 @@ export async function recordRequestDispatch(requestId:string,outcome:"accepted"|
 }
 export async function markFamilyFirstView(householdId:string,requestId:string):Promise<void>{
   // The caller is the authenticated /request server page after reading all 144
-  // states. A household cannot mark another household's request as visible.
+  // states and at least one source-backed result. An all-unresolved snapshot is
+  // not a first-useful-view measurement. A household cannot mark another's.
   await exec(`UPDATE school_requests SET first_visible_at=$1 WHERE id=$2 AND household_id=$3 AND first_visible_at IS NULL
-    AND (SELECT COUNT(*) FROM request_subject_states s WHERE s.unitid=school_requests.unitid AND s.term=school_requests.term)=144`,[nowIso(),requestId,householdId]);
+    AND (SELECT COUNT(*) FROM request_subject_states s WHERE s.unitid=school_requests.unitid AND s.term=school_requests.term)=144
+    AND EXISTS (SELECT 1 FROM request_subject_states s WHERE s.unitid=school_requests.unitid AND s.term=school_requests.term
+      AND s.state IN ('verified','not_applicable','not_yet_published') AND s.source_url IS NOT NULL AND s.source_url<>''
+      AND s.evidence_quote IS NOT NULL AND s.evidence_quote<> '')`,[nowIso(),requestId,householdId]);
 }
 
 export async function claimNextResearchJob():Promise<{job:ResearchJob;school:DirectorySchool;requestCount:number}|null>{
