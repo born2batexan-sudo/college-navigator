@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
 /**
  * Primary navigation. At 900px and below everything except the logo and the Start Now button collapses
  * into a menu toggle (button with aria-expanded). Escape closes the menu and returns focus to the toggle.
- * Nav order follows the approved mockup: Overview, How it works, 12² Standard, Sample plan, Trust, Log in.
+ * Nav order follows the approved mockup, with public Ask Campus Passage discoverable alongside the overview.
  */
-export default function HeaderNav({ current }: { current: "overview" | "sample" }) {
+export default function HeaderNav({ current }: { current: "overview" | "sample" | "ask" }) {
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
 
@@ -28,6 +28,7 @@ export default function HeaderNav({ current }: { current: "overview" | "sample" 
         <Link href="/#how" onClick={close}>How it works</Link>
         <Link href="/#standard" onClick={close}>12² Standard</Link>
         <Link aria-current={current === "sample" ? "page" : undefined} href="/sample-plan" onClick={close}>Sample plan</Link>
+        <Link aria-current={current === "ask" ? "page" : undefined} href="/ask" onClick={close}>Ask Campus Passage</Link>
         <Link href="/#trust" onClick={close}>Trust</Link>
         <Link href="/login?next=%2Fdashboard" className="login-link" onClick={close}>Log in</Link>
       </nav>

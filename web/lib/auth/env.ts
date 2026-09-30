@@ -69,7 +69,7 @@ export function isPublicPath(pathname: string): boolean {
   // OAuth response must reach its own signed-in/state/PKCE guard; do not put
   // authorization codes into the generic proxy's login?next= redirect.
   if (/^\/api\/mail\/callback\/(?:gmail|microsoft)$/.test(pathname) || pathname==='/api/mail/maintenance') return true;
-  if (pathname === "/" || pathname === "/sample-plan") return true;
+  if (pathname === "/" || pathname === "/sample-plan" || pathname === "/ask") return true;
   // Exact public pages; only explicit resource/callback prefixes may contain children.
   return PUBLIC_PATH_PREFIXES.some((p) => {
     if (["/login", "/request-access", "/robots.txt", "/sitemap.xml", "/favicon.ico", "/auth/callback", "/api/stripe/webhook", "/api/stripe/addon-webhook"].includes(p)) return pathname === p;

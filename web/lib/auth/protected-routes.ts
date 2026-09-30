@@ -10,7 +10,7 @@ const PROTECTED_EXACT_PATHS = new Set([
   "/api/ask",
   "/api/companion/context",
   "/api/companion/observe",
-  "/ask",
+  "/ask/research",
   "/dashboard",
   "/intake",
   "/onboarding",

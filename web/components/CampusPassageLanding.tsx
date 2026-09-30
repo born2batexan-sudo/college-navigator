@@ -119,6 +119,15 @@ export default function CampusPassageLanding() {
           </div>
         </section>
 
+        <section id="ask-campus-passage" className="section" aria-labelledby="ask-campus-passage-title">
+          <div className="site-shell">
+            <p className="eyebrow">Ask Campus Passage</p>
+            <h2 id="ask-campus-passage-title" className="display">Questions about how Campus Passage works?</h2>
+            <p className="lead">Ask general questions about the product, privacy, official sources, and getting started. Public Ask does not research a particular college, answer school-specific deadlines or scholarships, determine eligibility, or access household records.</p>
+            <div className="actions"><Link className="button button-secondary" href="/ask">Ask Campus Passage</Link><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now for your household plan</Link></div>
+          </div>
+        </section>
+
         <section id="standard" className="section" aria-labelledby="standard-title">
           <div className="site-shell">
             <p className="eyebrow">The 12² Standard</p>
