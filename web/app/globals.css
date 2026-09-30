@@ -307,12 +307,16 @@ details[open].tile .t::after { content: "–"; }
   .nav-toggle { width: 36px; height: 36px; }
 }
 @media (max-width: 340px) {
-  .topbar.site-shell { padding-inline: 10px; }
-  .brand-header .route-icon { width: 24px; height: 24px; }
-  .brand-header .brand-wordmark { font-size: 13px; }
-  .brand-header { gap: 6px; }
-  .nav-cta { padding: 6px 7px; font-size: 12px; }
-  .nav-toggle { width: 34px; height: 34px; }
+  .topbar.site-shell { padding-inline: 8px; }
+  .topbar { gap: 4px; }
+  .topbar-nav { gap: 3px; }
+  .brand-header .route-icon { width: 23px; height: 23px; }
+  .brand-header .brand-wordmark { font-size: 12px; }
+  .brand-header { gap: 5px; }
+  .nav-cta { padding: 5px 6px; font-size: 11px; }
+  .nav-toggle { width: 32px; height: 32px; }
+  .sample-cta .actions { width: 100%; max-width: 100%; }
+  .sample-cta .button { width: 100%; max-width: 100%; white-space: normal; text-align: center; }
 }
 @media (max-width: 860px) { .sample-grid { grid-template-columns: 1fr; } .sample-heading { flex-direction: column; } }
 @media (max-width: 480px) { .sample-anatomy dl > div { grid-template-columns: 1fr; gap: 0; } .pathway-selector { display: flex; } .pathway-selector button { flex: 1 1 140px; } }
