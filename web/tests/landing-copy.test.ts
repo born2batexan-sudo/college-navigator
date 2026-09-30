@@ -20,6 +20,15 @@ describe("public copy boundaries", () => {
     assert.doesNotMatch(overview, /Don&apos;t miss the moment|Don't miss the moment|two kids|two timelines/i);
     assert.match(overview, /From the first application to move-in day, Campus Passage brings verified dates, school-side waits, and family next steps into one clear plan/);
   });
+  it("keeps email connectivity outside the core flow and labels it Coming Soon", () => {
+    assert.match(overview, /Tell us what matters to your family/);
+    assert.match(overview, /Follow one clear, verified plan/);
+    assert.doesNotMatch(overview, /Connect an inbox, if you choose/);
+    assert.match(overview, /Email Connectivity — Coming Soon/);
+    assert.match(overview, /optional paid add-on/);
+    assert.match(overview, /Created by families who have been there/);
+    assert.doesNotMatch(overview, /co-founder with a legal background/);
+  });
   it("keeps four marketing essentials and all seven details inside each sample item", () => {
     assert.equal((overview.match(/\["(?:What it is|Whose move|By when|What's at stake)"/g) ?? []).length, 4);
     assert.doesNotMatch(visibleText(overview), /honest facts|seven facts/i);

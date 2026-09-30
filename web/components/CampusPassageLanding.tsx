@@ -14,9 +14,9 @@ const essentials = [
 const pills = ["Application deadlines", "FAFSA & CSS Profile", "Scholarships", "Housing & dorms", "Deposits", "Immunization records", "Orientation", "Meal plans", "Parking permits", "Greek life recruitment", "Move-in day", "The first bill"] as const;
 
 const steps = [
-  ["Add your student and schools.", "Add the colleges on each student's list, each tagged by application path: Common App, direct, or both. 10 unique colleges are included; each additional college is $19."],
-  ["Connect an inbox, if you choose.", "When enabled for an invited household, sender-scoped college updates can be added with explicit consent. You can disconnect and delete connected-mail data anytime."],
-  ["Get one clear plan.", "Public school and sponsor information, plus your own updates, become one list of next steps, each with its source."],
+  ["Add your students and schools.", "Create a separate path for each student and add the colleges they're considering. Ten unique colleges are included; each additional college is $19."],
+  ["Tell us what matters to your family.", "Answer a few questions about housing, commuting, financial aid, scholarships, accessibility, campus life, and other priorities. Campus Passage uses those answers to surface what is relevant without hiding school requirements."],
+  ["Follow one clear, verified plan.", "Campus Passage researches official public sources and organizes the findings by student, school, and term—showing what needs attention, whose move it is, and where the information came from."],
 ] as const;
 
 /** The 12² Standard: 4 phases x 3 themes, each "up to 12 checks". Example checks are the mockup's three per theme. */
@@ -51,13 +51,13 @@ const faqItems: readonly FaqItem[] = [
   { id: "faq-track", question: "How do I keep track of college application deadlines for my student?", answer: "Add each school your student is considering. Campus Passage organizes verified application, financial aid, scholarship, housing, and enrollment information in one plan, shows whose move each step is, and labels what is still under review or not yet published." },
   { id: "faq-spreadsheet", question: "Is this better than a college application spreadsheet?", answer: "A spreadsheet only knows what you type into it. Campus Passage reviews up to 144 checks per school and links verified findings to official sources, while unresolved checks remain clearly labeled." },
   { id: "faq-accepted", question: "What do we need to do after my student is accepted?", answer: "Enrollment deposits, housing applications, financial aid verification, immunization records, orientation, and the first bill may all matter. Campus Passage keeps the applicable verified steps together through move-in planning." },
-  { id: "faq-missing", question: "How will I know if something is missing from my student's application?", answer: "When optional inbox support is enabled for an invited household, sender-scoped college notices can surface a status update for review. School portals and official instructions remain the authority." },
+  { id: "faq-missing", question: "How will I know if something is missing from my student's application?", answer: "Campus Passage organizes findings from official public sources and clearly labels unresolved or unpublished information. School portals and official instructions remain the authority. Email connectivity is a Coming Soon optional paid add-on." },
   { id: "faq-portal", question: "Do you need my student's school portal login?", answer: "No. Never. Campus Passage doesn't sign into school portals." },
   { id: "faq-submit", question: "Does it apply, submit, or pay anything for me?", answer: "No. You stay in control, and the school's official instructions are always the authority." },
   { id: "faq-schools", question: "Which schools can I add, and can I track more than one student?", answer: "A household plan includes 10 unique colleges, and each additional college is $19. Eligible students sharing the same high-school graduation year and application cycle can be in one household. Every student, school, and term stays separate, and review depth is shown honestly." },
   { id: "faq-cost", question: "What does it cost?", answer: "$199 per qualifying household per application cycle, including 10 unique colleges, plus $19 for each additional college. For a limited time, approved founding families pay $99 per household per application cycle." },
   { id: "faq-counselor", question: "Does it replace our school counselor?", answer: "No. It helps your family bring better questions to your counselor." },
-  { id: "faq-data", question: "What happens to my data if I leave?", answer: "Connected inbox access can be disconnected, and connected-mail data can be deleted, even after product access ends." },
+  { id: "faq-data", question: "What happens to my data if I leave?", answer: "Your household records remain subject to Campus Passage's privacy and deletion controls. The Coming Soon optional paid email-connectivity add-on will include controls to disconnect inbox access and delete connected-mail data." },
 ];
 
 export default function CampusPassageLanding() {
@@ -170,7 +170,7 @@ export default function CampusPassageLanding() {
             <p className="eyebrow">Where the line is</p>
             <h2 id="boundaries-title" className="display">Your decisions and records stay yours.</h2>
             <p className="lead">Campus Passage does not apply to a school, submit or complete forms, sign into a portal, decide eligibility or awards, pay a bill, move 529 funds, or change a school record. Check the school, sponsor, vendor, or plan administrator before acting.</p>
-            <p className="lead"><b>Your inbox, your control.</b> Inbox connection is optional and consent-based. We read only what&apos;s needed to build your plan, never use it for marketing, and you can disconnect and delete connected-mail data at any time.</p>
+            <p className="lead"><b>Email Connectivity — Coming Soon.</b> An optional paid add-on will help invited families incorporate sender-scoped college updates into their plans—with explicit consent and controls to disconnect and delete connected-mail data.</p>
           </div>
         </section>
 
@@ -202,8 +202,11 @@ export default function CampusPassageLanding() {
         <section id="founders" className="section" aria-labelledby="founders-title">
           <div className="site-shell">
             <p className="eyebrow">Who&apos;s behind it</p>
-            <h2 id="founders-title" className="display">Built by a small, independent team.</h2>
-            <p className="lead">Campus Passage is independently built and funded. A co-founder with a legal background reviews every public claim and boundary on this site, so the plan stays exact about what it knows and what it doesn&apos;t.</p>
+            <h2 id="founders-title" className="display">Created by families who have been there.</h2>
+            <p className="lead">Campus Passage was created by two families who have been where you are—trying to keep track of deadlines, requirements, emails, housing details, financial-aid steps, and countless other tasks scattered across different websites and systems.</p>
+            <p className="lead">We experienced firsthand how fragmented and overwhelming the college onboarding season can become. Important information was often difficult to find, easy to miss, and rarely organized around what a family actually needed to do next.</p>
+            <p className="lead">So we built Campus Passage to bring greater clarity and order to the journey—helping families understand what matters, what&apos;s coming, and where to find the official information they need.</p>
+            <p className="lead">We&apos;re not outside observers. We&apos;re families who faced the same confusion and believed there had to be a better way.</p>
           </div>
         </section>
 
