@@ -60,7 +60,7 @@ describe("approved public release copy", () => {
     }
     assert.match(nav, /12² Standard/);
     assert.match(nav, /Pricing/);
-    assert.match(footer, /Connected-mail privacy/);
+    assert.match(footer, /Email connectivity — Coming Soon/);
     assert.match(footer, /Request access/);
     assert.match(footer, /Log in/);
   });

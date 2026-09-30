@@ -80,10 +80,51 @@ describe("owner-approved founding-family access", () => {
     await assert.rejects(() => B.completeBetaOnboarding(ctx, ctx.email, setup), /available/);
     assert.equal(await C.queryOne("SELECT 1 AS ok FROM cycle_orders WHERE household_id=$1", [ctx.household.id]), null);
   });
+  it("bypasses checkout but enforces ten distinct household-cycle colleges through the authorized request flow", async () => {
+    const Q = await import("../lib/db/requests");
+    const K = await import("../lib/db/college-coverage");
+    const { collegeCoverageEnforced } = await import("../lib/payments/college-coverage");
+    const invite = await approved("ten-colleges@example.com");
+    const ctx = await A.provisionAccount({ authUserId: "ten-colleges", email: "ten-colleges@example.com" });
+    assert.equal(await B.acceptBetaInvite(ctx, invite.token), "accepted");
+    await B.completeBetaOnboarding(ctx, ctx.email, setup);
+    assert.equal(await P.hasProductAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id), true);
+    assert.equal((await C.queryOne<{ amount_cents: number; kind: string }>("SELECT amount_cents,kind FROM cycle_orders WHERE household_id=$1", [ctx.household.id]))?.amount_cents, 0);
+    assert.equal((await C.queryOne<{ kind: string }>("SELECT kind FROM cycle_orders WHERE household_id=$1", [ctx.household.id]))?.kind, "complimentary");
+    assert.equal(collegeCoverageEnforced({}), false, "payment coverage experiment is off");
+    for (let i = 0; i < 11; i++) await Q.upsertDirectorySchool({ unitid: String(850000 + i), name: `Official School ${i}`, domain: "school.example.edu" });
+    await C.exec("INSERT INTO institutions(id,name,slug,created_at) VALUES($1,$2,$3,$4)", ["inst_beta_0", "Beta School Zero", "beta-school-zero", new Date().toISOString()]);
+    await C.exec("UPDATE school_directory SET institution_id=$1 WHERE unitid=$2", ["inst_beta_0", "850000"]);
+    await K.requireBetaTrackedCollege({ householdId: ctx.household.id, cycle: "Fall 2027", institutionId: "inst_beta_0" });
+    assert.equal((await K.getCollegeCoverageSummary(ctx.household.id, "Fall 2027")).coveredUnits, 1);
+    await assert.rejects(() => K.assertBetaAccessCycle(ctx.household.id, "Fall 2028"),
+      (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "invalid_cycle");
+    for (let i = 0; i < 10; i++) {
+      const requested = await Q.createSchoolRequest({ householdId: ctx.household.id, personId: ctx.person?.id, unitid: String(850000 + i), term: "Fall 2027" });
+      assert.equal(requested.created, true);
+      // The existing three-per-calendar-month rate limit is independent of lifetime cycle coverage.
+      await C.exec("UPDATE school_requests SET created_at=$1 WHERE id=$2", [`2025-${String(1 + i).padStart(2, "0")}-01T00:00:00.000Z`, requested.request.id]);
+    }
+    const summary = await K.getCollegeCoverageSummary(ctx.household.id, "Fall 2027");
+    assert.equal(summary.coveredCollegeIds.length, 10, "tracked and requested canonical school counts once");
+    assert.equal(summary.remainingUnits, 0);
+    await assert.rejects(() => K.requireBetaTrackedCollege({ householdId: ctx.household.id, cycle: "Fall 2027", institutionId: "inst_beta_11" }),
+      (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "capacity_exhausted");
+    assert.equal((await Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "850000", term: "Fall 2027" })).created, false);
+    await assert.rejects(() => Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "850010", term: "Fall 2027" }),
+      (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "capacity_exhausted");
+    assert.equal(await C.queryOne("SELECT 1 AS ok FROM school_requests WHERE household_id=$1 AND unitid=$2", [ctx.household.id, "850010"]), null);
+    assert.equal(await C.queryOne("SELECT 1 AS ok FROM college_addon_purchases WHERE household_id=$1", [ctx.household.id]), null);
+    assert.equal(await C.queryOne("SELECT 1 AS ok FROM cycle_accounting_events WHERE order_id IN (SELECT id FROM cycle_orders WHERE household_id=$1) AND kind='payment'", [ctx.household.id]), null);
+    assert.equal(await D.revokeDemoAccessRequest({ requestId: invite.requestId, actor }), true);
+    assert.equal(await P.hasProductAccess({ id: ctx.authUserId, email: ctx.email }, ctx.household.id), false);
+    await assert.rejects(() => K.requireBetaTrackedCollege({ householdId: ctx.household.id, cycle: "Fall 2027", institutionId: "inst_beta_0" }),
+      (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "no_active_entitlement");
+  });
   it("reserves the combined lifetime 25-household complimentary capacity at approval", async () => {
-    // The earlier three approvals include two expired reservations and one revoked,
-    // leaving the successfully onboarded family as a consumed slot.
-    for (let i = 0; i < 24; i++) await approved(`capacity-${i}@example.com`);
+    // Two onboarded beta households consume slots. Expired reservations and a revoked
+    // invitation release their reservation without erasing past $0 orders.
+    for (let i = 0; i < 23; i++) await approved(`capacity-${i}@example.com`);
     await D.submitDemoAccessRequest({ name: "Overflow", email: "capacity-overflow@example.com" });
     const row = await C.queryOne<{ id: string }>("SELECT id FROM demo_access_requests WHERE requester_email='capacity-overflow@example.com'");
     assert.ok(row);

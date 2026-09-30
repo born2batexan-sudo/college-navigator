@@ -452,6 +452,9 @@ describe('static guards on the coverage implementation', () => {
   it('coverage enforcement stays gated in the request flow', () => {
     const src = read('lib/db/requests.ts');
     assert.match(src, /requireCollegeCoverage\(/);
-    assert.match(read('lib/db/college-coverage.ts'), /if \(!collegeCoverageEnforced\(env\)\) return null;/);
+    const db = read('lib/db/college-coverage.ts');
+    assert.match(db, /if \(!beta && !collegeCoverageEnforced\(env\)\) return null;/);
+    assert.match(db, /JOIN beta_access_invites b ON o\.idempotency_key='beta:'\|\|b\.id/);
+    assert.match(db, /const result = await reserveCollegeCoverage\(input, beta\)/);
   });
 });

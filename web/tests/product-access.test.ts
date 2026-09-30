@@ -44,6 +44,8 @@ describe("production product authorization", () => {
     assert.equal(await hasProductAccess(identity, ctx.household.id), false);
     assert.equal(await hasProductAccess(actor, owner.household.id), true);
     assert.equal(await hasProductAccess({ id: actor.id, email: "other@example.com" }, owner.household.id), false);
+    assert.equal(await hasProductAccess(actor, ctx.household.id), false, "owner email does not authorize an unrelated household");
+    assert.equal(await hasProductAccess(identity, owner.household.id), false, "a household ID cannot be used as a bearer grant");
   });
 
   it("honors existing complimentary entitlement, expiry and revocation on every check", async () => {
@@ -70,6 +72,7 @@ describe("production product authorization", () => {
     assert.equal(await B.previewBetaInvite(decision.token, other.identity.email), null);
     assert.equal(await B.acceptBetaInvite(other.ctx, decision.token), "invalid");
     const matching = await createUser("approved-auth", "approved@example.com");
+    assert.equal(await hasProductAccess(other.identity, matching.ctx.household.id), false);
     assert.ok(await B.previewBetaInvite(decision.token, matching.identity.email));
     assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), false);
     assert.equal(await B.acceptBetaInvite(matching.ctx, decision.token), "accepted");
@@ -86,6 +89,8 @@ describe("production product authorization", () => {
     assert.equal((await A.getContextForUser(matching.identity.id))?.student?.name, "Real Student");
     assert.equal((await A.getContextForUser(matching.identity.id))?.isDemo, false);
     assert.equal(await hasProductAccess(matching.identity, matching.ctx.household.id), true);
+    assert.equal(await hasProductAccess(other.identity, matching.ctx.household.id), false, "forwarded token and household ID cannot authorize another sign-in");
+    assert.equal(await B.acceptBetaInvite(other.ctx, decision.token), "invalid", "accepted invitation cannot be forwarded or replayed");
     assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_orders WHERE household_id=$1 AND amount_cents=0", [matching.ctx.household.id]))?.n), 1);
     assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_accounting_events WHERE order_id=$1 AND kind='complimentary'", [order]))?.n), 1);
     assert.equal(Number((await C.queryOne<any>("SELECT COUNT(*) AS n FROM cycle_audit_events WHERE order_id=$1 AND event_type='complimentary_granted'", [order]))?.n), 1);
@@ -103,6 +108,14 @@ describe("production product authorization", () => {
     assert.match(readFileSync(path.join(process.cwd(), "app/request-access/actions.ts"), "utf8"), /submitDemoAccessRequest/);
     const session = readFileSync(path.join(process.cwd(), "lib/auth/session.ts"), "utf8");
     assert.match(session, /if \(!await hasProductAccess\(user, ctx\.household\.id\)\) redirect\("\/request-access"\)/);
+    const requestAction = readFileSync(path.join(process.cwd(), "app/request/actions.ts"), "utf8");
+    assert.match(requestAction, /requireWritableOnboardedHousehold\(\)/);
+    assert.match(requestAction, /createSchoolRequest\(/);
+    const trackedAction = readFileSync(path.join(process.cwd(), "app/welcome/actions.ts"), "utf8");
+    assert.match(trackedAction, /requireWritableSelectedStudent\(/);
+    assert.match(trackedAction, /withTransaction\(/);
+    assert.match(trackedAction, /requireBetaTrackedCollege\(/);
+    assert.match(trackedAction, /assertBetaAccessCycle\(/);
     for (const api of ["app/api/ask/route.ts", "app/api/companion/context/route.ts", "app/api/companion/observe/route.ts"]) {
       const source = readFileSync(path.join(process.cwd(), api), "utf8");
       assert.match(source, /authorizedApiHousehold\(\)/, `${api} must check live access`);

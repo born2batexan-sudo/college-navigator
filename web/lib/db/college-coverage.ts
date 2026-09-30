@@ -46,41 +46,82 @@ async function lockedAccount(householdId: string, cycle: string): Promise<Covera
 /** Single conditional statement: the capacity limit is re-asserted here, atomically, so a stale
  * in-memory decision can never over-grant. Returns the new covered count, or null if no capacity.
  * Exported only so tests can prove the invariant; call it inside the reservation transaction. */
-export async function claimCoverageUnit(householdId: string, cycle: string): Promise<number | null> {
+export async function claimCoverageUnit(householdId: string, cycle: string, includedOnly = false): Promise<number | null> {
   const row = await queryOne<any>(`UPDATE college_coverage_accounts SET covered_units=covered_units+1,updated_at=$1
     WHERE household_id=$2 AND cycle=$3 AND covered_units<included_units+purchased_units
-    AND (covered_units<included_units OR addon_hold=0) RETURNING covered_units`, [nowIso(), householdId, cycle]);
+    AND ($4=0 OR covered_units<included_units)
+    AND (covered_units<included_units OR addon_hold=0) RETURNING covered_units`, [nowIso(), householdId, cycle, includedOnly ? 1 : 0]);
   return row ? Number(row.covered_units) : null;
 }
 
 /** Idempotent, race-safe reservation of one canonical college for a household-cycle.
  * - Already covered (including after the college was removed, or by another student): no new unit.
  * - New college: consumes exactly one unit, or is blocked. Never partially applied. */
-export async function reserveCollegeCoverage(input: { householdId: string; cycle: string; collegeId: string; personId?: string | null }): Promise<ReserveResult> {
+export async function reserveCollegeCoverage(input: { householdId: string; cycle: string; collegeId: string; personId?: string | null }, includedOnly = false): Promise<ReserveResult> {
   if (!isCoverageCycle(input.cycle)) return { status: 'blocked', reason: 'invalid_cycle' };
   if (!isCanonicalCollegeId(input.collegeId)) return { status: 'blocked', reason: 'invalid_college' };
   return withTransaction(async (): Promise<ReserveResult> => {
     if (!await eligibleHousehold(input.householdId)) return { status: 'blocked', reason: 'ineligible_household' };
     const account = await lockedAccount(input.householdId, input.cycle);
+    // The beta invitation waives payment only; it never buys add-on capacity.
+    const usableAccount = includedOnly ? { ...account, purchasedUnits: 0 } : account;
     const alreadyCovered = !!await queryOne('SELECT 1 AS ok FROM college_coverage_colleges WHERE household_id=$1 AND cycle=$2 AND college_id=$3', [input.householdId, input.cycle, input.collegeId]);
     const entitlementActive = alreadyCovered || !!await activeEntitlement(input.householdId, input.cycle);
-    const decision = decideReservation({ account, alreadyCovered, entitlementActive });
+    const decision = decideReservation({ account: usableAccount, alreadyCovered, entitlementActive });
     if (decision.outcome === 'blocked') return { status: 'blocked', reason: decision.reason };
-    if (decision.outcome === 'already_covered') return { status: 'covered', consumedUnit: false, source: 'existing', coveredUnits: account.coveredUnits, remainingUnits: Math.max(0, account.includedUnits + account.purchasedUnits - account.coveredUnits) };
-    const covered = await claimCoverageUnit(input.householdId, input.cycle);
+    if (decision.outcome === 'already_covered') return { status: 'covered', consumedUnit: false, source: 'existing', coveredUnits: account.coveredUnits, remainingUnits: Math.max(0, usableAccount.includedUnits + usableAccount.purchasedUnits - account.coveredUnits) };
+    const covered = await claimCoverageUnit(input.householdId, input.cycle, includedOnly);
     if (covered === null) return { status: 'blocked', reason: account.addonHold ? 'addon_refund_review' : 'capacity_exhausted' };
     const source = covered <= account.includedUnits ? 'included' : 'addon';
     await exec('INSERT INTO college_coverage_colleges(household_id,cycle,college_id,source,first_person_id,first_covered_at) VALUES($1,$2,$3,$4,$5,$6)', [input.householdId, input.cycle, input.collegeId, source, input.personId ?? null, nowIso()]);
-    return { status: 'covered', consumedUnit: true, source, coveredUnits: covered, remainingUnits: Math.max(0, account.includedUnits + account.purchasedUnits - covered) };
+    return { status: 'covered', consumedUnit: true, source, coveredUnits: covered, remainingUnits: Math.max(0, usableAccount.includedUnits + usableAccount.purchasedUnits - covered) };
   });
 }
 
-/** Throws CollegeCoverageBlockedError when blocked. No-op unless enforcement is explicitly on in
- * staging/test, so production request behavior is unchanged. Call inside the caller's transaction
- * so a later failure rolls the unit back. */
+/** Beta's included ten colleges apply independently of the disabled payment experiment.
+ * Only a completed, active, household-bound beta $0 order activates this path;
+ * accepting a link alone cannot create research access or capacity. */
+async function betaGrant(householdId: string) {
+  return queryOne<{ cycle: string; revoked_at: string | null; starts_at: string; expires_at: string; request_status: string }>(
+    `SELECT e.cycle,e.revoked_at,e.starts_at,e.expires_at,r.status AS request_status FROM cycle_entitlements e
+      JOIN cycle_orders o ON o.id=e.order_id AND o.household_id=e.household_id
+      JOIN beta_access_invites b ON o.idempotency_key='beta:'||b.id AND b.accepted_household_id=e.household_id
+      JOIN demo_access_requests r ON r.id=b.request_id
+      WHERE e.household_id=$1 AND e.kind='complimentary'
+        AND o.kind='complimentary' AND o.status='complimentary' LIMIT 1`, [householdId]);
+}
+
+/** A beta grant is for its approved application cycle, never a new free cycle.
+ * Revocation/expiry fails closed even if an authorized request races the owner action. */
+export async function assertBetaAccessCycle(householdId: string, cycle: string): Promise<boolean> {
+  const grant = await betaGrant(householdId);
+  if (!grant) return false;
+  if (cycle !== grant.cycle) throw new CollegeCoverageBlockedError('invalid_cycle');
+  const now = nowIso();
+  if (grant.revoked_at || grant.request_status !== 'approved' || grant.starts_at > now || grant.expires_at <= now)
+    throw new CollegeCoverageBlockedError('no_active_entitlement');
+  return true;
+}
+
+/** Reserve a trackable college in the same ledger as new research requests.
+ * If the school is already linked to an official directory UNITID, use that
+ * canonical ID so tracking and research share a single unit. No research is
+ * queued by tracking a school. The caller wraps this with the relationship write. */
+export async function requireBetaTrackedCollege(input: { householdId: string; cycle: string; institutionId: string }): Promise<void> {
+  if (!await assertBetaAccessCycle(input.householdId, input.cycle)) return;
+  const directory = await queryOne<{ unitid: string }>('SELECT unitid FROM school_directory WHERE institution_id=$1 ORDER BY unitid LIMIT 1', [input.institutionId]);
+  const result = await reserveCollegeCoverage({ householdId: input.householdId, cycle: input.cycle, collegeId: directory?.unitid ?? input.institutionId }, true);
+  if (result.status === 'blocked') throw new CollegeCoverageBlockedError(result.reason);
+}
+
+/** Throws CollegeCoverageBlockedError when blocked. Paid coverage remains opt-in and
+ * staging/test-only; an active founding-family beta always has only its ten included
+ * colleges, even with Stripe and the payment experiment disabled. Call within the
+ * request transaction so a later quota/validation failure rolls back the unit. */
 export async function requireCollegeCoverage(input: { householdId: string; cycle: string; collegeId: string; personId?: string | null }, env: Env = process.env): Promise<ReserveResult | null> {
-  if (!collegeCoverageEnforced(env)) return null;
-  const result = await reserveCollegeCoverage(input);
+  const beta = await assertBetaAccessCycle(input.householdId, input.cycle);
+  if (!beta && !collegeCoverageEnforced(env)) return null;
+  const result = await reserveCollegeCoverage(input, beta);
   if (result.status === 'blocked') throw new CollegeCoverageBlockedError(result.reason);
   return result;
 }

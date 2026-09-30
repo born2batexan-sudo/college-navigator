@@ -3,6 +3,10 @@ import { isDemoOwnerEmail } from "@/lib/db/accounts";
 
 /** Server-side, per-request authorization. Authentication or a household link alone is not access. */
 export async function hasProductAccess(user: { id: string; email: string | null }, householdId: string): Promise<boolean> {
+  // An entitlement belongs to a household, not to any signed-in user who knows its ID.
+  // Check the live auth link even for the owner override; callers must not rely on a
+  // client-selected household or an earlier/stale context as proof of membership.
+  if (!await queryOne("SELECT 1 AS ok FROM auth_links WHERE auth_user_id=$1 AND household_id=$2", [user.id, householdId])) return false;
   if (isDemoOwnerEmail(user.email)) return true;
   const now = new Date().toISOString();
   const entitlement = await queryOne(`SELECT 1 AS ok FROM cycle_entitlements e

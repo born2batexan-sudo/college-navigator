@@ -12,7 +12,9 @@ import {
 import { materializeActionsForRelationship } from "@/lib/materialize";
 import { requireWritableSelectedStudent } from "@/lib/auth/session";
 import { updateStudentAttributes } from "@/lib/db/accounts";
-import { isStartTerm } from "@/lib/terms";
+import { enteringTermFrom, isStartTerm } from "@/lib/terms";
+import { assertBetaAccessCycle, requireBetaTrackedCollege } from "@/lib/db/college-coverage";
+import { withTransaction } from "@/lib/db/client";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
 
 // The student always comes from the signed-in family (requireOnboardedHousehold),
@@ -26,7 +28,7 @@ import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
  * interest on) immediately updates which of the 144 checkpoints apply.
  */
 export async function saveSchoolPreferences(formData: FormData): Promise<void> {
-  const { student } = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
+  const { student, household } = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
   const institution = await getInstitution(institutionId);
@@ -37,15 +39,18 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
   const bringingCar = formData.get("bringingCar") === "on";
   const disabilityAccommodation = formData.get("disabilityAccommodation") === "on";
 
-  const relationship = await upsertRelationship({ studentId: student.id, institutionId });
-  await updateRelationshipAttributes(relationship.id, {
-    housingPlan,
-    greekInterest,
-    bringingCar,
-    disabilityAccommodation,
+  await withTransaction(async () => {
+    await requireBetaTrackedCollege({ householdId: household.id, cycle: enteringTermFrom(student) ?? "Not sure yet", institutionId });
+    const relationship = await upsertRelationship({ studentId: student.id, institutionId });
+    await updateRelationshipAttributes(relationship.id, {
+      housingPlan,
+      greekInterest,
+      bringingCar,
+      disabilityAccommodation,
+    });
+    await setRelationshipActive(relationship.id, true);
+    await materializeActionsForRelationship(relationship.id);
   });
-  await setRelationshipActive(relationship.id, true);
-  await materializeActionsForRelationship(relationship.id);
 
   revalidatePath("/welcome");
   revalidatePath("/");
@@ -60,6 +65,7 @@ export async function saveStartTerm(formData: FormData): Promise<void> {
   const ctx = await requireWritableSelectedStudent(String(formData.get("studentId") ?? ""));
   const term = String(formData.get("enteringTerm") ?? "");
   if (!isStartTerm(term)) throw new Error("Choose a valid start term");
+  await assertBetaAccessCycle(ctx.household.id, term);
   await updateStudentAttributes(ctx, { enteringTerm: term });
   // Rebuild each tracked school's actions from this exact term. If that term
   // has no certified rules yet, no other cycle is substituted.

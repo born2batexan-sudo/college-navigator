@@ -71,7 +71,8 @@ export async function createSchoolRequest(input:{householdId:string;personId?:st
   const created=await withTransaction(async()=>{
     if(usingPostgres)await exec("SELECT pg_advisory_xact_lock(hashtext($1))",[`request:${input.householdId}`]);
     if(!await getDirectorySchool(input.unitid))throw new Error("That school is not in the directory");
-    // Off unless COLLEGE_COVERAGE_ENFORCEMENT=1 in staging/test. Same transaction: any later failure rolls back the unit.
+    // Beta $0 grants always use their ten included colleges; paid coverage remains off unless
+    // COLLEGE_COVERAGE_ENFORCEMENT=1 in staging/test. Any later failure rolls the unit back.
     await requireCollegeCoverage({householdId:input.householdId,cycle:input.term,collegeId:input.unitid,personId:input.personId??null});
     const old=await queryOne<any>("SELECT id FROM school_requests WHERE household_id=$1 AND unitid=$2 AND term=$3",[input.householdId,input.unitid,input.term]);if(old)return false;
     if(input.personId){const owner=await queryOne("SELECT 1 AS ok FROM people WHERE id=$1 AND household_id=$2",[input.personId,input.householdId]);if(!owner)throw new Error("Requesting person does not belong to this household");}
