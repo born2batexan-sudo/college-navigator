@@ -8,6 +8,8 @@ import { STATE_LABELS, STATE_STYLES, formatDate, formatMoney } from "@/lib/forma
 import { advanceActionState } from "@/app/actions";
 import { parseDateStatus, awaitingMessage, lastYearLine, DATE_NOT_POSTED_LABEL } from "@/lib/date-status";
 import { enteringTermFrom } from "@/lib/terms";
+import { CompletionToggle } from "@/components/CompletionToggle";
+import { OfficialDestination } from "@/components/OfficialDestination";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,11 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </div>
       </header>
 
+      {dateStatus.kind !== "not_applicable" && <section className="grid gap-3 sm:grid-cols-2 sm:items-start" aria-label="Task completion and official destination">
+        <CompletionToggle key={`${action.id}:${action.state}`} actionId={action.id} completed={action.state === "complete"} readOnly={isDemo || action.state === "waived"} />
+        <OfficialDestination source={action.source} rule={action.rule} schoolName={schoolName} />
+      </section>}
+
       {sourceUpdatePending && (
         <section className="rounded-lg border border-warn/30 bg-warn/10 p-4">
           <p className="font-semibold text-warn">We detected a change on the official source.</p>
@@ -109,13 +116,6 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           <Field label="Why it matters">{g.why}</Field>
           <Field label="How">{g.how}</Field>
           <Field label="If you miss it">{g.consequence}</Field>
-          {g.deepLink && (
-            <Field label="Official link">
-              <a href={g.deepLink} target="_blank" rel="noreferrer" className="text-accent underline">
-                {g.deepLink}
-              </a>
-            </Field>
-          )}
         </section>
       ) : dateStatus.kind === "not_applicable" ? null : (
         <section className="rounded-lg border border-line bg-white p-4 text-sm text-ink/70">
@@ -180,14 +180,9 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </ol>
       </section>
 
-      {action.source && (
-        <footer className="border-t border-line pt-3 text-xs text-ink/40">
-          Official source: {action.source.label} — last checked {formatDate(action.source.lastVerified)} —{" "}
-          <a href={action.source.url} target="_blank" rel="noreferrer" className="underline">
-            {action.source.url}
-          </a>
-        </footer>
-      )}
+      {action.source && <footer className="border-t border-line pt-3 text-xs text-ink/40">
+        Research source: {action.source.label} — last checked {action.source.lastVerified ? formatDate(action.source.lastVerified) : "date unavailable"}. Only verified official URLs are linked above.
+      </footer>}
     </main>
   );
 }

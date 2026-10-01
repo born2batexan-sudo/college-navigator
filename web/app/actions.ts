@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getActionInstance, updateActionInstance, createActionEvent } from "@/lib/db/repo";
+import { saveFamilyCompletion } from "@/lib/db/action-completion";
 import { requireWritableOnboardedHousehold } from "@/lib/auth/session";
 import { actionBelongsToHousehold } from "@/lib/db/accounts";
 
@@ -22,5 +23,15 @@ export async function advanceActionState(actionId: string, toState: string) {
   await createActionEvent({ actionId, eventType: "state_change", fromState: current.state, toState, actorType: "student" });
 
   revalidatePath("/");
+  revalidatePath(`/action/${actionId}`);
+  revalidatePath("/dashboard");
+}
+
+/** Persist a family's independent per-task completion marker, never an official school-side confirmation. */
+export async function setActionCompleted(actionId: string, completed: boolean) {
+  const { household } = await requireWritableOnboardedHousehold();
+  await saveFamilyCompletion(household.id, actionId, completed);
+  revalidatePath("/");
+  revalidatePath("/dashboard");
   revalidatePath(`/action/${actionId}`);
 }

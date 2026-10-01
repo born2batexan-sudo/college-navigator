@@ -84,7 +84,7 @@ export default function CampusPassageLanding() {
             </div>
             <aside className="hero-plan-card" aria-label="Illustrative example of different kinds of updates">
               <ol className="hero-plan-list">
-                <li><span className="hero-plan-dot dot-action" aria-hidden="true" /><span className="hero-plan-text"><strong>Transcript</strong><small>Family action</small></span></li>
+                <li><span className="hero-plan-dot dot-action" aria-hidden="true" /><span className="hero-plan-text"><strong>Fictional transcript step</strong><small>Family action · Fall 2027</small><small><label><input type="checkbox" disabled /> Completed (sample only)</label></small><small>Official destination unavailable in this fictional example</small></span></li>
                 <li><span className="hero-plan-dot dot-date" aria-hidden="true" /><span className="hero-plan-text"><strong>Housing date</strong><small>Date window</small></span></li>
                 <li><span className="hero-plan-dot dot-waiting" aria-hidden="true" /><span className="hero-plan-text"><strong>Waiting on school</strong><small>School-side wait</small></span></li>
                 <li><span className="hero-plan-dot dot-aware" aria-hidden="true" /><span className="hero-plan-text"><strong>Scholarship listing</strong><small>Awareness</small></span></li>

@@ -39,6 +39,7 @@ function SampleItem({ row }: { row: PlanItem }) {
       <h3>{row.title}</h3>
       <p>{row.detail}</p>
       <p className="sample-why"><strong>{row.exception ? "School rule takes priority: " : "Why this appears: "}</strong>{row.whyShown}</p>
+      {row.tone === "action" && <div className="sample-why"><label><input type="checkbox" disabled /> Completed (read-only example)</label><p>Official destination unavailable in this fictional sample — no real school URL is connected. Campus Passage does not sign in, submit, or pay for you.</p></div>}
       <details className="sample-anatomy"><summary>See item context</summary>
         <dl>
           <div><dt>What it is</dt><dd>{row.kind}: {row.title}</dd></div>

@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "db:seed": "tsx lib/db/seed.ts",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test tests/*.test.ts tests/*.test.tsx",
     "db:reset": "rm -f lib/db/dev.sqlite3 && npm run db:seed"
   },
   "dependencies": {
