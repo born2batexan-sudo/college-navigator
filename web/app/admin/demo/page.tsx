@@ -27,8 +27,8 @@ export default async function DemoAdminPage() {
     <main className="mx-auto flex max-w-4xl flex-col gap-7 py-5">
       <header className="border-b border-line pb-5">
         <p className="text-xs font-semibold uppercase tracking-[.18em] text-accent">Campus Passage</p>
-        <h1 className="mt-2 font-display text-3xl font-semibold text-ink">Early access approvals</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink/65">Approve or decline requests for real, complimentary founding-family access. Invitations are email-bound, single-use, and expire in seven days. Onboarding must finish before expiry for the configured cycle; tokens appear only once.</p>
+        <h1 className="mt-2 font-display text-3xl font-semibold text-ink">Exceptional access and review</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink/65">Routine verified-email onboarding grants household access automatically. Use manual approval only for exceptional invitation and support cases; suspend access for reviewed fraud or abuse. Exceptional invitations are email-bound, single-use, and expire in seven days.</p>
       </header>
 
       <section className="rounded-xl border border-line bg-white/70 p-4 text-sm" aria-label="Review summary"><h2 className="font-semibold">Review summary · built—not live</h2><p className="mt-2">Pending requests: {summary.requests} · Active complimentary grants: {summary.grants} · Verified payments: {summary.payments} · Order exceptions: {summary.exceptions.length} · Webhook exceptions: {summary.webhookExceptions.length}</p>{summary.exceptions.length > 0 && <ul className="mt-2 list-disc pl-5">{summary.exceptions.map(x => <li key={x.id}>Order {x.id} · household {x.household_id} · {x.cycle} · {x.status}</li>)}</ul>}{summary.webhookExceptions.length>0 && <ul className="mt-2 list-disc pl-5">{summary.webhookExceptions.map(x=><li key={x.event_id}>Webhook {x.event_id}: {x.detail_code}</li>)}</ul>}<p className="mt-2 text-xs text-ink/55">Provider fees and net cash remain unreconciled until actual processor fee data is imported and checked. Webhook exceptions require separate review.</p></section>

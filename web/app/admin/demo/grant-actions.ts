@@ -2,12 +2,17 @@
 import { revalidatePath } from 'next/cache';
 import { requireDemoOwner } from '@/lib/auth/session';
 import { grantComplimentary, issueComplimentaryInvite, revokeComplimentary } from '@/lib/db/cycle-access';
+import { suspendSelfServiceHousehold } from '@/lib/db/self-service-access';
 export type GrantState={message:string;token:string|null};
 export async function manageComplimentary(_prior:GrantState,form:FormData):Promise<GrantState> {
  const actor=await requireDemoOwner();
  const householdId=String(form.get('householdId')??'').trim(), reason=String(form.get('reason')??'').trim(), operation=String(form.get('operation')??'');
  try {
   const identity={id:actor.id,email:actor.email!};
+  if(operation==='suspend_self_service') {
+   const changed=await suspendSelfServiceHousehold({householdId,actor:identity,reason});
+   revalidatePath('/admin/demo');return {message:changed?'Self-service household suspended; access revoked and audited.':'No active self-service grant found.',token:null};
+  }
   if(operation==='revoke') await revokeComplimentary({householdId,actor:identity,reason});
   else if(operation==='grant') await grantComplimentary({householdId,actor:identity,reason,idempotencyKey:crypto.randomUUID()});
   else if(operation==='invite' || operation==='founding_family') {

@@ -1,6 +1,6 @@
 import { queryOne } from "@/lib/db/client";
 import { isDemoOwnerEmail } from "@/lib/db/accounts";
-import { hasSelfServiceAccess } from "@/lib/db/self-service-access";
+import { hasSelfServiceAccess, selfServiceAccessRevoked } from "@/lib/db/self-service-access";
 
 /** Server-side, per-request authorization. Authentication or a household link alone is not access. */
 export async function hasProductAccess(user: { id: string; email: string | null }, householdId: string): Promise<boolean> {
@@ -9,6 +9,8 @@ export async function hasProductAccess(user: { id: string; email: string | null 
   // client-selected household or an earlier/stale context as proof of membership.
   if (!await queryOne("SELECT 1 AS ok FROM auth_links WHERE auth_user_id=$1 AND household_id=$2", [user.id, householdId])) return false;
   if (isDemoOwnerEmail(user.email)) return true;
+  // Suspension is household-wide and takes precedence over older grants.
+  if (await selfServiceAccessRevoked(householdId)) return false;
   // This grant exists only after verified-email, first-time onboarding commits.
   // It is household-bound, cycle-scoped, revocable and never an invitation/order.
   if (await hasSelfServiceAccess(householdId)) return true;
