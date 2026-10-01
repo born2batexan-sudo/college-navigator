@@ -110,7 +110,7 @@ describe("public Ask Campus Passage", () => {
       "How do I start and can you submit my application?",
       "What does Campus Passage do, and what is the FAFSA deadline?",
       "How does Campus Passage work and can you submit my transcript?",
-      "Can you research Elmwood College scholarship requirements?", 
+      "Can you research Elmwood College scholarship requirements?",
     ];
     for (const question of refused) {
       const answer = answerPublicQuestion(question);
