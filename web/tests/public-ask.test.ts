@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { answerPublicQuestion } from "../lib/public-ask";
+import { answerPublicQuestion, type PublicAskCategory } from "../lib/public-ask";
 import { isPublicPath } from "../lib/auth/env";
 import { isApplicationProtectedPath } from "../lib/auth/protected-routes";
 
@@ -16,134 +16,138 @@ const homepage = read("../components/CampusPassageLanding.tsx");
 const navigation = read("../components/HeaderNav.tsx");
 const dashboard = read("../app/dashboard/page.tsx");
 
-describe("public Ask Campus Passage boundary", () => {
-  it("makes only the exact /ask page public and keeps research behind auth", () => {
+const matrix: readonly [string, PublicAskCategory, RegExp][] = [
+  ["What does Campus Passage do?", "overview", /organizes college steps.*student, school, and term/i],
+  ["What is the full experience from start to finish?", "full-experience", /sample plan.*illustrative, read-only/i],
+  ["How do I get started?", "getting-started", /Start Now, verify your email/i],
+  ["Can I track multiple students?", "multiple-students", /graduation year.*separate/i],
+  ["How many colleges can we add?", "college-allowance", /up to 10 unique colleges/i],
+  ["How do official citations stay fresh?", "sources", /official public sources.*when they were checked/i],
+  ["Does a Completed checkbox tell the school I finished?", "task-completion", /does not confirm that a school received/i],
+  ["What appears on the dashboard?", "dashboard", /selected student.*school tasks/i],
+  ["How private is my data?", "privacy", /runs in your browser.*without saving/i],
+  ["Can you connect my inbox?", "email-coming-soon", /Coming Soon.*optional/i],
+  ["Where can I send feedback?", "feedback", /Share feedback on the dashboard/i],
+  ["Can I reach an administrator for help?", "administrator-support", /No live support is promised/i],
+  ["Can it replace my counselor?", "product-boundaries", /does not sign into school portals/i],
+];
+const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+describe("public Ask Campus Passage", () => {
+  it("keeps only the public product FAQ anonymous; research and records remain authenticated", () => {
     assert.equal(isPublicPath("/ask"), true);
     assert.equal(isPublicPath("/ask/research"), false);
     assert.equal(isApplicationProtectedPath("/ask"), false);
     assert.equal(isApplicationProtectedPath("/ask/research"), true);
-    assert.equal(isApplicationProtectedPath("/ask/research/extra"), false);
     assert.match(publicPage, /PublicAskForm/);
     assert.doesNotMatch(publicPage, /requireOnboardedHousehold|import AskForm|api\/ask/);
     assert.match(researchPage, /requireOnboardedHousehold\(/);
-    assert.match(researchPage, /AskForm studentId=\{ctx\.student\.id\}/);
     assert.match(researchForm, /fetch\('\/api\/ask'/);
     assert.match(authenticatedApi, /authorizedApiHousehold\(/);
   });
 
-  it("answers only supported general FAQ topics with auditable FAQ sources", () => {
-    const accepted = [
-      ["How does Campus Passage work?", "full-experience"],
-      ["What does Campus Passage do?", "overview"],
-      ["What is the full experience from start to finish?", "full-experience"],
-      ["What is the full Campus Passage experience?", "full-experience"],
-      ["How do I share feedback?", "feedback"],
-      ["How are your sources and citations verified?", "sources"],
-      ["How do I get started?", "getting-started"],
-      ["What is the privacy and deletion policy?", "privacy"],
-      ["How many students can a household support?", "multiple-students"],
-      ["What is Email Connectivity?", "email-coming-soon"],
-      ["Does Campus Passage need my school portal password?", "product-boundaries"],
-    ] as const;
-    for (const [question, category] of accepted) {
+  it("gives directly relevant, auditable, materially different answers across 13 intents", () => {
+    const unique = new Set<string>();
+    for (const [question, category, fact] of matrix) {
       const answer = answerPublicQuestion(question);
       assert.equal(answer.kind, "faq", question);
       assert.equal(answer.category, category, question);
+      assert.match(answer.answer, fact, question);
       assert.match(answer.source ?? "", /^Public Campus Passage FAQ · /);
+      unique.add(normalize(answer.answer));
+    }
+    assert.equal(unique.size, matrix.length, "No normalized duplicate responses in broad prompt matrix");
+  });
+
+  it("recognizes paraphrases without a capitalization heuristic or generic default", () => {
+    const paraphrases: readonly [PublicAskCategory, string[]][] = [
+      ["overview", ["What is Campus Passage?", "How does this product help parents organize the college journey?"]],
+      ["full-experience", ["How does it work?", "Describe the whole family journey."]],
+      ["getting-started", ["Where do we begin using the product?", "I want to sign up"]],
+      ["multiple-students", ["Can siblings share one household?", "Is there a second student profile?"]],
+      ["college-allowance", ["Is there a college limit?", "How many schools may I track?"]],
+      ["sources", ["What happens if information is stale or conflicts?", "When were sources last checked?"]],
+      ["task-completion", ["Can I check off a task?", "If I mark a task done, does the school know?"]],
+      ["dashboard", ["Where can I see the plan?", "What needs attention on the dashboard?"]],
+      ["privacy", ["Who can see our data?", "Can I delete my account?"]],
+      ["email-coming-soon", ["Is inbox connectivity required?", "What is Email Connectivity?"]],
+      ["feedback", ["How do I share feedback?", "Can I report a bug?"]],
+      ["administrator-support", ["How do I contact your support team?", "Can I speak to someone?"]],
+      ["product-boundaries", ["Does Campus Passage need my school portal password?", "What can't it do?"]],
+    ];
+    for (const [category, prompts] of paraphrases) for (const question of prompts) {
+      const answer = answerPublicQuestion(question);
+      assert.equal(answer.kind, "faq", question);
+      assert.equal(answer.category, category, question);
+    }
+    assert.equal(answerPublicQuestion("hOW maNY coLLEges can WE ADD?").category, "college-allowance");
+  });
+
+  it("answers multiple safe intents together without dropping the first or burying the second", () => {
+    for (const [question, facts] of [
+      ["What does Campus Passage do and how do I start?", [/organizes college steps/i, /Start Now, verify your email/i]],
+      ["Can siblings track separate schools, and how many colleges can we add?", [/graduation year/i, /up to 10 unique colleges/i]],
+      ["Are citations current and who can see my data?", [/official public sources/i, /runs in your browser/i]],
+      ["How does the dashboard show task completion?", [/Completed checkbox/i, /signed-in dashboard/i]],
+      ["Can I send feedback and reach an administrator?", [/Share feedback on the dashboard/i, /Administrators review submitted feedback privately/i]],
+    ] as const) {
+      const answer = answerPublicQuestion(question);
+      assert.equal(answer.kind, "faq", question);
+      for (const fact of facts) assert.match(answer.answer, fact, question);
     }
   });
 
-  it("keeps every public Ask message illustrative and free of retired sample wording", () => {
-    const accepted = [
-      "How does Campus Passage work?",
-      "What does Campus Passage do?",
-      "What is the full experience from start to finish?",
-      "How do I share feedback?",
-      "How are your sources and citations verified?",
-      "How do I get started?",
-      "What is the privacy and deletion policy?",
-      "How many students can a household support?",
-      "What is Email Connectivity?",
-      "Does Campus Passage need my school portal password?",
-    ];
-    const fullExperience = answerPublicQuestion("What is the full experience from start to finish?");
-    assert.match(fullExperience.answer, /illustrative example/i);
-    const publicResponses = [...accepted.map(answerPublicQuestion), answerPublicQuestion("When is Harvard's application deadline?")];
-    for (const response of publicResponses) assert.doesNotMatch(JSON.stringify(response), /\bfictional\b/i);
-    assert.doesNotMatch(`${publicPage}\n${publicForm}\n${publicLibrary}`, /\bfictional\b/i);
-  });
-
-  it("redirects school research, deadlines, scholarships, eligibility, advice, actions, payments, and records", () => {
+  it("refuses school-specific requests, personalized decisions, portal actions, and records even mixed with safe topics", () => {
     const refused = [
-      "When is the application deadline at UT Austin?",
-      "Which scholarships are open?",
-      "Is my student eligible for aid?",
-      "What does Harvard require?",
-      "Should my daughter apply to Stanford?",
-      "Please log in to my school portal and check the application.",
-      "Pay my housing deposit.",
-      "Show me my household records.",
-      "What do you know about my student?",
-      "Write my personal statement.",
-      "What is the FAFSA priority deadline?",
-      "What does harvard require?",
-      "When does Rice require deposits?",
-      "Can you recommend the best school for my child?",
-      "What is my student's task status?",
-      "What scholarships does my daughter qualify for?",
-      "Can you submit my transcript?",
-      "What does Stanford require for Fall 2027?",
-      "What does Campus Passage cost?",
+      "When is the application deadline at UT Austin?", "Which scholarships are open?", "Is my student eligible for aid?",
+      "What does Harvard require?", "What does harvard require?", "Should my daughter apply to Stanford?",
+      "Please log in to my school portal and check the application.", "Show me my household records.",
+      "What do you know about my student?", "Write my personal statement.", "What is the FAFSA priority deadline?",
+      "When does Rice require deposits?", "Can you recommend the best school for my child?",
+      "What is my student's task status?", "What scholarships does my daughter qualify for?",
+      "Can you submit my transcript?", "What does Stanford require for Fall 2027?",
+      "What does Campus Passage do, and when is Harvard's deadline?",
+      "How do I start and can you submit my application?",
+      "What does Campus Passage do, and what is the FAFSA deadline?",
+      "How does Campus Passage work and can you submit my transcript?",
+      "Can you research Elmwood College scholarship requirements?", 
     ];
     for (const question of refused) {
       const answer = answerPublicQuestion(question);
       assert.equal(answer.kind, "redirect", question);
       assert.match(answer.answer, /Start Now/i, question);
+      assert.doesNotMatch(answer.answer, /Harvard's deadline is|Stanford requires|eligible for aid/i, question);
     }
-    assert.equal(answerPublicQuestion("").kind, "redirect");
-    assert.equal(answerPublicQuestion("x".repeat(501)).kind, "redirect");
-    const combined = answerPublicQuestion("What does Campus Passage do and how do I start?");
-    assert.equal(combined.kind, "faq");
-    assert.match(combined.answer, /organizes the college journey/i);
-    assert.match(combined.answer, /verify your email/i);
-    for (const [question, expected] of [
-      ["Tell me more about the full experience", /household plan.*Add eligible students/i],
-      ["What about privacy and access?", /no access to a household's records/i],
-      ["Can I track my two students?", /same high-school graduation year/i],
-      ["Where can I send feedback?", /Share feedback on the dashboard/i],
-      ["Is inbox connectivity required?", /Coming Soon.*optional/i],
-      ["Can it replace my counselor?", /does not replace a counselor/i],
-    ] as const) {
-      const result = answerPublicQuestion(question);
-      assert.equal(result.kind, "faq", question);
-      assert.match(result.answer, expected, question);
-    }
-    assert.doesNotMatch(JSON.stringify(Object.values([combined, answerPublicQuestion("What is the full experience?")])), /student_\w+|household_\w+|https?:\/\/[^\s]+\/api\/|access_token|refresh_token/i);
+    assert.notEqual(answerPublicQuestion("When is Harvard's deadline?").answer, answerPublicQuestion("Show my household records").answer);
   });
 
-  it("cannot reflect visitor input or import protected research or household data", () => {
+  it("asks a concise question on unknown intent instead of repeating an overview", () => {
+    for (const question of ["", "Tell me more", "What about colleges?", "Could you explain that?", "x".repeat(501)]) {
+      const answer = answerPublicQuestion(question);
+      assert.equal(answer.kind, "clarify", question.slice(0, 30));
+      assert.match(answer.answer, /\?/);
+      assert.notEqual(answer.answer, answerPublicQuestion("What does Campus Passage do?").answer);
+    }
+  });
+
+  it("neither reflects visitor input nor implies live AI, personal access, or public price details", () => {
     assert.doesNotMatch(publicLibrary, /^\s*import\s|\bfetch\s*\(|\bqueryRows\s*\(|\bgetSessionUser\s*\(/m);
     const sentinel = "SENSITIVE_TEST_HOUSEHOLD_RECORD_8493";
-    for (const question of [
-      `What is Campus Passage? ${sentinel}`,
-      `When is Harvard's deadline? ${sentinel}`,
-      `Show my household records ${sentinel}`,
-      `How do I share feedback? ${sentinel}`,
-    ]) {
-      const result = answerPublicQuestion(question);
-      assert.doesNotMatch(JSON.stringify(result), /SENSITIVE_TEST_HOUSEHOLD_RECORD_8493/);
-      assert.doesNotMatch(JSON.stringify(result), /access_token|refresh_token|school_research_queue|student_id/i);
+    for (const question of [`What is Campus Passage? ${sentinel}`, `When is Harvard's deadline? ${sentinel}`, `Show my household records ${sentinel}`]) {
+      assert.doesNotMatch(JSON.stringify(answerPublicQuestion(question)), /SENSITIVE_TEST_HOUSEHOLD_RECORD_8493|access_token|refresh_token|school_research_queue|student_id/i);
     }
+    for (const response of [...matrix.map(([q]) => answerPublicQuestion(q)), answerPublicQuestion("What does Campus Passage cost?")]) {
+      assert.doesNotMatch(response.answer, /\b(?:fictional|pricing|price|payment|pay|subscription|live ai)\b/i);
+    }
+    assert.doesNotMatch(`${publicPage}\n${publicForm}`, /\b(?:pricing|price|payment)\b/i);
   });
 
-  it("does not send public questions to the authenticated API and adds public and signed-in links", () => {
+  it("renders local FAQ and protected research separately in navigation and UI", () => {
     assert.doesNotMatch(publicPage, /api\/ask|fetch\(/);
     assert.doesNotMatch(publicForm, /api\/ask|fetch\(/);
     assert.match(publicForm, /answerQuestion\(trimmed\)/);
-    assert.match(publicForm, /answerQuestion = answerPublicQuestion/);
     assert.match(navigation, /href="\/ask"[^>]*>Ask Campus Passage/);
     assert.match(homepage, /id="ask-campus-passage"/);
-    assert.match(homepage, /href="\/ask"/);
     assert.match(homepage, /does not research a particular college/i);
     assert.match(dashboard, /href="\/ask\/research"[^>]*>Ask Campus Passage/);
   });

@@ -50,7 +50,7 @@ export default function PublicAskForm({ answerQuestion = answerPublicQuestion }:
       {answer && (
         <section role="status" aria-live="polite" className="rounded-lg border border-line bg-white p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/65">
-            {answer.kind === "faq" ? "Public FAQ answer" : "Outside public Ask scope"}
+            {answer.kind === "faq" ? "Public FAQ answer" : answer.kind === "clarify" ? "A little more detail" : "Outside public Ask scope"}
           </p>
           <p className="whitespace-pre-wrap text-sm">{answer.answer}</p>
           {answer.source && <p className="mt-3 text-xs text-ink/65">Source: {answer.source}</p>}

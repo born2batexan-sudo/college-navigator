@@ -1,109 +1,139 @@
 export type PublicAskCategory =
-  | "overview"
-  | "full-experience"
-  | "getting-started"
-  | "privacy"
-  | "sources"
-  | "product-boundaries"
-  | "multiple-students"
-  | "feedback"
-  | "email-coming-soon";
+  | "overview" | "full-experience" | "getting-started" | "multiple-students"
+  | "college-allowance" | "sources" | "task-completion" | "dashboard"
+  | "privacy" | "email-coming-soon" | "feedback" | "administrator-support"
+  | "product-boundaries";
 
 export type PublicAskAnswer = {
-  kind: "faq" | "redirect";
+  kind: "faq" | "redirect" | "clarify";
   category?: PublicAskCategory;
   answer: string;
   source?: string;
 };
 
-const REDIRECT_ANSWER =
-  "I can only explain Campus Passage generally here. I cannot look up a school, deadlines, eligibility, scholarships, personalized advice, portal actions, or your household records in public Ask. Choose Start Now to set up a household, or sign in for school-specific Ask; always check the school's official instructions.";
-
-// Public product copy only. Never import research, request, session, or household modules here.
+// Local, deterministic product help. No network, visitor-text interpolation, account or research imports.
+// Keep these facts aligned with public copy and signed-in controls; they are not live school answers.
 const answers: Record<PublicAskCategory, { label: string; answer: string }> = {
   overview: {
     label: "What Campus Passage does",
-    answer: "Campus Passage organizes the college journey into a plan for each student, school, and term. It shows verified dates and next steps, whose move each is, and links findings to official public sources. Missing, conflicting, or unpublished details stay labeled rather than guessed.",
+    answer: "Campus Passage organizes college steps into a plan by student, school, and term. It separates family actions from school-side waits and unknowns, with official-source links where findings are verified.",
   },
   "full-experience": {
     label: "The household experience",
-    answer: "Start with a verified email and a household plan. Add eligible students and schools, share priorities such as housing or aid, and follow separate student, school, and term plans through applications, enrollment, and move-in planning. The plan distinguishes family actions, school-side waits, and unknowns; the sample plan lets you explore an illustrative example before signing in.",
+    answer: "After email verification, set up your household, add students and schools, and answer intake questions. Then use each student's plan from applications through enrollment and move-in; the sample plan is an illustrative, read-only example before sign-in.",
   },
   "getting-started": {
     label: "Getting started",
-    answer: "Choose Start Now, verify your email, and set up your household. Add your students and schools, then answer a few intake questions to tailor the plan. School-specific Ask is separate and requires sign-in and household onboarding.",
-  },
-  privacy: {
-    label: "Privacy and access",
-    answer: "Public Ask has no access to a household's records and does not send your question to the signed-in research service. Household plans and school-specific Ask require sign-in; student, school, and term information stays distinct. Account privacy and deletion controls are available in the signed-in experience. Do not enter passwords or sensitive personal information here.",
-  },
-  sources: {
-    label: "Official sources and uncertainty",
-    answer: "Verified findings in a signed-in plan link to official public school sources for the applicable term, with citations and check dates. Missing, stale, or conflicting evidence is labeled rather than treated as a fact. School instructions and portals remain authoritative.",
-  },
-  "product-boundaries": {
-    label: "Product boundaries",
-    answer: "Campus Passage organizes information; it does not apply to colleges, complete or submit forms, sign into school portals, decide admission, eligibility or awards, initiate payments, move funds, or change school records. It does not replace a counselor or the school's official instructions.",
+    answer: "Select Start Now, verify your email, and set up your household. Add students and schools, then answer a few questions about your priorities to shape each student's plan.",
   },
   "multiple-students": {
     label: "Multiple students",
-    answer: "A qualifying household can include two or more eligible students who share the same high-school graduation year and admissions cycle. The current household plan includes up to 10 unique colleges. Each student's schools, tasks, preferences, and term stay separate.",
+    answer: "Eligible students sharing a high-school graduation year and admissions cycle can use one household. Each student's schools, intake answers, tasks, and term remain separate; switch students in the signed-in plan.",
   },
-  feedback: {
-    label: "Sharing feedback",
-    answer: "After signing in and setting up a household, choose Share feedback on the dashboard to send product feedback for private review. Public Ask does not collect feedback or save the question you type here.",
+  "college-allowance": {
+    label: "Colleges in a household plan",
+    answer: "A household plan can track up to 10 unique colleges in the current admissions cycle across its eligible students. A school shared by siblings counts once toward that household total; each student's plan stays separate.",
+  },
+  sources: {
+    label: "Official sources and freshness",
+    answer: "Verified school findings in a signed-in plan link to official public sources for the applicable term and show when they were checked. Missing, stale, or conflicting details are labeled instead of guessed; the school's current instructions remain authoritative.",
+  },
+  "task-completion": {
+    label: "Family task completion",
+    answer: "A family's Completed checkbox records its own completion marker for each task and can be unchecked. It does not confirm that a school received anything or act in a school portal; unanswered or school-side steps remain visible.",
+  },
+  dashboard: {
+    label: "Dashboard and task plan",
+    answer: "The signed-in dashboard shows a separate plan for the selected student, with school tasks, what needs attention, and an official destination where one is verified. A missing destination is called out, not invented; your task marker is separate from school confirmation.",
+  },
+  privacy: {
+    label: "Privacy and account controls",
+    answer: "Public Ask runs in your browser without saving or sending this question to the signed-in research service. Household plans require sign-in, keep student information separate, and offer account deletion controls; don't enter passwords or sensitive details here.",
   },
   "email-coming-soon": {
     label: "Email Connectivity — Coming Soon",
-    answer: "Email Connectivity is Coming Soon, not part of public Ask or the core start flow. A future connection would be optional, require separate consent, and offer controls to disconnect and delete connected-mail data. No inbox access is needed to start.",
+    answer: "Email Connectivity is Coming Soon and is not needed to start. A future inbox connection would be optional, require separate consent, and include disconnect and connected-mail deletion controls; public Ask cannot read email.",
+  },
+  feedback: {
+    label: "Sharing feedback",
+    answer: "After signing in and setting up a household, choose Share feedback on the dashboard. It is privately reviewed, with a separate choice if you want follow-up; this public question box does not submit feedback.",
+  },
+  "administrator-support": {
+    label: "Administrators and help",
+    answer: "Administrators review submitted feedback privately; public Ask cannot reach an administrator or inspect your account. For a product issue, sign in and use Share feedback on the dashboard, with an optional follow-up choice. No live support is promised here.",
+  },
+  "product-boundaries": {
+    label: "What the product cannot do",
+    answer: "Campus Passage organizes and cites information; it does not sign into school portals, submit forms, change school records, decide eligibility or admission, or replace a counselor. Follow the school's official instructions for actions and decisions.",
   },
 };
 
-function isOutOfScope(question: string): boolean {
-  // Deny research, eligibility, advice, actions, and requests for stored records
-  // before any public FAQ matching. Fail closed for named institutions and dates.
-  if (/\b(?:pay|purchase|price|pricing|cost|transaction)\b/i.test(question)) return true;
-  if (/\b(?:deadlines?|due dates?|scholarships?|eligib(?:ility|le)|qualif(?:y|ication)|financial aid award|admission chances|chance(?:s)? of (?:admission|getting in)|which (?:college|school|university)|compare (?:colleges|schools|universities)|college-specific|school-specific|essay|personal statement|recommend(?:ation|ations)?|should (?:i|we|my)|best (?:college|school))\b/i.test(question)) {
-    // General FAQ wording about the product's boundaries is still useful.
-    if (!/^\s*(?:what (?:does|can|can't|cannot|doesn't) campus passage|does campus passage|can campus passage)\b/i.test(question) || !/\b(?:do|handle|offer|replace|submit|apply|decide|look up|research|cost|price|pay)\b/i.test(question)) return true;
+const redirect = (answer: string): PublicAskAnswer => ({ kind: "redirect", answer });
+
+function outsideScope(q: string): PublicAskAnswer | null {
+  // Deny direct research and private/actions requests before attempting FAQ classification.
+  // A question about the PRODUCT's capabilities is different from requesting a personal answer.
+  const product = /\b(?:campus passage|this (?:app|product|service)|your (?:app|product|service))\b/.test(q);
+  const capability = product && /\b(?:does|can|could|will|how does|what does|what can|why doesn't|why can't)\b/.test(q);
+  if ((/\b(?:harvard|stanford|rice|baylor|ucla|usc|mit|nyu|ut austin)\b/.test(q) && /\b(?:when|how|what|can|should|deadline|scholarship|aid|require|apply|eligible|portal|admission)\b/.test(q)) ||
+      (/\b(?:university of [a-z]+|[a-z]+ (?:university|college|institute))\b/.test(q) && /\b(?:when|deadline|scholarship|aid|require|apply|eligible|portal|admission|research|look up|offer|accept)\b/.test(q))) {
+    return redirect("I can't look up a named school's requirements or a student's situation in public Ask. Choose Start Now and sign in for school-specific research; check the school's official instructions.");
   }
-  if (/\b(?:\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|\d{4}[/-]\d{1,2}[/-]\d{1,2}|fall|spring|summer|winter)\b.{0,25}\b(?:deadline|due|apply|require)/i.test(question)) return true;
-  if (/\b(?:at|from|for)\s+(?:[A-Z][\w-]*\s+){0,4}(?:University|College|Institute)\b|\b(?:University|College|Institute)\s+of\s+[A-Z]/.test(question)) return true;
-  const withoutProductNames = question.replace(/\b(?:campus passage|ask campus passage|email connectivity|start now|coming soon|share feedback)\b/gi, " ").replace(/^\s*(?:what|how|why|where|when|does|do|can|could|is|are|tell|please|i)\b/i, " ");
-  if (/\b(?:[A-Z]{2,}|[A-Z][a-z]+)\b/.test(withoutProductNames)) return true;
-  if (/\b(?:what do you know about|tell me about|show|list|retrieve|look up|read|display|check|what is|what's|update|change)\b.{0,65}\b(?:my|our)\b.{0,40}\b(?:student|child|daughter|son|household|record|profile|task|plan|status|application)\b/i.test(question)) return true;
-  if (/\b(?:what does|does|when does)\s+(?!campus passage\b|it\b|this\b|the product\b|your product\b)[a-z]+(?:\s+[a-z]+){0,3}\s+(?:require|offer|accept|start|open|close|need)\b/i.test(question)) return true;
-  if (/\b(?:my|our)\b.{0,35}\b(?:deadline|scholarship|eligibility|application status|admission|financial aid)\b/i.test(question)) return true;
-  if (/\b(?:log\s*in|sign\s*in|open|check|access|submit|apply|pay|purchase|change|update|complete|send|write|draft)\b.{0,55}\b(?:portal|application|form|account|school record|essay|deposit|payment|transcript)\b/i.test(question)) return true;
-  if (/^\s*(?:please\s+)?(?:show|list|retrieve|look up|read|display|check|open|submit|apply|pay|purchase|change|update|complete|send|write|draft)\b/i.test(question)) return true;
-  return false;
+  if (/\b(?:my|our)\b.{0,55}\b(?:household|account|profile|student|child|daughter|son|task|status|application|record|plan)\b/.test(q) &&
+      /\b(?:show|check|look up|retrieve|read|tell|what|where|when|update|change|access|see|know|is|are|did|has|have)\b/.test(q) &&
+      !/\b(?:how (?:do|can) i (?:start|add|track|switch|mark|share)|can i (?:track|add|have)|what happens to my data|delete my data)\b/.test(q)) {
+    return redirect("I can't see or change your household, student's records, or task status in public Ask. Choose Start Now and sign in to view your own plan.");
+  }
+  if ((/\b(?:log\s*in(?:to)?|sign\s*in(?:to)?|open|submit|send|upload|file|complete|change|update|write|draft|pay)\b.{0,60}\b(?:school portal|college portal|application|transcript|deposit|school record|essay|personal statement|form)\b|\b(?:submit|send|upload|write|draft)\b.{0,45}\b(?:my|our)\b.{0,25}\b(?:application|essay|transcript|form)\b/.test(q) && !capability) ||
+      /\b(?:you|please)\s+(?:submit|send|upload|write|draft|open|log in|check|change|update)\s+(?:my|our)\b|\b(?:submit|send|upload|write|draft)\s+(?:my|our)\b/.test(q)) {
+    return redirect("I can't take action in a school portal, submit forms, or write application materials. Choose Start Now for a signed-in plan, then follow the school's own instructions for any action.");
+  }
+  if (/\b(?:recommend|recommendation|which (?:college|school|university)|best (?:college|school)|where should|should (?:i|we|my|our)|compare (?:colleges|schools)|chances? of (?:admission|getting in))\b/.test(q) && !capability) {
+    return redirect("I can't recommend a school or decide what's right for a student here. Choose Start Now to organize a signed-in plan and discuss decisions with your counselor and the schools.");
+  }
+  const researchRequest = /\b(?:when (?:is|does|are)|which|what is|what's|tell me|find|look up)\b.{0,80}\b(?:deadlines?|due dates?|scholarships?|eligib(?:ility|le)|qualif(?:y|ies)|requirements?)\b/.test(q);
+  if (/\b(?:deadlines?|due dates?|scholarships?|eligib(?:ility|le)|qualif(?:y|ies)|admission requirements?|requirements? for|financial aid award|fafsa priority|when (?:does|is|do)\b.{0,50}\b(?:open|close|start|due|require))\b/.test(q) && (!capability || researchRequest)) {
+    return redirect("I can't verify a particular school's dates, scholarships, requirements, or a student's eligibility in public Ask. Choose Start Now and sign in for school-specific research; check the school's current official instructions.");
+  }
+  if (/\b(?:what does|does|when does)\s+(?!(?:campus passage|it|this|your (?:app|product|service))\b)[a-z][a-z\s'-]{1,40}\s+(?:require|offer|accept|open|close|need)\b/.test(q) && !capability) {
+    return redirect("I can't verify a particular school's requirements or dates in public Ask. Choose Start Now and sign in for school-specific research; check the school's official instructions.");
+  }
+  if (/\b(?:price|pricing|cost|pay|purchase|subscription|billing)\b/.test(q) && !/\b(?:task|school|college|aid)\b/.test(q)) {
+    return redirect("For current access details, choose Start Now. Public Ask can explain the household experience and how to begin, but cannot answer account-specific access questions.");
+  }
+  return null;
 }
 
-/** Offline, deterministic answers grounded only in the public product FAQ. */
+/** Product-help FAQ only: no live AI, school lookup, personal records, or network calls. */
 export function answerPublicQuestion(input: string): PublicAskAnswer {
-  const question = input.trim().replace(/\s+/g, " ");
-  if (!question || question.length > 500 || isOutOfScope(question)) return { kind: "redirect", answer: REDIRECT_ANSWER };
+  const q = input.trim().toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ");
+  if (!q) return { kind: "clarify", answer: "What would you like to know about Campus Passage—getting started, your household plan, official sources, privacy, or feedback?" };
+  if (q.length > 500) return { kind: "clarify", answer: "Could you shorten your question to 500 characters and ask about one or two Campus Passage topics?" };
+  const refusal = outsideScope(q);
+  if (refusal) return refusal;
 
-  const q = question.toLowerCase();
-  const categories: PublicAskCategory[] = [];
-  const include = (category: PublicAskCategory, pattern: RegExp) => { if (pattern.test(q)) categories.push(category); };
-  include("overview", /\b(?:what (?:is|does) (?:campus passage|it)|what (?:can|will) (?:campus passage|it) do|about campus passage|tell me (?:about|more)|overview|help families|help parents|organize|track|college journey)\b/);
-  include("full-experience", /\b(?:full (?:campus passage )?experience|whole experience|entire experience|end.to.end|from start to finish|how (?:does campus passage|does it|it) work|how campus passage works|how it works|steps|sample plan|through move.in|family journey)\b/);
-  include("getting-started", /\b(?:start now|get started|start|sign up|sign in|log in|create an account|new family|register|onboard|set up|access campus passage)\b/);
-  include("privacy", /\b(?:privacy|private|data|consent|delete|deletion|stored|store|retention|secure|security|who can see|household access)\b/);
-  include("sources", /\b(?:source|citation|cite|official|verified|verification|evidence|uncertain|conflict|published|current|accurate)\b/);
-  include("product-boundaries", /\b(?:portal password|school portal|portal|submit|apply|application|counselor|replace|limitations|boundaries|can't|cannot|doesn't|don't do)\b/);
-  include("multiple-students", /\b(?:multiple students|more than one student|several students|siblings|two students|student profiles|how many students|add another student|my (?:kids|children|daughter and son))\b/);
-  include("feedback", /\b(?:feedback|suggestion|report a bug|feature request)\b/);
-  include("email-coming-soon", /\b(?:email connectivity|connected mail|inbox|coming soon|connect (?:my |an? )?email|email connection)\b/);
+  const matches: PublicAskCategory[] = [];
+  const include = (category: PublicAskCategory, pattern: RegExp) => { if (pattern.test(q)) matches.push(category); };
+  include("overview", /\b(?:what (?:is|does|can) (?:campus passage|the app|the product|it)(?: do)?|what's campus passage|about campus passage|tell me about (?:campus passage|the product)|overview|help (?:families|parents)|organize (?:college|the journey)|college journey)\b/);
+  include("full-experience", /\b(?:full (?:campus passage )?experience|whole (?:experience|journey)|entire (?:experience|journey)|end.to.end|start to finish|from (?:application|applying|start).{0,30}(?:move.in|finish)|how (?:does (?:campus passage|it)|(?:campus passage|it)) work|family journey|sample plan)\b/);
+  include("getting-started", /\b(?:start now|get started|how (?:do|can) (?:i|we) start|how to (?:start|begin)|sign up|sign in|log in|create an account|register|onboard|set up (?:my|our|a|the) household|begin using|gain access|access (?:the|my) (?:plan|product|experience))\b/);
+  include("multiple-students", /\b(?:multiple students|more than one student|several students|two students|siblings|student profiles|how many students|another student|second student|my (?:kids|children|daughter and son)|switch students|separate students|both (?:of my )?students)\b/);
+  include("college-allowance", /\b(?:how many (?:colleges|schools)|number of (?:colleges|schools)|college (?:limit|allowance|maximum)|school (?:limit|allowance)|up to (?:10|ten) (?:colleges|schools)|ten unique colleges|add (?:more|another) (?:college|school)|track (?:more than|multiple|several|ten) (?:colleges|schools)|colleges (?:can|may) (?:i|we) (?:add|track))\b/);
+  include("sources", /\b(?:sources?|citations?|cite|official|verified|verification|evidence|uncertain|conflict|published|current information|accurate|fresh|stale|recheck|check date|last checked|outdated|up.to.date)\b/);
+  include("task-completion", /\b(?:completed|completion|check(?:ed)? off|checkbox|mark(?:ing)? (?:a |my |the )?task|finish(?:ed)? (?:a |my |the )?task|done with (?:a |my |the )?task|undo a task)\b/);
+  include("dashboard", /\b(?:dashboard|task list|task status|tasks (?:show|appear|stay|disappear)|what needs attention|whose move|see (?:my|our|the) plan|school tasks|where (?:can|do) (?:i|we) (?:see|find) (?:the |my |our )?(?:plan|tasks))\b/);
+  include("privacy", /\b(?:privacy|private|my data|our data|personal data|delete (?:my|our) (?:data|account)|deletion|stored|store (?:my|our)|retention|secure|security|who can see|household access|data sharing|protect (?:my|our))\b/);
+  include("email-coming-soon", /\b(?:email connectivity|connected mail|inbox|coming soon|connect (?:my |an? )?email|email connection|read (?:my|our) email|mail privacy|email consent)\b/);
+  include("feedback", /\b(?:feedback|suggestion|report a bug|feature request|share (?:my|our) thoughts|send (?:a )?comment)\b/);
+  include("administrator-support", /\b(?:administrator|admin(?:istrator)?s?|human help|contact (?:a|an|the|your) (?:person|team|admin|support)|customer support|support team|get support|help desk|trouble with (?:my|our) account|speak to (?:someone|a person))\b/);
+  include("product-boundaries", /\b(?:portal password|school portal|portal|submit|apply for me|application for me|counselor|replace|limitations|boundaries|recommendations?|can't|cannot|doesn't|don't do|what (?:won't|can't) (?:it|campus passage) do)\b/);
 
-  // Vague safe questions get a useful overview, not an empty/opaque refusal.
-  if (categories.length === 0) categories.push("overview");
-  const selected = categories.slice(0, 3);
-  return {
-    kind: "faq",
-    category: selected[0],
-    answer: selected.map((category) => answers[category].answer).join("\n\n"),
-    source: selected.map((category) => `Public Campus Passage FAQ · ${answers[category].label}`).join("; "),
-  };
+  if (!matches.length) {
+    if (/\b(?:college|school|research)\b/.test(q)) return { kind: "clarify", answer: "Do you mean how many colleges a household can track, how official-source research works, or a specific school's information? Specific-school questions belong in signed-in Start Now." };
+    return { kind: "clarify", answer: "Could you ask about a Campus Passage topic—getting started, students and colleges, the task dashboard, sources, privacy, or feedback?" };
+  }
+  // At most three directly requested topics; no single all-purpose overview for unmatched input.
+  const selected = matches.slice(0, 3);
+  return { kind: "faq", category: selected[0], answer: selected.map(c => answers[c].answer).join("\n\n"),
+    source: selected.map(c => `Public Campus Passage FAQ · ${answers[c].label}`).join("; ") };
 }

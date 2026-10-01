@@ -13,7 +13,7 @@ export default function PublicAskPage() {
         <h1 id="ask-title" className="display">Ask Campus Passage</h1>
         <p className="lead">Ask about what Campus Passage does, the full household experience and Start Now flow, privacy and access, official sources, multiple students, feedback, product boundaries, or optional Email Connectivity — Coming Soon.</p>
         <div className="callout">
-          <b>Public Ask is not a college research tool.</b> It cannot look up a particular school, deadlines, scholarships, eligibility, personalized advice, portal actions, payments, or household records. For school-specific research, choose Start Now and continue in the signed-in, onboarded household experience.
+          <b>Public Ask is not a college research tool.</b> It cannot look up a particular school, deadlines, scholarships, eligibility, personalized advice, portal actions, or household records. For school-specific research, choose Start Now and continue in the signed-in, onboarded household experience.
         </div>
         <div className="actions">
           <Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link>

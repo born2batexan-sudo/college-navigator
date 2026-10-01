@@ -34,7 +34,7 @@ describe("public Ask form accessibility and failure recovery", () => {
       await input("What does Campus Passage do and how do I start?");
       await submit();
       assert.equal(container.querySelector('[role="alert"]')?.textContent, undefined);
-      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /organizes the college journey[\s\S]*verify your email/i);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /organizes college steps[\s\S]*verify your email/i);
       assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Public Campus Passage FAQ/);
       await input("When is Harvard's application deadline?");
       await submit();
