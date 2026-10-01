@@ -83,7 +83,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       </header>
 
       {dateStatus.kind !== "not_applicable" && <section className="grid gap-3 sm:grid-cols-2 sm:items-start" aria-label="Task completion and official destination">
-        <CompletionToggle key={`${action.id}:${action.completed}`} actionId={action.id} completed={action.completed} readOnly={isDemo || action.state === "waived"} />
+        <CompletionToggle key={`${action.id}:${action.completed}`} actionId={action.id} completed={action.completed} readOnly={isDemo} />
         <OfficialDestination source={action.source} rule={action.rule} schoolName={schoolName} />
       </section>}
 

@@ -64,6 +64,18 @@ describe("independent household task completion and official destinations", () =
     const after = await R.listActionInstancesForRelationship((await R.getActionInstanceFull(a))!.relationship.id, "Fall 2027");
     assert.equal(partitionTasks(after).completedCount, 0);
     assert.equal(partitionTasks(after).open.length, 2);
+    // Terminal-looking workflow labels must neither inflate progress nor hide an applicable task.
+    await R.updateActionInstance(a, { state: "waived" });
+    await R.updateActionInstance(b, { state: "missed" });
+    const terminal = partitionTasks(await R.listActionInstancesForRelationship((await R.getActionInstanceFull(a))!.relationship.id, "Fall 2027"));
+    assert.equal(terminal.completedCount, 0);
+    assert.deepEqual(terminal.open.map(x => x.id).sort(), [a, b].sort());
+    await S.saveFamilyCompletion(first.household.id, a, true);
+    assert.equal(partitionTasks(await R.listActionInstancesForRelationship((await R.getActionInstanceFull(a))!.relationship.id, "Fall 2027")).completedCount, 1);
+    await S.saveFamilyCompletion(first.household.id, a, false);
+    assert.equal((await R.getActionInstanceFull(a))?.state, "waived", "undo preserves the distinct workflow state");
+    await R.updateActionInstance(a, { state: "submitted" });
+    await R.updateActionInstance(b, { state: "complete" });
     await S.saveFamilyCompletion(first.household.id, a, true);
     const checked = await R.listActionInstancesForRelationship((await R.getActionInstanceFull(a))!.relationship.id, "Fall 2027");
     assert.equal(checked.find(x => x.id === a)?.state, "submitted");
@@ -135,6 +147,11 @@ describe("independent household task completion and official destinations", () =
     const preview = readFileSync(new URL("components/LandingTaskPreview.tsx", base), "utf8");
     const sample = readFileSync(new URL("components/SamplePlan.tsx", base), "utf8");
     const css = readFileSync(new URL("app/globals.css", base), "utf8");
+    const toggle = readFileSync(new URL("components/CompletionToggle.tsx", base), "utf8");
+    assert.match(toggle, /<label[^>]*min-h-11[^>]*>/, "visible label has a touch-sized native target");
+    assert.match(toggle, /<input type="checkbox" aria-label="Completed" checked=\{checked\} disabled=\{readOnly \|\| pending\}/, "native checkbox is keyboard-operable and exposes a name/state");
+    assert.match(toggle, /<\/input>|\/>\s*Completed/, "the completion label is visibly printed");
+    assert.match(css, /@media \(max-width: 900px\) \{[\s\S]*?\.hero-plan-card \{ display: block; max-width: 700px; width: 100%; \}/, "mobile breakpoint retains the task preview");
     assert.match(dashboard, /readOnly=\{base\.isDemo\}/);
     assert.match(dashboard, /partitionTasks/);
     for (const rendered of [queue, detail, preview]) { assert.match(rendered, /<CompletionToggle/); assert.match(rendered, /<OfficialDestination/); }

@@ -25,7 +25,6 @@ export async function saveFamilyCompletion(householdId: string, actionId: string
   const action = await getActionInstanceFull(actionId);
   if (!action || enteringTermFrom(action.relationship.student) !== action.rule.researchTerm ||
     parseDateStatus(action.rule).kind === "not_applicable" || action.state === "not_applicable") throw new Error("Action not found");
-  if (completed && action.state === "waived") throw new Error("Action is not actionable");
   if (action.completed === completed) return;
   if (!completed && !action.completed) throw new Error("Action is not completed");
   // Older releases overwrote workflow state on check. Restore the pre-check state
