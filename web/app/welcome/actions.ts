@@ -17,6 +17,7 @@ import { assertBetaAccessCycle, requireBetaTrackedCollege } from "@/lib/db/colle
 import { assertSelfServiceAccessCycle } from "@/lib/db/self-service-access";
 import { withTransaction } from "@/lib/db/client";
 import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
+import { getDirectorySchoolForInstitution, listDirectoryMappedInstitutionIds } from "@/lib/db/requests";
 
 // The student always comes from the signed-in family (requireOnboardedHousehold),
 // never from a form field, so one family cannot change another family's schools.
@@ -33,7 +34,15 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
   const institutionId = String(formData.get("institutionId") ?? "");
   if (!institutionId) throw new Error("Missing institutionId");
   const institution = await getInstitution(institutionId);
-  if (!institution || !TRACKABLE_SCHOOL_SLUGS.includes(institution.slug)) throw new Error("That school is not available");
+  if (!institution) throw new Error("That school is not available");
+  const existing = await findRelationship(student.id, institutionId);
+  // Existing requested schools remain editable even when absent from the legacy
+  // opt-in list; an arbitrary institution ID cannot create a new relationship.
+  if (!existing?.active && !TRACKABLE_SCHOOL_SLUGS.includes(institution.slug)) throw new Error("That school is not available");
+  const directory = await getDirectorySchoolForInstitution(institutionId);
+  // A directory link (or old 90% coverage value) is not independently reviewed
+  // research. Preserve active preferences but do not create or revive a plan.
+  if (directory && !existing?.active) throw new Error("School source review is required before tracking begins");
 
   const housingPlan = String(formData.get("housingPlan") ?? "undecided");
   const greekInterest = formData.get("greekInterest") === "on";
@@ -41,16 +50,20 @@ export async function saveSchoolPreferences(formData: FormData): Promise<void> {
   const disabilityAccommodation = formData.get("disabilityAccommodation") === "on";
 
   await withTransaction(async () => {
-    await requireBetaTrackedCollege({ householdId: household.id, cycle: enteringTermFrom(student) ?? "Not sure yet", institutionId });
-    const relationship = await upsertRelationship({ studentId: student.id, institutionId });
+    if (!directory) await requireBetaTrackedCollege({ householdId: household.id, cycle: enteringTermFrom(student) ?? "Not sure yet", institutionId });
+    const relationship = directory ? existing! : await upsertRelationship({ studentId: student.id, institutionId });
     await updateRelationshipAttributes(relationship.id, {
       housingPlan,
       greekInterest,
       bringingCar,
       disabilityAccommodation,
     });
-    await setRelationshipActive(relationship.id, true);
-    await materializeActionsForRelationship(relationship.id);
+    if (!directory) {
+      await setRelationshipActive(relationship.id, true);
+      await materializeActionsForRelationship(relationship.id);
+    }
+    // For a previously active, directory-linked school: preference-only save.
+    // Existing actions are not recertified by this edit.
   });
 
   revalidatePath("/welcome");
@@ -70,8 +83,11 @@ export async function saveStartTerm(formData: FormData): Promise<void> {
   await updateStudentAttributes(ctx, { enteringTerm: term });
   // Rebuild each tracked school's actions from this exact term. If that term
   // has no certified rules yet, no other cycle is substituted.
-  const relationships = await listRelationshipsForStudent(ctx.student.id);
-  await Promise.all(relationships.map((rel) => materializeActionsForRelationship(rel.id)));
+  const [relationships, directoryMappedIds] = await Promise.all([listRelationshipsForStudent(ctx.student.id), listDirectoryMappedInstitutionIds()]);
+  // A changed cycle is not evidence that a directory-linked school has a
+  // certified action plan. Preserve its saved relationship, but do not create
+  // fresh action instances from quarantined legacy research.
+  await Promise.all(relationships.filter(rel => !directoryMappedIds.has(rel.institutionId)).map(rel => materializeActionsForRelationship(rel.id)));
   revalidatePath("/welcome"); revalidatePath("/");
 }
 

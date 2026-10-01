@@ -7,6 +7,7 @@ import { updateStudentAttributes } from "@/lib/db/accounts";
 import { listRelationshipsForStudent } from "@/lib/db/repo";
 import { parseIntakeForm } from "@/lib/intake";
 import { materializeActionsForRelationship } from "@/lib/materialize";
+import { listDirectoryMappedInstitutionIds } from "@/lib/db/requests";
 
 export async function saveIntake(formData: FormData): Promise<void> {
   const studentId = formData.get("studentId");
@@ -15,8 +16,9 @@ export async function saveIntake(formData: FormData): Promise<void> {
   const answers = parseIntakeForm(formData);
   await updateStudentAttributes(ctx, { intake: answers });
   // Never walk all household students: a preference belongs to one plan.
-  const relationships = await listRelationshipsForStudent(ctx.student.id);
-  await Promise.all(relationships.map((rel) => materializeActionsForRelationship(rel.id)));
+  const [relationships, directoryMappedIds] = await Promise.all([listRelationshipsForStudent(ctx.student.id), listDirectoryMappedInstitutionIds()]);
+  // Saving an intake answer must not republish unreviewed directory-linked rules.
+  await Promise.all(relationships.filter(rel => !directoryMappedIds.has(rel.institutionId)).map(rel => materializeActionsForRelationship(rel.id)));
   revalidatePath("/intake");
   revalidatePath("/dashboard");
   revalidatePath("/welcome");

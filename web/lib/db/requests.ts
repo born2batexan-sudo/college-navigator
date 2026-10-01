@@ -50,6 +50,16 @@ export async function searchDirectory(query: string, limit=20): Promise<Director
   return rows.map(toDirectory);
 }
 export async function getDirectorySchool(unitid:string):Promise<DirectorySchool|null>{const r=await queryOne<any>("SELECT * FROM school_directory WHERE unitid=$1",[unitid]);return r?toDirectory(r):null;}
+/** Read-only canonical identity lookup. Ambiguous mappings fail closed. */
+export async function getDirectorySchoolForInstitution(institutionId: string): Promise<DirectorySchool | null> {
+  const rows = await queryRows<any>("SELECT * FROM school_directory WHERE institution_id=$1 ORDER BY unitid LIMIT 2", [institutionId]);
+  if (rows.length > 1) throw new Error("Ambiguous canonical school mapping; owner review required");
+  return rows[0] ? toDirectory(rows[0]) : null;
+}
+export async function listDirectoryMappedInstitutionIds(): Promise<Set<string>> {
+  const rows = await queryRows<{ institution_id: string }>("SELECT institution_id FROM school_directory WHERE institution_id IS NOT NULL");
+  return new Set(rows.map(r => r.institution_id));
+}
 export async function upsertDirectorySchool(input:{unitid:string;name:string;alias?:string|null;city?:string|null;state?:string|null;website?:string|null;domain?:string|null;control?:string|null}):Promise<void>{
   const unitid=String(input.unitid).trim(),name=String(input.name).trim().slice(0,240);if(!/^\d+$/.test(unitid)||!name)throw new Error("unitid and name are required");
   const domain=normalizeDomain(input.domain??input.website) ;

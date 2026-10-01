@@ -116,6 +116,9 @@ describe("independent household task completion and official destinations", () =
     assert.match(html, /not a verified direct login or payment endpoint/);
     assert.match(html, /Fall 2027.*last checked/);
     assert.match(html, /Research evidence:.*Official aid instructions/);
+    const wrongAudience = renderToStaticMarkup(<OfficialDestination source={{ ...source, url: "https://www.ou.edu/admissions/counselor-resources/slate-account" }} rule={{ ...rule, title: "Check application portal" }} schoolName="University of Oklahoma" />);
+    assert.match(wrongAudience, /Official destination unavailable/);
+    assert.doesNotMatch(wrongAudience, /counselor-resources|href=/);
     const unavailable = renderToStaticMarkup(<OfficialDestination source={null} rule={rule} schoolName="Fiction University" />);
     assert.match(unavailable, /Official destination unavailable/);
     assert.doesNotMatch(unavailable, /href=/);

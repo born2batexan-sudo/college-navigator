@@ -13,7 +13,13 @@ export function verifiedOfficialUrl(source: Source | null | undefined): string |
 }
 
 export function OfficialDestination({ source, rule, schoolName, illustrative = false }: { source: Source | null | undefined; rule: Pick<Rule, "title" | "domain" | "researchTerm" | "applicability" | "evidenceQuote">; schoolName: string; illustrative?: boolean }) {
-  const href = verifiedOfficialUrl(source);
+  const verified = verifiedOfficialUrl(source);
+  // This legacy source is specifically a counselor Slate.org resource, not a
+  // student's OU application portal. A 200 on ou.edu does not make it a safe
+  // applicant destination. Withhold rather than invent a replacement URL.
+  const wrongAudience = /application portal/i.test(rule.title) &&
+    /^https:\/\/(?:www\.)?ou\.edu\/admissions\/counselor-resources\/slate-account(?:[/?#]|$)/i.test(verified ?? "");
+  const href = wrongAudience ? null : verified;
   const sensitive = /portal|log[ -]?in|payment|pay |deposit|billing|accept.*award/i.test(`${rule.title} ${rule.domain}`);
   return <div className="rounded-lg border border-line bg-white/80 p-3 text-sm text-ink/75" data-official-destination>
     <p className="font-semibold text-ink">Official destination · {sensitive ? "portal/login/payment-sensitive task" : "information and instructions"}</p>

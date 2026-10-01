@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { listRelationshipsForStudent, listInstitutions, listStudentsForHousehold } from "@/lib/db/repo";
 import { requireSelectedStudent } from "@/lib/auth/session";
-import { TRACKABLE_SCHOOL_SLUGS } from "@/lib/trackable";
+import { managedSchoolInventory } from "@/lib/trackable";
+import { listDirectoryMappedInstitutionIds } from "@/lib/db/requests";
 import { parseAttributes, resolveAttributes } from "@/lib/rules-engine";
 import { saveSchoolPreferences, saveStartTerm, stopTracking } from "./actions";
 import { START_TERMS, enteringTermFrom, termNotice } from "@/lib/terms";
-import type { Institution, InstitutionRelationship } from "@/lib/db/types";
 import { StudentSwitcher } from "@/components/StudentSwitcher";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +15,8 @@ type Params = { student?: string };
 export default async function WelcomePage({ searchParams }: { searchParams: Promise<Params> }) {
   const query = await searchParams;
   const { student, household, isDemo } = await requireSelectedStudent(query.student);
-  const [students, allInstitutions, relationships] = await Promise.all([listStudentsForHousehold(household.id), listInstitutions(), listRelationshipsForStudent(student.id, { includeInactive: true })]);
-  const relByInstitution = new Map<string, InstitutionRelationship>(relationships.map((relationship) => [relationship.institutionId, relationship]));
-  const schools = TRACKABLE_SCHOOL_SLUGS.map((slug) => allInstitutions.find((institution) => institution.slug === slug)).filter((institution): institution is Institution => !!institution);
-  // Counted only against the schools this picker can actually show (the
-  // trackable list above), not every active relationship on the student —
-  // the Private Preview demo can carry an extra illustrative-example
-  // relationship (Example Demo University) that never appears in this
-  // picker, and counting it here would render an impossible "7 of 6".
-  const trackedCount = schools.filter((institution) => relByInstitution.get(institution.id)?.active).length;
+  const [students, allInstitutions, relationships, directoryMappedIds] = await Promise.all([listStudentsForHousehold(household.id), listInstitutions(), listRelationshipsForStudent(student.id, { includeInactive: true }), listDirectoryMappedInstitutionIds()]);
+  const { schools, relByInstitution, activeCount: trackedCount, missingActiveCount } = managedSchoolInventory(allInstitutions, relationships);
   const enteringTerm = enteringTermFrom(student) ?? "Fall 2027";
   const notice = termNotice(enteringTerm);
   const studentUrl = (id?: string) => id ? `/welcome?student=${encodeURIComponent(id)}` : "/dashboard";
@@ -39,7 +32,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
       <h1 className="mt-2 font-display text-3xl font-semibold leading-tight text-ink sm:text-4xl">Schools to track</h1>
       <p className="mt-2 max-w-2xl text-ink/60">Each student has an independent school list and preferences. Changes here affect only {student.name}&apos;s plan — never another student&apos;s.</p>
       {isDemo && <p className="mt-3 rounded-xl border border-accent/25 bg-accent/10 p-3 text-sm text-ink/75"><strong className="font-semibold text-accent">Private Preview</strong> · School settings are shown for context; changes are disabled.</p>}
-      <p className="mt-3 text-sm text-ink/40">Currently tracking {trackedCount} of {schools.length} schools · <Link href={`/dashboard?student=${student.id}`} className="underline">Back to {student.name}&apos;s dashboard</Link> · <Link href={`/intake?student=${encodeURIComponent(student.id)}`} className="underline">Edit plan preferences</Link></p>
+      <p className="mt-3 text-sm text-ink/60">Currently tracking {trackedCount} school{trackedCount === 1 ? "" : "s"} · {schools.length} school{schools.length === 1 ? "" : "s"} shown · <Link href={`/dashboard?student=${student.id}`} className="underline">Back to {student.name}&apos;s dashboard</Link> · <Link href={`/intake?student=${encodeURIComponent(student.id)}`} className="underline">Edit plan preferences</Link></p>
+      {missingActiveCount > 0 && <p role="alert" className="mt-3 rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm text-warn">{missingActiveCount} active school relationship{missingActiveCount === 1 ? " has" : "s have"} no matching school record. It is counted but cannot be managed here; owner review is required.</p>}
+      {schools.some(i => directoryMappedIds.has(i.id) && relByInstitution.get(i.id)?.active) && <p className="mt-3 rounded-lg border border-warn/40 bg-warn/10 p-3 text-sm text-warn">A tracked school is still under official-source review. Tracking and saved preferences are not certification; school actions and deadlines need independent confirmation.</p>}
     </header>
 
     <StudentSwitcher students={students} selectedStudentId={student.id} hrefFor={studentUrl} />
@@ -50,7 +45,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
         the workflow legible for one student at a time. */}
     <section aria-label="Setup progress" className="grid gap-3 sm:grid-cols-2">
       <StageTile number={1} label="Entering term" done={termConfirmed} detail={termConfirmed ? `Set to ${enteringTerm}` : `Defaulting to ${enteringTerm} until you confirm one`} />
-      <StageTile number={2} label="School preferences" done={schoolsStageDone} detail={`${trackedCount} of ${schools.length} schools configured`} />
+      <StageTile number={2} label="School preferences" done={schoolsStageDone} detail={`${trackedCount} tracked · ${schools.length} shown`} />
     </section>
 
     <section aria-labelledby="stage-term-heading" className="rounded-2xl border border-line border-t-4 border-t-accent bg-white/80 p-5 shadow-card sm:p-6">
@@ -79,11 +74,14 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{schools.map((institution) => {
         const rel = relByInstitution.get(institution.id); const attrs = rel ? resolveAttributes(rel, student) : parseAttributes(student); const isActive = !!rel?.active; const wasRemoved = !!rel && !rel.active;
+        const underReview = directoryMappedIds.has(institution.id);
+        const cannotActivate = underReview && !isActive;
         return <article key={institution.id} className="flex flex-col gap-4 rounded-2xl border border-line bg-white/80 p-5 shadow-card">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h3 className="font-display text-lg font-semibold text-ink">{institution.name}</h3>
               <TrackingBadge state={isActive ? "tracking" : wasRemoved ? "paused" : "not_tracked"} studentName={student.name} />
+              {underReview && <p className="mt-1 text-xs text-warn">Official-source review pending · not a certified action plan</p>}
             </div>
           </div>
           <form action={saveSchoolPreferences} className="flex flex-col gap-3">
@@ -97,8 +95,9 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
             <label className="flex items-center gap-2 text-sm text-ink/70"><input type="checkbox" name="bringingCar" defaultChecked={attrs.bringingCar === true} disabled={isDemo} />Bringing a car to campus</label>
             <label className="flex items-center gap-2 text-sm text-ink/70"><input type="checkbox" name="disabilityAccommodation" defaultChecked={attrs.disabilityAccommodation === true} disabled={isDemo} />Needs disability accommodations</label>
             <div className="mt-1 flex items-center gap-3">
-              <button type="submit" disabled={isDemo} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{isActive ? "Save preferences" : wasRemoved ? "Resume tracking" : "Start tracking"}</button>
-              {isActive && <Link href={`/school/${institution.slug}?student=${student.id}`} className="text-sm text-ink/50 underline">View tracker</Link>}
+              <button type="submit" disabled={isDemo || cannotActivate} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{isActive ? "Save preferences" : wasRemoved ? "Resume tracking" : "Start tracking"}</button>
+              {isActive && <Link href={`/school/${institution.slug}?student=${encodeURIComponent(student.id)}`} className="text-sm text-ink/50 underline">View tracking status</Link>}
+              {cannotActivate && <span className="text-xs text-warn">New or resumed tracking awaits source review.</span>}
             </div>
           </form>
           {isActive && <form action={stopTracking} className="border-t border-line pt-3"><input type="hidden" name="studentId" value={student.id} /><input type="hidden" name="institutionId" value={institution.id} /><button type="submit" disabled={isDemo} className="text-sm text-ink/40 underline hover:text-urgent disabled:cursor-not-allowed disabled:opacity-40">Stop tracking this school</button></form>}
