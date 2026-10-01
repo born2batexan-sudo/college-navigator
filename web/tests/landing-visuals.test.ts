@@ -7,6 +7,7 @@ const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
 const header = readFileSync(new URL("../components/MarketingHeader.tsx", import.meta.url), "utf8");
 const logo = readFileSync(new URL("../components/RouteLogo.tsx", import.meta.url), "utf8");
 const nav = readFileSync(new URL("../components/HeaderNav.tsx", import.meta.url), "utf8");
+const preview = readFileSync(new URL("../components/LandingTaskPreview.tsx", import.meta.url), "utf8");
 
 describe("immersive overview and accessible presentation", () => {
   it("keeps three campus photographs with non-specific attribution and efficient image sizing", () => {
@@ -26,7 +27,7 @@ describe("immersive overview and accessible presentation", () => {
     assert.match(css, /h2\.display \{[^}]*font-size: clamp\(28px,4vw,40px\)[^}]*line-height: 1\.15/);
     assert.match(css, /\.hero-title \{[^}]*font-size: clamp\(34px,5\.2vw,58px\)[^}]*line-height: 1\.05[^}]*color: #fff/);
     assert.match(css, /\.hero-subhead \{[^}]*clamp\(20px,2\.4vw,26px\)/);
-    assert.match(css, /\.hero-inner \{[^}]*grid-template-columns: 1\.25fr \.85fr[^}]*gap: 48px[^}]*padding-top: 96px[^}]*padding-bottom: 88px/);
+    assert.match(css, /\.hero-inner \{[^}]*grid-template-columns: 1\.25fr \.85fr[^}]*gap: 40px[^}]*padding-top: 40px[^}]*padding-bottom: 44px[^}]*align-items: start/);
     assert.match(css, /\.hero-media-img \{[^}]*opacity: \.45/);
     assert.match(css, /\.hero-plan-card \{[^}]*rgba\(251,249,244,\.98\)[^}]*border-radius: 18px[^}]*padding: clamp\(14px,2vw,24px\)/);
     assert.match(css, /\.card \{[^}]*border-radius: 14px[^}]*padding: 22px/);
@@ -45,6 +46,19 @@ describe("immersive overview and accessible presentation", () => {
     assert.match(source, /className="section final"/);
     for (const color of ["#123B55", "#FBF9F4", "#E8875B"]) assert.match(logo, new RegExp(color));
     assert.match(logo, /PROVISIONAL/);
+  });
+  it("keeps the complete hero message early, with a detailed task and two compact honest examples", () => {
+    assert.match(source, /Your College Journey Tracker/);
+    assert.match(source, /Be their parent, not their project manager\./);
+    assert.match(source, /From the first application to move-in day/);
+    assert.match(source, /href="\/login\?next=%2Fonboarding">Start Now/);
+    assert.ok(source.indexOf("hero-copy") < source.indexOf("<LandingTaskPreview"), "reading order stays copy, then illustration");
+    assert.match(css, /\.hero-inner \{[^}]*align-items: start/);
+    assert.match(css, /\.hero-preview-task-summary \{[^}]*padding-block: 9px/);
+    assert.match(preview, /tasks\.map\(\(task, index\)/);
+    assert.match(preview, /index === 0 && <>[\s\S]*?<CompletionToggle[\s\S]*?<OfficialDestination/);
+    assert.match(preview, /no live source checked/);
+    assert.match(css, /@media \(max-width: 900px\) \{[\s\S]*?\.hero-inner \{ grid-template-columns: 1fr; gap: 32px/);
   });
   it("keeps mobile navigation, focus visibility, and reduced-motion support", () => {
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

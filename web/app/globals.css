@@ -79,8 +79,9 @@ h3.display, .card h3, .card h4 { font-family: var(--serif); font-weight: 600; fo
 /* Hero */
 .hero { position: relative; overflow: hidden; color: var(--paper); background: var(--hero-bg); }
 .hero-media { position: absolute; inset: 0; z-index: 0; background: var(--hero-bg); }
-.hero-media-img { object-fit: cover; object-position: center 38%; opacity: .45; }
-.hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: 1.25fr .85fr; gap: 48px; padding-top: 96px; padding-bottom: 88px; align-items: center; }
+.hero-media-img { object-fit: cover; object-position: center 30%; opacity: .45; }
+/* The tall dashboard illustration must not vertically center the primary message below the fold. */
+.hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: 1.25fr .85fr; gap: 40px; padding-top: 40px; padding-bottom: 44px; align-items: start; }
 .hero .eyebrow { color: rgba(251,249,244,.85); }
 .hero-title { font-size: clamp(34px,5.2vw,58px); line-height: 1.05; letter-spacing: -.01em; margin: 0; color: #fff; }
 .hero-subhead { text-wrap: balance; margin: 18px 0 12px; font-size: clamp(20px,2.4vw,26px); line-height: 1.3; color: #fff; }
@@ -100,6 +101,8 @@ h3.display, .card h3, .card h4 { font-family: var(--serif); font-weight: 600; fo
 .hero-preview-meta { display: flex; flex-wrap: wrap; gap: 6px 9px; align-items: center; font-size: 11px; color: var(--muted); }
 .hero-preview-priority { text-transform: uppercase; font-weight: 700; color: var(--coral-deep); }
 .hero-preview-task h3 { margin: 6px 0 3px; font: 600 16px/1.25 var(--serif); }
+.hero-preview-task-summary { padding-block: 9px; }
+.hero-preview-task-summary h3 { margin-top: 3px; font-size: 14px; }
 .hero-preview-date { font-size: 12px; font-weight: 600; margin: 0; }
 .hero-preview-reason { font-size: 11px; color: var(--muted); margin: 3px 0 0; }
 .hero-preview-controls { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; font-size: 12px; }
@@ -297,7 +300,7 @@ details[open].tile .t::after { content: "–"; }
 /* Responsive. The mockup collapses at 900px; the mobile menu toggle is an addition so no navigation is lost. */
 @media (max-width: 900px) {
   .site-shell { padding-inline: 20px; }
-  .hero-inner { grid-template-columns: 1fr; padding-top: 36px; padding-bottom: 56px; }
+  .hero-inner { grid-template-columns: 1fr; gap: 32px; padding-top: 36px; padding-bottom: 56px; }
   .hero .lede { font-size: 16px; margin-bottom: 20px; }
   .hero-subhead { margin: 14px 0 10px; }
   .hero-plan-card { display: block; max-width: 700px; width: 100%; }

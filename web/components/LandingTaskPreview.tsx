@@ -13,16 +13,18 @@ const tasks = [
 export function LandingTaskPreview() {
   return <aside className="hero-plan-card" aria-label="Illustrative read-only dashboard task preview">
     <div className="hero-preview-heading"><div><p className="hero-preview-kicker">A family plan at a glance</p><h2>Lakeview College · Fall 2027</h2></div><span className="hero-preview-badge">Read-only example</span></div>
-    <div className="hero-preview-tasks">{tasks.map((task) => <article key={task.id} className="hero-preview-task" data-preview-task>
+    <div className="hero-preview-tasks">{tasks.map((task, index) => <article key={task.id} className={`hero-preview-task${index === 0 ? "" : " hero-preview-task-summary"}`} data-preview-task>
       <div className="hero-preview-meta"><span className="hero-preview-priority">{task.priority}</span><span>{task.domain}</span><StatePill state={task.status} styles={STATE_STYLES} labels={STATE_LABELS} /></div>
       <h3>{task.title}</h3>
       <p className="hero-preview-date">{task.date}</p>
-      <p className="hero-preview-reason">Why included: {task.reason}</p>
-      <div className="hero-preview-controls">
-        <CompletionToggle actionId={`preview-${task.id}`} completed={task.checked} readOnly />
-        <OfficialDestination source={null} rule={{ title: task.title, domain: task.domain, researchTerm: "Fall 2027", applicability: task.applicability, evidenceQuote: null }} schoolName="Lakeview College" illustrative />
-      </div>
+      {index === 0 && <>
+        <p className="hero-preview-reason">Why included: {task.reason}</p>
+        <div className="hero-preview-controls">
+          <CompletionToggle actionId={`preview-${task.id}`} completed={task.checked} readOnly />
+          <OfficialDestination source={null} rule={{ title: task.title, domain: task.domain, researchTerm: "Fall 2027", applicability: task.applicability, evidenceQuote: null }} schoolName="Lakeview College" illustrative />
+        </div>
+      </>}
     </article>)}</div>
-    <p className="hero-plan-caption">Illustrative school, dates, and statuses; no live source checked. The checked task represents a family choice, not a school receipt. Only a family&apos;s saved Completed selections count in a real plan.</p>
+    <p className="hero-plan-caption">Illustrative school, dates, and statuses; no live source checked. The detailed task&apos;s checked box represents a family choice, not a school receipt. Only a family&apos;s saved Completed selections count in a real plan.</p>
   </aside>;
 }
