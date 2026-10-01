@@ -30,6 +30,33 @@ describe("staging monitor machine authorization", () => {
       process.env.MONITORING_DELIVERY_ENABLED = "0";
       process.env.VERCEL_ENV = "production";
       assert.equal(requireAgentAuth(request("monitor-secret"), "monitor")?.status, 404);
+      delete process.env.VERCEL_ENV;
+      assert.equal(requireAgentAuth(request("monitor-secret"), "monitor")?.status, 404);
+    } finally {
+      for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+      Object.assign(process.env, previous);
+    }
+  });
+});
+
+describe("staging queue machine authorization", () => {
+  it("requires the review Preview even when all queue and research flags are on", () => {
+    const previous = { ...process.env };
+    try {
+      Object.assign(process.env, {
+        NODE_ENV: "production",
+        VERCEL_ENV: "preview",
+        REQUEST_PIPELINE_ENABLED: "1",
+        REQUEST_QUEUE_ENABLED: "1",
+        RESEARCH_API_ENABLED: "1",
+        QUEUE_AGENT_API_KEY: "queue-secret",
+      });
+      assert.equal(requireAgentAuth(request("queue-secret"), "queue"), null);
+      assert.equal(requireAgentAuth(request("wrong"), "queue")?.status, 401);
+      process.env.VERCEL_ENV = "production";
+      assert.equal(requireAgentAuth(request("queue-secret"), "queue")?.status, 404);
+      delete process.env.VERCEL_ENV;
+      assert.equal(requireAgentAuth(request("queue-secret"), "queue")?.status, 404);
     } finally {
       for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
       Object.assign(process.env, previous);

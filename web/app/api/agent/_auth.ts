@@ -12,12 +12,13 @@ const ENV_BY_SCOPE: Record<AgentScope,string> = {
 
 function machineRouteEnabled(scope: AgentScope): boolean {
   if (scope === "queue") {
-    return process.env.REQUEST_PIPELINE_ENABLED === "1" &&
+    return process.env.VERCEL_ENV === "preview" &&
+      process.env.REQUEST_PIPELINE_ENABLED === "1" &&
       process.env.REQUEST_QUEUE_ENABLED === "1" &&
       process.env.RESEARCH_API_ENABLED === "1";
   }
   if (scope === "monitor") {
-    return process.env.VERCEL_ENV !== "production" &&
+    return process.env.VERCEL_ENV === "preview" &&
       process.env.MONITORING_API_ENABLED === "1" &&
       process.env.MONITORING_PIPELINE_ENABLED === "1" &&
       process.env.MONITORING_DELIVERY_ENABLED === "0";
@@ -32,8 +33,8 @@ function privateError(status: number, error: string): NextResponse {
 /** Machine credentials are narrowly scoped; queue and monitor tokens cannot fabricate rules. */
 export function requireAgentAuth(req: NextRequest, scope: AgentScope = "general"): NextResponse | null {
   // Machine-key routes have no signed-in household entitlement. Production app
-  // routes stay closed; monitoring can open only on a non-production deployment
-  // with both explicit gates on and family delivery explicitly off.
+  // routes stay closed; queue and monitoring can open only on an explicit Vercel
+  // Preview with their separate gates set, and family delivery explicitly off.
   if (process.env.NODE_ENV === "production" && !machineRouteEnabled(scope)) {
     return privateError(404, "Not found");
   }
