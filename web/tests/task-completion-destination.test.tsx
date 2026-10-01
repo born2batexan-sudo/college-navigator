@@ -108,6 +108,7 @@ describe("independent household task completion and official destinations", () =
   it("links only safe verified official sources and distinguishes sensitive information from portals", () => {
     assert.equal(verifiedOfficialUrl(source), "https://fiction.example.edu/aid");
     assert.equal(verifiedOfficialUrl({ ...source, authorityLevel: "unverified" }), null);
+    assert.equal(verifiedOfficialUrl({ ...source, lastVerified: null }), null, "undated legacy sources must not be called verified destinations");
     for (const url of ["http://fiction.example.edu/aid", "javascript:alert(1)", "https://user:pass@fiction.example.edu", "https://127.0.0.1/aid"]) assert.equal(verifiedOfficialUrl({ ...source, url }), null);
     const html = renderToStaticMarkup(<OfficialDestination source={source} rule={{ ...rule, title: "Pay deposit in portal" }} schoolName="Fiction University" />);
     assert.match(html, /portal\/login\/payment-sensitive task/);
@@ -119,6 +120,19 @@ describe("independent household task completion and official destinations", () =
     const wrongAudience = renderToStaticMarkup(<OfficialDestination source={{ ...source, url: "https://www.ou.edu/admissions/counselor-resources/slate-account" }} rule={{ ...rule, title: "Check application portal" }} schoolName="University of Oklahoma" />);
     assert.match(wrongAudience, /Official destination unavailable/);
     assert.doesNotMatch(wrongAudience, /counselor-resources|href=/);
+    const undated = renderToStaticMarkup(<OfficialDestination source={{ ...source, lastVerified: null }} rule={rule} schoolName="Fiction University" />);
+    assert.match(undated, /Official destination unavailable/);
+    assert.doesNotMatch(undated, /href=/);
+    for (const [url, title] of [
+      ["https://admissions.utexas.edu/apply/freshman/", "Submit financial-aid forms"],
+      ["https://www.ou.edu/admissions/apply/freshman", "Confirm transcript received"],
+    ]) {
+      const mismatched = renderToStaticMarkup(<OfficialDestination source={{ ...source, url }} rule={{ ...rule, title }} schoolName="Reviewed School" />);
+      assert.match(mismatched, /Official destination unavailable/);
+      assert.doesNotMatch(mismatched, /href=/);
+      const differentTask = renderToStaticMarkup(<OfficialDestination source={{ ...source, url }} rule={{ ...rule, title: "Review admissions instructions" }} schoolName="Reviewed School" />);
+      assert.match(differentTask, /href="https:\/\//, "do not suppress unrelated source use");
+    }
     const unavailable = renderToStaticMarkup(<OfficialDestination source={null} rule={rule} schoolName="Fiction University" />);
     assert.match(unavailable, /Official destination unavailable/);
     assert.doesNotMatch(unavailable, /href=/);

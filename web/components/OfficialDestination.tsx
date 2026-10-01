@@ -3,7 +3,9 @@ import { formatDate } from "@/lib/format";
 
 /** Only a research record marked official can supply a destination. Guidance prose/deep links are not verified URLs. */
 export function verifiedOfficialUrl(source: Source | null | undefined): string | null {
-  if (!source || source.authorityLevel !== "official") return null;
+  // An official-domain flag without a recorded source check is not a verified
+  // destination. Legacy imported sources may have authority but no audit date.
+  if (!source || source.authorityLevel !== "official" || !source.lastVerified) return null;
   try {
     const url = new URL(source.url);
     if (url.protocol !== "https:" || url.username || url.password || !url.hostname.includes(".") ||
@@ -19,7 +21,16 @@ export function OfficialDestination({ source, rule, schoolName, illustrative = f
   // applicant destination. Withhold rather than invent a replacement URL.
   const wrongAudience = /application portal/i.test(rule.title) &&
     /^https:\/\/(?:www\.)?ou\.edu\/admissions\/counselor-resources\/slate-account(?:[/?#]|$)/i.test(verified ?? "");
-  const href = wrongAudience ? null : verified;
+  // These exact legacy source/task pairs were reviewed against their public
+  // pages: freshman application instructions do not answer an aid-form task,
+  // and OU's general admissions page does not confirm receipt of a transcript.
+  // Withhold the mismatched task links rather than pretending a 200 certifies
+  // task applicability. Other actions using these sources remain unaffected.
+  const wrongTask = (rule.title.toLowerCase() === "submit financial-aid forms" &&
+    verified === "https://admissions.utexas.edu/apply/freshman/") ||
+    (rule.title.toLowerCase() === "confirm transcript received" &&
+    verified === "https://www.ou.edu/admissions/apply/freshman");
+  const href = wrongAudience || wrongTask ? null : verified;
   const sensitive = /portal|log[ -]?in|payment|pay |deposit|billing|accept.*award/i.test(`${rule.title} ${rule.domain}`);
   return <div className="rounded-lg border border-line bg-white/80 p-3 text-sm text-ink/75" data-official-destination>
     <p className="font-semibold text-ink">Official destination · {sensitive ? "portal/login/payment-sensitive task" : "information and instructions"}</p>
@@ -30,6 +41,6 @@ export function OfficialDestination({ source, rule, schoolName, illustrative = f
       <p className="mt-1 text-xs">Opens the school&apos;s source in a new tab. {sensitive ? "This is a source/instructions link, not a verified direct login or payment endpoint. Follow the school's own portal instructions; Campus Passage never signs in, submits, or pays for you." : "Follow the school's instructions yourself; Campus Passage does not act in school portals."}</p>
       <p className="mt-1 text-xs text-ink/55">{rule.researchTerm} · {rule.applicability.replaceAll("_", " ")} · source {source!.lastVerified ? `last checked ${formatDate(source!.lastVerified)}` : "check date unavailable"}</p>
       {rule.evidenceQuote && <p className="mt-1 text-xs text-ink/65">Research evidence: “{rule.evidenceQuote}”</p>}
-    </> : illustrative ? <details className="mt-1"><summary className="cursor-pointer font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">How official destinations work</summary><p className="mt-1 text-xs text-ink/65">A signed-in task links verified school instructions and shows its source, term, applicability, and last check. {schoolName} is an illustrative school, so this preview has no external destination or source-check claim. Confirm real steps on the school&apos;s official site.</p></details> : <p className="mt-1 text-sm text-warn">Official destination unavailable — no verified official URL for this task. Check with {schoolName}; no destination has been invented.</p>}
+    </> : illustrative ? <details className="mt-1"><summary className="cursor-pointer font-semibold text-accent underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">How official destinations work</summary><p className="mt-1 text-xs text-ink/65">A signed-in task links verified school instructions and shows its source, term, applicability, and last check. {schoolName} is an illustrative school, so this preview has no external destination or source-check claim. Confirm real steps on the school&apos;s official site.</p></details> : <p className="mt-1 text-sm text-warn">Official destination unavailable — no dated, task-matched official URL verified for this task. Check with {schoolName}; no destination has been invented.</p>}
   </div>;
 }
