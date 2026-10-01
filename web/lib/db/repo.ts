@@ -10,6 +10,7 @@
 
 import { queryRows, queryOne, exec, newId, nowIso } from "./client";
 import { cleanCopy } from "../copy-guard";
+import { isOuAidDateHeld } from "../ou-aid-quarantine";
 import { familyCompletionForActions } from "./action-completion";
 import type {
   Household,
@@ -665,7 +666,13 @@ export async function listActionInstancesForRelationship(relationshipId: string,
     const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
     const guidance = pendingSourceChange ? null : await getGuidanceForRule(rule.id);
     const source = await approvedSourceForRule(rule);
-    out.push({ ...action, completed: completed.get(action.id) === true, rule, guidance, source, pendingSourceChange });
+    const held = isOuAidDateHeld(rule);
+    // Read-time projection protects previously materialized action rows without
+    // a staging migration. Do not leak dated guidance or the disputed source as
+    // an actionable destination to dashboard, school plan, or companion JSON.
+    out.push({ ...action, dueAt: held ? null : action.dueAt, priority: held ? "normal" : action.priority,
+      completed: completed.get(action.id) === true, rule, guidance: held ? null : guidance,
+      source: held ? null : source, pendingSourceChange });
   }
   return out;
 }
@@ -684,7 +691,10 @@ export async function getActionInstanceFull(id: string) {
   const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
   const relationship = (await getRelationship(action.relationshipId))!;
   const markers = await familyCompletionForActions([id]);
-  return { ...action, completed: markers.get(id) === true, rule, guidance: pendingSourceChange ? null : guidance, source, relationship, pendingSourceChange };
+  const held = isOuAidDateHeld(rule);
+  return { ...action, dueAt: held ? null : action.dueAt, priority: held ? "normal" : action.priority,
+    completed: markers.get(id) === true, rule, guidance: held || pendingSourceChange ? null : guidance,
+    source: held ? null : source, relationship, pendingSourceChange };
 }
 
 export async function createActionEvent(input: {

@@ -16,6 +16,8 @@
  * sentence is shown as the last-year reference.
  */
 
+import { isOuAidDateHeld, OU_AID_HOLD_MESSAGE } from "./ou-aid-quarantine";
+
 /** The entering term families are planning for. Keep in step with the agent's default term. */
 export const ENTERING_TERM = "Fall 2027";
 
@@ -55,7 +57,14 @@ export function parseDateStatus(rule: {
   applicability?: "applies" | "not_applicable" | "not_yet_published";
   cycleState?: "current" | "prior" | "undated";
   researchTerm?: string;
+  institutionId?: string;
+  checkpointCode?: string;
 }): DateStatus {
+  // A researched/current label does not override an independently audited
+  // term-specific conflict. Never parse the old requirement's disputed date.
+  if (rule.institutionId && rule.checkpointCode && rule.researchTerm && isOuAidDateHeld({
+    institutionId: rule.institutionId, checkpointCode: rule.checkpointCode, researchTerm: rule.researchTerm,
+  })) return { kind: "awaiting", term: rule.researchTerm, lastYear: null, detail: OU_AID_HOLD_MESSAGE };
   const text = rule.requirement ?? "";
 
   // Structured research fields are authoritative; text prefixes remain for

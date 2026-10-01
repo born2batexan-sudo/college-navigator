@@ -22,6 +22,7 @@ import {
 } from "./db/repo";
 import { hostnameOf, domainMatches, globMatch } from "./urlmatch";
 import type { Institution, ObservationPattern } from "./db/types";
+import { isOuAidDateHeld, OU_AID_HOLD_TITLE } from "./ou-aid-quarantine";
 
 export const DEMO_HOUSEHOLD_ID = "demo-household";
 
@@ -67,7 +68,7 @@ export async function getContextForUrl(url: string) {
     actions: openActions.map((a) => ({
       id: a.id,
       checkpointCode: a.rule.checkpointCode,
-      title: a.rule.title,
+      title: isOuAidDateHeld(a.rule) ? OU_AID_HOLD_TITLE : a.rule.title,
       state: a.state,
       priority: a.priority,
       dueAt: a.dueAt,

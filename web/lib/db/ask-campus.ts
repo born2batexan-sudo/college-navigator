@@ -3,6 +3,7 @@ import { evaluatePopulation, evaluateTrigger } from '../rules-engine';
 import type { Institution, InstitutionRelationship, Rule, Student } from './types';
 import { isOfficialInstitutionUrl } from './repo';
 import { modelCostCents, selectOfficialEvidence, type EvidenceSelection } from '../ask-provider';
+import { isOuAidDateHeld } from '../ou-aid-quarantine';
 
 export type Citation = { title: string; quote: string; url: string; term: string; verifiedAt: string; sourceVerifiedAt: string };
 export type Answer = { kind: 'fact' | 'unknown'; text: string; citations: Citation[] };
@@ -31,7 +32,7 @@ function safeUrl(value: unknown): value is string {
     !/^(?:localhost|\d+\.\d+\.\d+\.\d+|\[|.*\.(?:local|internal|test))$/i.test(u.hostname); } catch { return false; }
 }
 type ResearchRow = {
-  id: string; title: string; checkpoint_code: string; domain: string; population: string; trigger_state: string | null;
+  id: string; institution_id: string; title: string; checkpoint_code: string; domain: string; population: string; trigger_state: string | null;
   research_term: string; status: string; confidence: string; applicability: string; cycle_state: string;
   evidence_quote: string | null; verified_at: string | null; updated_at: string; source_id: string | null;
   url: string | null; authority_level: string | null; last_verified: string | null;
@@ -43,7 +44,8 @@ function eligible(row: ResearchRow, student: Student, now: number): boolean {
   const rule = { population: row.population, trigger: row.trigger_state } as Rule;
   let attrs: Record<string, unknown>;
   try { attrs = { ...JSON.parse(student.attributes), ...JSON.parse(row.relationship_attributes) }; } catch { return false; }
-  return row.status === 'verified' && row.confidence === 'high' && row.applicability === 'applies' &&
+  return !isOuAidDateHeld({ institutionId: row.institution_id, checkpointCode: row.checkpoint_code, researchTerm: row.research_term }) &&
+    row.status === 'verified' && row.confidence === 'high' && row.applicability === 'applies' &&
     row.cycle_state === 'current' && row.coverage_status === 'certified' && row.authority_level === 'official' &&
     !!row.source_id && Number(row.pending_changes) === 0 && fresh(row.certified_at, now) && fresh(row.research_updated_at, now) &&
     fresh(row.verified_at, now) && fresh(row.last_verified, now) &&
@@ -89,7 +91,7 @@ export async function askCampus(input: { householdId: string; actorId: string; s
     const rows = term ? await queryRows<ResearchRow>(`SELECT ru.id,ru.title,ru.checkpoint_code,ru.domain,ru.population,ru.trigger_state,ru.research_term,
       ru.status,ru.confidence,ru.applicability,ru.cycle_state,ru.evidence_quote,ru.verified_at,ru.updated_at,ru.source_id,
       s.url,s.authority_level,s.last_verified,rv.coverage_status,rv.certified_at,rv.updated_at AS research_updated_at,
-      i.name AS institution_name,i.domains AS institution_domains,ir.id AS relationship_id,ir.lifecycle_state,ir.attributes AS relationship_attributes,
+      i.id AS institution_id,i.name AS institution_name,i.domains AS institution_domains,ir.id AS relationship_id,ir.lifecycle_state,ir.attributes AS relationship_attributes,
       CAST((SELECT COUNT(*) FROM change_events ce WHERE ce.source_id=s.id AND ce.review_state='pending') AS INTEGER) AS pending_changes
       FROM institution_relationships ir JOIN institutions i ON i.id=ir.institution_id
       JOIN action_instances a ON a.relationship_id=ir.id JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=ir.institution_id

@@ -10,6 +10,7 @@ import { parseDateStatus, awaitingMessage, lastYearLine, DATE_NOT_POSTED_LABEL }
 import { enteringTermFrom } from "@/lib/terms";
 import { CompletionToggle } from "@/components/CompletionToggle";
 import { OfficialDestination } from "@/components/OfficialDestination";
+import { isOuAidDateHeld, OU_AID_HOLD_TITLE, OU_AID_HOLD_MESSAGE, OU_AID_CONFLICT_SOURCES } from "@/lib/ou-aid-quarantine";
 
 export const dynamic = "force-dynamic";
 
@@ -38,13 +39,14 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
 
   const events = await listEventsForAction(action.id);
   const sourceUpdatePending = action.pendingSourceChange;
-  const g = sourceUpdatePending ? null : action.guidance;
+  const held = isOuAidDateHeld(action.rule);
+  const g = held || sourceUpdatePending ? null : action.guidance;
 
   // If the school hasn't published this cycle's dates (or only last cycle's are known), say so
   // plainly and never show an older date as if it were current.
   const dateStatus = parseDateStatus(action.rule);
   const schoolName = action.relationship.institution.name;
-  const awaitingMsg = dateStatus.kind === "awaiting" ? awaitingMessage(schoolName, dateStatus.term) : null;
+  const awaitingMsg = held ? OU_AID_HOLD_MESSAGE : dateStatus.kind === "awaiting" ? awaitingMessage(schoolName, dateStatus.term) : null;
   const lastYear = lastYearLine(dateStatus);
 
   async function setState(formData: FormData) {
@@ -66,11 +68,13 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           <span>{action.rule.domain}</span>
         </div>
         <h1 className="text-xl font-semibold text-ink">
-          {dateStatus.kind === "awaiting" ? action.rule.title : (g?.what ?? action.rule.title)}
+          {held ? OU_AID_HOLD_TITLE : dateStatus.kind === "awaiting" ? action.rule.title : (g?.what ?? action.rule.title)}
         </h1>
         <div className="flex items-center gap-2">
           <StatePill state={action.completed ? "complete" : action.state === "complete" ? "not_started" : action.state} styles={STATE_STYLES} labels={STATE_LABELS} />
-          {sourceUpdatePending ? (
+          {held ? (
+            <span className="text-xs font-medium text-warn">Unresolved official-date conflict for Fall 2027</span>
+          ) : sourceUpdatePending ? (
             <span className="text-xs font-medium text-warn">Official source update under review</span>
           ) : dateStatus.kind === "awaiting" ? (
             <span className="text-xs font-medium text-warn">
@@ -83,18 +87,25 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       </header>
 
       {dateStatus.kind !== "not_applicable" && <section className="grid gap-3 sm:grid-cols-2 sm:items-start" aria-label="Task completion and official destination">
-        <CompletionToggle key={`${action.id}:${action.completed}`} actionId={action.id} completed={action.completed} readOnly={isDemo} />
+        {held ? <p className="text-sm text-warn">No task action until OU confirms this term&apos;s deadline.</p> : <CompletionToggle key={`${action.id}:${action.completed}`} actionId={action.id} completed={action.completed} readOnly={isDemo} />}
         <OfficialDestination source={action.source} rule={action.rule} schoolName={schoolName} />
       </section>}
 
-      {sourceUpdatePending && (
+      {held && <section className="rounded-lg border border-warn/30 bg-warn/10 p-4" aria-label="Conflicting official evidence">
+        <p className="font-semibold text-warn">School confirmation needed — no verified Fall 2027 deadline</p>
+        <p className="mt-1 text-sm text-ink/80">{OU_AID_HOLD_MESSAGE}</p>
+        <p className="mt-2 text-xs text-ink/60">The following official pages are conflict evidence, not certified term-specific instructions or task destinations:</p>
+        <ul className="mt-1 list-disc pl-5 text-xs">{OU_AID_CONFLICT_SOURCES.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer" className="text-accent underline">{source.label} ↗</a></li>)}</ul>
+      </section>}
+
+      {!held && sourceUpdatePending && (
         <section className="rounded-lg border border-warn/30 bg-warn/10 p-4">
           <p className="font-semibold text-warn">We detected a change on the official source.</p>
           <p className="mt-1 text-sm text-ink/80">We are rechecking this item before showing instructions, dates, or costs. Check the official destination above when available; otherwise contact the school directly.</p>
         </section>
       )}
 
-      {!sourceUpdatePending && awaitingMsg && (
+      {!held && !sourceUpdatePending && awaitingMsg && (
         <section className="rounded-lg border border-warn/30 bg-warn/10 p-4">
           <p className="font-semibold text-warn">{DATE_NOT_POSTED_LABEL}</p>
           <p className="mt-1 text-sm text-ink/80">{awaitingMsg}</p>
@@ -109,7 +120,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </section>
       )}
 
-      {sourceUpdatePending ? null : g ? (
+      {held || sourceUpdatePending ? null : g ? (
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="What">{dateStatus.kind === "awaiting" ? action.rule.title : g.what}</Field>
           <Field label="When">{awaitingMsg ?? g.when}</Field>
@@ -131,7 +142,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         </p>
       )}
 
-      {!sourceUpdatePending && (
+      {!held && !sourceUpdatePending && (
         <section className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-white p-4 text-sm sm:grid-cols-3">
           <Stat label="Due" value={dateStatus.kind === "awaiting" ? "Not posted yet" : formatDate(action.dueAt)} />
           <Stat label="Cost" value={formatMoney(dateStatus.kind === "awaiting" ? null : action.rule.costCents)} />
@@ -144,7 +155,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
         <p className="rounded-lg bg-ink/5 p-3 text-sm text-ink/70">{action.applicabilityReason}</p>
       </section>
 
-      {!sourceUpdatePending && !isDemo && NEXT_STATES[action.state]?.length > 0 && (
+      {!held && !sourceUpdatePending && !isDemo && NEXT_STATES[action.state]?.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/50">Update status</h2>
           <div className="flex flex-wrap gap-2">

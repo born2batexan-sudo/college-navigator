@@ -1,3 +1,5 @@
+import { isOuAidDateHeld } from "../ou-aid-quarantine";
+
 // Provider-neutral reminder foundation.
 //
 // This module intentionally stops at a local SQLite/Postgres outbox. It does
@@ -365,7 +367,7 @@ export async function resumeReminders(householdId: string): Promise<ReminderPref
 // caller from enqueueing a demo, stale-term, unverified, low-confidence,
 // inapplicable, or source-less action by guessing an id.
 async function eligibleAction(actionInstanceId: string): Promise<any | null> {
-  const row = await queryOne<any>(`SELECT ai.*, r.institution_id, r.status AS rule_status, r.confidence,
+  const row = await queryOne<any>(`SELECT ai.*, r.institution_id, r.checkpoint_code, r.status AS rule_status, r.confidence,
       r.applicability, r.research_term, r.source_id, r.evidence_quote, r.updated_at AS rule_updated_at,
       rel.student_id, rel.active AS relationship_active, s.attributes, s.household_id,
       h.timezone, src.institution_id AS source_institution_id
@@ -385,7 +387,7 @@ async function eligibleAction(actionInstanceId: string): Promise<any | null> {
       AND NULLIF(TRIM(r.evidence_quote),'') IS NOT NULL
       AND src.id IS NOT NULL
       AND src.institution_id=r.institution_id`, [actionInstanceId]);
-  if (!row) return null;
+  if (!row || isOuAidDateHeld({ institutionId: row.institution_id, checkpointCode: row.checkpoint_code, researchTerm: row.research_term })) return null;
   let attrs: any = {};
   try { attrs = JSON.parse(row.attributes || "{}"); } catch { return null; }
   if (attrs.enteringTerm !== row.research_term) return null;
@@ -416,6 +418,7 @@ export async function enqueueReminder(input: EnqueueReminderInput): Promise<{ cr
       if (existing.action_instance_id !== input.actionInstanceId) {
         return { created: false, reminder: null, reason: "idempotency_key_conflict" };
       }
+      if (!(await eligibleAction(input.actionInstanceId))) return { created: false, reminder: null, reason: "not_eligible" };
       return { created: false, reminder: toOutbox(existing) };
     }
     const action = await eligibleAction(input.actionInstanceId);
@@ -522,6 +525,11 @@ export async function recordReminderDeliveryEvent(input: {
     }
 
     const current = outbox.delivery_state as ReminderState;
+    // No adapter may promote a queued/retried item to a send attempt after
+    // this research hold, even if reconciliation has not run yet.
+    if (input.state === "sent" && !(await eligibleAction(outbox.action_instance_id))) {
+      throw new Error("Reminder action is not eligible for dispatch");
+    }
     if (!ALLOWED[current].includes(input.state)) throw new Error(`Invalid reminder transition ${current} -> ${input.state}`);
     const currentAttemptCount = Number(outbox.attempt_count);
     const attempt = input.attemptNumber ?? (input.state === "sent" ? currentAttemptCount + 1 : currentAttemptCount);
@@ -566,6 +574,7 @@ export async function cancelReminder(reminderId: string, reason: string): Promis
 export async function retryFailedReminder(reminderId: string): Promise<ReminderOutbox | null> {
   const current = await getReminder(reminderId);
   if (!current || current.deliveryState !== "failed" || current.attemptCount >= current.maxAttempts) return current;
+  if (!(await eligibleAction(current.actionInstanceId))) return cancelReminder(reminderId, "research_unsafe_or_not_applicable");
   await recordReminderDeliveryEvent({ reminderId, state: "queued", detailCode: "retry" });
   return getReminder(reminderId);
 }
