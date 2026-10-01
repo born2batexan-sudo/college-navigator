@@ -27,7 +27,7 @@ const answers: Record<PublicAskCategory, { label: string; answer: string }> = {
   },
   "full-experience": {
     label: "The household experience",
-    answer: "Start with a verified email and a household plan. Add eligible students and schools, share priorities such as housing or aid, and follow separate student, school, and term plans through applications, enrollment, and move-in planning. The plan distinguishes family actions, school-side waits, and unknowns; the sample plan lets you explore a fictional example before signing in.",
+    answer: "Start with a verified email and a household plan. Add eligible students and schools, share priorities such as housing or aid, and follow separate student, school, and term plans through applications, enrollment, and move-in planning. The plan distinguishes family actions, school-side waits, and unknowns; the sample plan lets you explore an illustrative example before signing in.",
   },
   "getting-started": {
     label: "Getting started",

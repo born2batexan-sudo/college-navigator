@@ -53,6 +53,26 @@ describe("public Ask Campus Passage boundary", () => {
     }
   });
 
+  it("keeps every public Ask message illustrative and free of retired sample wording", () => {
+    const accepted = [
+      "How does Campus Passage work?",
+      "What does Campus Passage do?",
+      "What is the full experience from start to finish?",
+      "How do I share feedback?",
+      "How are your sources and citations verified?",
+      "How do I get started?",
+      "What is the privacy and deletion policy?",
+      "How many students can a household support?",
+      "What is Email Connectivity?",
+      "Does Campus Passage need my school portal password?",
+    ];
+    const fullExperience = answerPublicQuestion("What is the full experience from start to finish?");
+    assert.match(fullExperience.answer, /illustrative example/i);
+    const publicResponses = [...accepted.map(answerPublicQuestion), answerPublicQuestion("When is Harvard's application deadline?")];
+    for (const response of publicResponses) assert.doesNotMatch(JSON.stringify(response), /\bfictional\b/i);
+    assert.doesNotMatch(`${publicPage}\n${publicForm}\n${publicLibrary}`, /\bfictional\b/i);
+  });
+
   it("redirects school research, deadlines, scholarships, eligibility, advice, actions, payments, and records", () => {
     const refused = [
       "When is the application deadline at UT Austin?",
