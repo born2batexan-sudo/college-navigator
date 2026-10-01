@@ -3,10 +3,68 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { callbackLoginLocation, isNoCodeSignupReturn } from "../lib/auth/callback";
+import { canonicalPreviewLocation } from "../lib/auth/origin";
+import { NextRequest } from "next/server";
+import { proxy } from "../proxy";
 
 const ROOT = process.cwd();
 
 describe("email authentication callback", () => {
+  it("canonicalizes only this protected Preview branch to its allowlisted auth origin", () => {
+    const previewUrl = new URL("https://college-navigator-gubxjz7d3-j-dock.vercel.app/welcome?tab=schools");
+    const alias = "https://college-navigator-git-review-mvp-school-research-queue-j-dock.vercel.app";
+    const canonical = canonicalPreviewLocation(
+      previewUrl,
+      "preview",
+      "review/mvp-school-research-queue",
+      alias,
+    );
+    assert.equal(canonical?.href, `${alias}/welcome?tab=schools`);
+    assert.equal(canonicalPreviewLocation(new URL(`${alias}/login?next=%2Fwelcome`), "preview", "review/mvp-school-research-queue", alias), null);
+    assert.equal(canonicalPreviewLocation(previewUrl, "production", "main", alias), null);
+    assert.equal(canonicalPreviewLocation(previewUrl, "preview", "other/review-branch", alias), null);
+    assert.throws(
+      () => canonicalPreviewLocation(previewUrl, "preview", "review/mvp-school-research-queue", "https://www.campuspassage.com"),
+      /allowlisted review-branch origin/,
+    );
+
+    const proxy = readFileSync(path.join(ROOT, "proxy.ts"), "utf8");
+    assert.match(proxy, /canonicalPreviewLocation\(request\.nextUrl\)/);
+    assert.ok(proxy.includes('(pathname === "/login" || isProtected)'));
+    assert.match(proxy, /"code", "token_hash", "access_token", "refresh_token"/);
+    assert.match(proxy, /request\.method === "GET" \|\| request\.method === "HEAD"/);
+  });
+
+  it("redirects immutable protected Preview visits before login and does not forward callback codes", async () => {
+    const alias = "https://college-navigator-git-review-mvp-school-research-queue-j-dock.vercel.app";
+    const previous = {
+      vercelEnv: process.env.VERCEL_ENV,
+      gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+      appOrigin: process.env.APP_ORIGIN,
+    };
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_GIT_COMMIT_REF = "review/mvp-school-research-queue";
+    process.env.APP_ORIGIN = alias;
+    try {
+      const protectedResponse = await proxy(new NextRequest("https://college-navigator-gubxjz7d3-j-dock.vercel.app/welcome?tab=schools"));
+      assert.equal(protectedResponse.status, 307);
+      assert.equal(protectedResponse.headers.get("location"), `${alias}/welcome?tab=schools`);
+      assert.match(protectedResponse.headers.get("cache-control") ?? "", /private/);
+
+      const callbackResponse = await proxy(new NextRequest("https://college-navigator-gubxjz7d3-j-dock.vercel.app/auth/callback?code=one-time-code"));
+      assert.equal(callbackResponse.headers.get("location"), null);
+    } finally {
+      for (const [key, value] of Object.entries({
+        VERCEL_ENV: previous.vercelEnv,
+        VERCEL_GIT_COMMIT_REF: previous.gitRef,
+        APP_ORIGIN: previous.appOrigin,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("recognizes only an explicit no-code signup return without provider errors", () => {
     assert.equal(isNoCodeSignupReturn(new URLSearchParams("type=signup")), true);
     assert.equal(isNoCodeSignupReturn(new URLSearchParams("type=signup&token_hash=secret")), true);

@@ -9,6 +9,7 @@ import {
   supabaseConfigured,
 } from "@/lib/auth/env";
 import { isApplicationProtectedPath } from "@/lib/auth/protected-routes";
+import { canonicalPreviewLocation } from "@/lib/auth/origin";
 import { APPLICATION_SECURITY_HEADERS, NO_STORE, PRIVATE_NO_STORE, isUnsupportedApplicationMethod } from "@/lib/security-headers";
 
 function addSecurityHeaders(response: NextResponse): void {
@@ -46,6 +47,22 @@ export async function proxy(request: NextRequest) {
       },
     );
     return rejected;
+  }
+
+  // Sign-in uses a host-only Supabase PKCE verifier cookie. Normalize protected
+  // Preview page visits and the login form onto its allowlisted branch alias
+  // before an auth request can start. Never forward auth-response material.
+  const hasAuthResponseMaterial = ["code", "token_hash", "access_token", "refresh_token"]
+    .some((key) => request.nextUrl.searchParams.has(key));
+  if ((request.method === "GET" || request.method === "HEAD") &&
+    (pathname === "/login" || isProtected) && !hasAuthResponseMaterial) {
+    const canonicalLocation = canonicalPreviewLocation(request.nextUrl);
+    if (canonicalLocation) {
+      const canonicalRedirect = NextResponse.redirect(canonicalLocation, 307);
+      addSecurityHeaders(canonicalRedirect);
+      canonicalRedirect.headers.set("Cache-Control", PRIVATE_NO_STORE);
+      return canonicalRedirect;
+    }
   }
 
   if (isPublic || !isProtected) return response;
