@@ -90,7 +90,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       {sourceUpdatePending && (
         <section className="rounded-lg border border-warn/30 bg-warn/10 p-4">
           <p className="font-semibold text-warn">We detected a change on the official source.</p>
-          <p className="mt-1 text-sm text-ink/80">We are rechecking this item before showing instructions, dates, or costs. Use the official source below if you need to act now.</p>
+          <p className="mt-1 text-sm text-ink/80">We are rechecking this item before showing instructions, dates, or costs. Check the official destination above when available; otherwise contact the school directly.</p>
         </section>
       )}
 
@@ -120,7 +120,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       ) : dateStatus.kind === "not_applicable" ? null : (
         <section className="rounded-lg border border-line bg-white p-4 text-sm text-ink/70">
           <p className="font-medium text-ink">{action.rule.requirement}</p>
-          <p className="mt-2 text-ink/55">We are preparing clearer instructions for this item. Use the official source below before acting.</p>
+          <p className="mt-2 text-ink/55">We are preparing clearer instructions for this item. Check the official destination above if available; otherwise contact the school before acting.</p>
         </section>
       )}
 
