@@ -22,7 +22,8 @@ export function OfficialDestination({ source, rule, schoolName }: { source: Sour
         Open {schoolName} official source: {source!.label} ↗
       </a>
       <p className="mt-1 text-xs">Opens the school&apos;s source in a new tab. {sensitive ? "This is a source/instructions link, not a verified direct login or payment endpoint. Follow the school's own portal instructions; Campus Passage never signs in, submits, or pays for you." : "Follow the school's instructions yourself; Campus Passage does not act in school portals."}</p>
-      <p className="mt-1 text-xs text-ink/55">{rule.researchTerm} · {rule.applicability.replaceAll("_", " ")} · {rule.evidenceQuote ? "Research evidence on file" : "Review source for details"} · source {source!.lastVerified ? `last checked ${formatDate(source!.lastVerified)}` : "check date unavailable"}</p>
+      <p className="mt-1 text-xs text-ink/55">{rule.researchTerm} · {rule.applicability.replaceAll("_", " ")} · source {source!.lastVerified ? `last checked ${formatDate(source!.lastVerified)}` : "check date unavailable"}</p>
+      {rule.evidenceQuote && <p className="mt-1 text-xs text-ink/65">Research evidence: “{rule.evidenceQuote}”</p>}
     </> : <p className="mt-1 text-sm text-warn">Official destination unavailable — no verified official URL for this task. Check with {schoolName}; no destination has been invented.</p>}
   </div>;
 }

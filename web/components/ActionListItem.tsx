@@ -32,6 +32,7 @@ export function ActionListItem({ action, schoolName, studentIndex, readOnly = fa
         </div>
         <Link href={`/action/${action.id}`} className="mt-1 block font-display text-lg font-semibold leading-snug text-ink underline decoration-transparent hover:decoration-current">{taskTitle}</Link>
         <p className="mt-0.5 text-sm text-ink/50">{action.rule.domain}{pending ? " · official source update under review" : awaiting ? " · waiting on the school" : " · included in your school plan"}</p>
+        <p className="mt-1 text-xs text-ink/50">Why included: {action.applicabilityReason}</p>
       </div>
       <div className="flex shrink-0 items-center gap-3"><div className={overdue ? "font-medium text-urgent" : awaiting || pending ? "text-warn" : "text-ink/70"}>{pending ? "Under review" : awaiting ? DATE_NOT_POSTED_LABEL : formatDate(action.dueAt)}</div><StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} /></div>
     </div>

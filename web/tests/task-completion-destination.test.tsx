@@ -66,9 +66,22 @@ describe("independent household task completion and official destinations", () =
     assert.match(html, /target="_blank" rel="noopener noreferrer"/);
     assert.match(html, /not a verified direct login or payment endpoint/);
     assert.match(html, /Fall 2027.*last checked/);
+    assert.match(html, /Research evidence:.*Official aid instructions/);
     const unavailable = renderToStaticMarkup(<OfficialDestination source={null} rule={rule} schoolName="Fiction University" />);
     assert.match(unavailable, /Official destination unavailable/);
     assert.doesNotMatch(unavailable, /href=/);
+  });
+
+  it("withholds imported or altered off-domain source rows even if marked official", async () => {
+    const { exec } = await import("../lib/db/client");
+    await exec("UPDATE sources SET url=$1 WHERE id=$2", ["https://lookalike.example.net/aid", source.id]);
+    try {
+      assert.equal((await R.getActionInstanceFull(ids[0]))?.source, null);
+      const full = await R.getActionInstanceFull(ids[0]);
+      assert.equal((await R.listActionInstancesForRelationship(full!.relationship.id, rule.researchTerm))[0].source, null);
+    } finally {
+      await exec("UPDATE sources SET url=$1 WHERE id=$2", [source.url, source.id]);
+    }
   });
 
   it("keeps landing/sample visuals structurally honest relative to signed-in completion and destination", () => {

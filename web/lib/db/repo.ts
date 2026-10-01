@@ -641,6 +641,16 @@ export async function hasPendingSourceChange(sourceId: string | null): Promise<b
   return !!(await queryOne("SELECT 1 AS pending FROM change_events WHERE source_id=$1 AND review_state='pending' LIMIT 1", [sourceId]));
 }
 
+// Revalidate at read time as well: imported/legacy source rows must not become outgoing links
+// merely because their authority_level says "official".
+async function approvedSourceForRule(rule: Rule, institution?: Institution): Promise<Source | null> {
+  if (!rule.sourceId) return null;
+  const source = await getSource(rule.sourceId);
+  const school = institution ?? await getInstitution(rule.institutionId);
+  return source && school && source.authorityLevel === "official" &&
+    source.institutionId === rule.institutionId && isOfficialInstitutionUrl(source.url, school) ? source : null;
+}
+
 export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[]> {
   const rows = researchTerm
     ? await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
@@ -652,7 +662,7 @@ export async function listActionInstancesForRelationship(relationshipId: string,
     const rule = (await getRuleById(action.ruleId))!;
     const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
     const guidance = pendingSourceChange ? null : await getGuidanceForRule(rule.id);
-    const source = rule.sourceId ? await getSource(rule.sourceId) : null;
+    const source = await approvedSourceForRule(rule);
     out.push({ ...action, rule, guidance, source, pendingSourceChange });
   }
   return out;
@@ -668,7 +678,7 @@ export async function getActionInstanceFull(id: string) {
   if (!action) return null;
   const rule = (await getRuleById(action.ruleId))!;
   const guidance = await getGuidanceForRule(rule.id);
-  const source = rule.sourceId ? await getSource(rule.sourceId) : null;
+  const source = await approvedSourceForRule(rule);
   const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
   const relationship = (await getRelationship(action.relationshipId))!;
   return { ...action, rule, guidance: pendingSourceChange ? null : guidance, source, relationship, pendingSourceChange };
