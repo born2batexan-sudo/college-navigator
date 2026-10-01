@@ -1,5 +1,5 @@
 export type PublicAskCategory =
-  | "overview" | "full-experience" | "getting-started" | "multiple-students"
+  | "access-cost" | "overview" | "full-experience" | "getting-started" | "multiple-students"
   | "college-allowance" | "sources" | "task-completion" | "dashboard"
   | "privacy" | "email-coming-soon" | "feedback" | "administrator-support"
   | "product-boundaries";
@@ -14,6 +14,10 @@ export type PublicAskAnswer = {
 // Local, deterministic product help. No network, visitor-text interpolation, account or research imports.
 // Keep these facts aligned with public copy and signed-in controls; they are not live school answers.
 const answers: Record<PublicAskCategory, { label: string; answer: string }> = {
+  "access-cost": {
+    label: "Current access and cost",
+    answer: "There is no charge to start using Campus Passage right now. Payments are paused and checkout is disabled. Start Now gives your household the full experience without payment while we gather feedback.",
+  },
   overview: {
     label: "What Campus Passage does",
     answer: "Campus Passage organizes college steps into a plan by student, school, and term. It separates family actions from school-side waits and unknowns, with official-source links where findings are verified.",
@@ -75,8 +79,8 @@ function outsideScope(q: string): PublicAskAnswer | null {
   // A question about the PRODUCT's capabilities is different from requesting a personal answer.
   const product = /\b(?:campus passage|this (?:app|product|service)|your (?:app|product|service))\b/.test(q);
   const capability = product && /\b(?:does|can|could|will|how does|what does|what can|why doesn't|why can't)\b/.test(q);
-  if ((/\b(?:harvard|stanford|rice|baylor|ucla|usc|mit|nyu|ut austin)\b/.test(q) && /\b(?:when|how|what|can|should|deadline|scholarship|aid|require|apply|eligible|portal|admission)\b/.test(q)) ||
-      (/\b(?:university of [a-z]+|[a-z]+ (?:university|college|institute))\b/.test(q) && /\b(?:when|deadline|scholarship|aid|require|apply|eligible|portal|admission|research|look up|offer|accept)\b/.test(q))) {
+  if ((/\b(?:harvard|stanford|rice|baylor|ucla|usc|mit|nyu|ut austin)\b/.test(q) && /\b(?:when|how|what|can|should|deadline|scholarship|aid|require|apply|eligible|portal|admission|tuition|cost|fees?)\b/.test(q)) ||
+      (/\b(?:university of [a-z]+|[a-z]+ (?:university|college|institute))\b/.test(q) && /\b(?:when|deadline|scholarship|aid|require|apply|eligible|portal|admission|research|look up|offer|accept|tuition|cost|fees?)\b/.test(q))) {
     return redirect("For a tracked college and student, choose Start Now to enter your Passage. There, Ask about your journey can cite current, certified official findings for the entering term when available; check the school's own instructions for decisions.");
   }
   if (/\b(?:my|our)\b.{0,55}\b(?:household|account|profile|student|child|daughter|son|task|status|application|record|plan)\b/.test(q) &&
@@ -98,8 +102,9 @@ function outsideScope(q: string): PublicAskAnswer | null {
   if (/\b(?:what does|does|when does)\s+(?!(?:campus passage|it|this|your (?:app|product|service))\b)[a-z][a-z\s'-]{1,40}\s+(?:require|offer|accept|open|close|need)\b/.test(q) && !capability) {
     return redirect("Choose Start Now to track the college in your Passage and ask about its tasks there. When certified official evidence supports an answer for your student's term, Ask provides a citation; check the school's current instructions.");
   }
-  if (/\b(?:price|pricing|cost|pay|purchase|subscription|billing)\b/.test(q) && !/\b(?:task|school|college|aid)\b/.test(q)) {
-    return redirect("Choose Start Now for current access details and to begin your household plan. I can explain how the Passage works here; account details are available after sign-in.");
+  // A college's tuition or fees are school research, not the cost of this product.
+  if (/\b(?:tuition|(?:school|college|university|application|enrollment) (?:fee|fees|costs?|price))\b/.test(q) && !product) {
+    return redirect("For a tracked college's tuition or fees, choose Start Now and ask about your journey inside the Passage. Check the school's current official information for the applicable student and term.");
   }
   return null;
 }
@@ -114,15 +119,18 @@ export function answerPublicQuestion(input: string): PublicAskAnswer {
 
   const matches: PublicAskCategory[] = [];
   const include = (category: PublicAskCategory, pattern: RegExp) => { if (pattern.test(q)) matches.push(category); };
-  include("overview", /\b(?:what (?:is|does|can) (?:campus passage|the app|the product|it)(?: do)?|what's campus passage|about campus passage|tell me about (?:campus passage|the product)|overview|help (?:families|parents)|organize (?:college|the journey)|college journey)\b/);
-  include("full-experience", /\b(?:full (?:campus passage )?experience|whole (?:experience|journey)|entire (?:experience|journey)|end.to.end|start to finish|from (?:application|applying|start).{0,30}(?:move.in|finish)|how (?:does (?:campus passage|it)|(?:campus passage|it)) work|family journey|sample plan)\b/);
-  include("getting-started", /\b(?:start now|get started|how (?:do|can) (?:i|we) start|how to (?:start|begin)|sign up|sign in|log in|create an account|register|onboard|set up (?:my|our|a|the) household|begin using|gain access|access (?:the|my) (?:plan|product|experience))\b/);
-  include("multiple-students", /\b(?:multiple students|more than one student|several students|two students|siblings|student profiles|how many students|another student|second student|my (?:kids|children|daughter and son)|switch students|separate students|both (?:of my )?students)\b/);
+  // Cost is a public product fact, not a private account detail. Keep this in the
+  // normal topic classifier so a compound question can receive both answers.
+  include("access-cost", /\b(?:costs?|costing|pric(?:e|es|ing)|prcie|prcies|pricng|charg(?:e|es|ed|ing)|payment(?:s)?|paym?ents?|paymnts?|paid|pay|billing|billed|subscriptions?|subcription|subscrption|purchas(?:e|ing)|fees?|free|how much)\b/);
+  include("overview", /\b(?:what is (?:campus passage|the app|the product|this (?:app|product|service)|this|it)|what (?:does|can) (?:campus passage|the app|the product|this (?:app|product|service)|this|it) do|what's (?:campus passage|this)|about campus passage|tell me about (?:campus passage|the product|this)|overview|help (?:families|parents)|organize (?:college|the journey)|college journey)\b/);
+  include("full-experience", /\b(?:full (?:campus passage )?experience|whole (?:experience|journey)|entire (?:experience|journey)|end.to.end|start to finish|from (?:application|applying|start).{0,30}(?:move.in|finish)|how (?:does (?:campus passage|it|this)|(?:campus passage|it|this)) work|family journey|sample plan)\b/);
+  include("getting-started", /\b(?:start now|get started|how (?:do|can) (?:i|we) start|how to (?:start|begin)|what happens (?:after|when) (?:i |we )?(?:start|sign up|select start now)|sign up|sign in|log in|create an account|make an account|register|onboard|set up (?:my|our|a|the) household|begin using|gain access|access (?:the|my) (?:plan|product|experience)|(?:need|require|verify|use) (?:an? |my |our )?email(?: address)?|email (?:address|verification|required))\b/);
+  include("multiple-students", /\b(?:multiple students|more than one (?:student|kid|child)|several (?:students|kids|children)|two (?:students|kids|children)|siblings|student profiles|how many students|another student|second student|my (?:kids|children|daughter and son)|switch students|separate students|both (?:of my )?(?:students|kids|children))\b/);
   include("college-allowance", /\b(?:how many (?:colleges|schools)|number of (?:colleges|schools)|college (?:limit|allowance|maximum)|school (?:limit|allowance)|up to (?:10|ten) (?:colleges|schools)|ten unique colleges|add (?:more|another) (?:college|school)|track (?:more than|multiple|several|ten) (?:colleges|schools)|colleges (?:can|may) (?:i|we) (?:add|track))\b/);
-  include("sources", /\b(?:sources?|citations?|cite|official|verified|verification|evidence|uncertain|conflict|published|current information|accurate|fresh|stale|recheck|check date|last checked|outdated|up.to.date)\b/);
+  include("sources", /\b(?:sources?|citations?|cite|official|verified|verification|evidence|uncertain|conflict|published|current information|accurate|fresh|stale|recheck|check date|last checked|outdated|up.to.date|where (?:does|do) (?:the |your )?(?:school )?(?:information|info|facts|answers) come from|where do you get (?:your |the )?(?:school )?(?:information|info|facts|answers))\b/);
   include("task-completion", /\b(?:completed|completion|check(?:ed)? off|checkbox|mark(?:ing)? (?:a |my |the )?task|finish(?:ed)? (?:a |my |the )?task|done with (?:a |my |the )?task|undo a task)\b/);
   include("dashboard", /\b(?:dashboard|task list|task status|tasks (?:show|appear|stay|disappear)|what needs attention|whose move|see (?:my|our|the) plan|school tasks|where (?:can|do) (?:i|we) (?:see|find) (?:the |my |our )?(?:plan|tasks))\b/);
-  include("privacy", /\b(?:privacy|private|my data|our data|personal data|delete (?:my|our) (?:data|account)|deletion|stored|store (?:my|our)|retention|secure|security|who can see|household access|data sharing|protect (?:my|our))\b/);
+  include("privacy", /\b(?:privacy|private|my data|our data|personal data|delete (?:my|our) (?:data|account)|deletion|stored|store (?:my|our)|retention|secure|security|who can see|household access|data sharing|protect (?:my|our)|(?:my|our) (?:info|information)|is (?:my|our) (?:info|information) private|how (?:is|do you keep) (?:my|our) (?:info|information))\b/);
   include("email-coming-soon", /\b(?:email connectivity|connected mail|inbox|coming soon|connect (?:my |an? )?email|email connection|read (?:my|our) email|mail privacy|email consent)\b/);
   include("feedback", /\b(?:feedback|suggestion|report a bug|feature request|share (?:my|our) thoughts|send (?:a )?comment)\b/);
   include("administrator-support", /\b(?:administrator|admin(?:istrator)?s?|human help|contact (?:a|an|the|your) (?:person|team|admin|support)|customer support|support team|get support|help desk|trouble with (?:my|our) account|speak to (?:someone|a person))\b/);
