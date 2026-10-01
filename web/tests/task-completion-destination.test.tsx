@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { OfficialDestination, verifiedOfficialUrl } from "../components/OfficialDestination";
+import { ActionListItem } from "../components/ActionListItem";
 import type { Rule, Source } from "../lib/db/types";
 import { partitionTasks } from "../lib/task-progress";
 
@@ -117,22 +120,12 @@ describe("independent household task completion and official destinations", () =
     assert.match(html, /not a verified direct login or payment endpoint/);
     assert.match(html, /Fall 2027.*last checked/);
     assert.match(html, /Research evidence:.*Official aid instructions/);
-    const wrongAudience = renderToStaticMarkup(<OfficialDestination source={{ ...source, url: "https://www.ou.edu/admissions/counselor-resources/slate-account" }} rule={{ ...rule, title: "Check application portal" }} schoolName="University of Oklahoma" />);
-    assert.match(wrongAudience, /Official destination unavailable/);
-    assert.doesNotMatch(wrongAudience, /counselor-resources|href=/);
     const undated = renderToStaticMarkup(<OfficialDestination source={{ ...source, lastVerified: null }} rule={rule} schoolName="Fiction University" />);
     assert.match(undated, /Official destination unavailable/);
     assert.doesNotMatch(undated, /href=/);
-    for (const [url, title] of [
-      ["https://admissions.utexas.edu/apply/freshman/", "Submit financial-aid forms"],
-      ["https://www.ou.edu/admissions/apply/freshman", "Confirm transcript received"],
-    ]) {
-      const mismatched = renderToStaticMarkup(<OfficialDestination source={{ ...source, url }} rule={{ ...rule, title }} schoolName="Reviewed School" />);
-      assert.match(mismatched, /Official destination unavailable/);
-      assert.doesNotMatch(mismatched, /href=/);
-      const differentTask = renderToStaticMarkup(<OfficialDestination source={{ ...source, url }} rule={{ ...rule, title: "Review admissions instructions" }} schoolName="Reviewed School" />);
-      assert.match(differentTask, /href="https:\/\//, "do not suppress unrelated source use");
-    }
+    const crossSchool = renderToStaticMarkup(<OfficialDestination source={{ ...source, institutionId: "another-school" }} rule={rule} schoolName="Fiction University" />);
+    assert.match(crossSchool, /Official destination unavailable/);
+    assert.doesNotMatch(crossSchool, /href=/);
     const unavailable = renderToStaticMarkup(<OfficialDestination source={null} rule={rule} schoolName="Fiction University" />);
     assert.match(unavailable, /Official destination unavailable/);
     assert.doesNotMatch(unavailable, /href=/);
@@ -141,6 +134,42 @@ describe("independent household task completion and official destinations", () =
     assert.match(preview, /<summary[^>]*>How official destinations work<\/summary>/);
     assert.match(preview, /no external destination or source-check claim/);
     assert.doesNotMatch(preview, /href=/);
+  });
+
+  it("withholds audited live fixture task/source pairs in the rendered cards, not fabricated task titles", async () => {
+    // Read-only staging fixture snapshot, 2026-10-01: rules + guidance_assets + sources.
+    // The visible task title is guidance.what; the underlying rule.title is a research checkpoint.
+    const fixtures = [
+      { school: "University of Texas at Austin", institutionId: "inst_7b2274ac563f45878b11101d5a89f38f", ruleId: "rule_ut_aid03", checkpointCode: "AID-03", domain: "Financial Aid", title: "Priority aid deadline verified", guidanceWhat: "Submit financial aid forms by the priority deadline", sourceId: "src_ut_apply_freshman", url: "https://admissions.utexas.edu/apply/freshman/", label: "Freshman Admission", lastVerified: "2026-09-13T00:00:00.000Z", withheld: true },
+      { school: "University of Texas at Austin", institutionId: "inst_7b2274ac563f45878b11101d5a89f38f", ruleId: "rule_ut_adm01", checkpointCode: "ADM-01", domain: "Admissions", title: "Application platform(s) and applicant type path identified", guidanceWhat: null, sourceId: "src_ut_apply_freshman", url: "https://admissions.utexas.edu/apply/freshman/", label: "Freshman Admission", lastVerified: "2026-09-13T00:00:00.000Z", withheld: false },
+      { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm05", checkpointCode: "ADM-05", domain: "Admissions", title: "Transcript submission rules verified", guidanceWhat: "Confirm your transcript is received", sourceId: "src_ou_admissions_apply_freshman", url: "https://www.ou.edu/admissions/apply/freshman", label: "Freshman Admissions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: true },
+      { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm01", checkpointCode: "ADM-01", domain: "Admissions", title: "Application platform(s) and applicant type path identified", guidanceWhat: null, sourceId: "src_ou_admissions_apply_freshman", url: "https://www.ou.edu/admissions/apply/freshman", label: "Freshman Admissions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: false },
+      { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm11", checkpointCode: "ADM-11", domain: "Admissions", title: "Application status portal and post-submit monitoring path identified", guidanceWhat: "Check the application portal for missing items", sourceId: "src_ou_resources_slate_account", url: "https://www.ou.edu/admissions/counselor-resources/slate-account", label: "Slate Account (Counselor Resources)", lastVerified: "2026-09-10T00:00:00.000Z", withheld: true },
+    ] as const;
+    const baseline = (await R.getActionInstanceFull(ids[0]))!;
+    for (const fixture of fixtures) {
+      const actualRule = { ...rule, id: fixture.ruleId, institutionId: fixture.institutionId, checkpointCode: fixture.checkpointCode, domain: fixture.domain, title: fixture.title, researchTerm: "Fall 2027", applicability: "applies" as const, sourceId: fixture.sourceId };
+      const actualSource = { ...source, id: fixture.sourceId, institutionId: fixture.institutionId, url: fixture.url, label: fixture.label, lastVerified: fixture.lastVerified };
+      const actualGuidance = fixture.guidanceWhat ? { id: `guidance-${fixture.ruleId}`, ruleId: fixture.ruleId, what: fixture.guidanceWhat, when: "", why: "", how: "", consequence: "", deepLink: null, generatedBy: "fixture", createdAt: "", updatedAt: "" } : null;
+      const card = renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {}, bfcacheId: "_test_" } },
+        <ActionListItem action={{ ...baseline, rule: actualRule, source: actualSource, guidance: actualGuidance }} schoolName={fixture.school} />));
+      assert.ok(card.includes(fixture.guidanceWhat ?? fixture.title), `${fixture.ruleId}: actual card heading`);
+      assert.equal(actualRule.researchTerm, "Fall 2027");
+      if (fixture.withheld) {
+        assert.match(card, /Official destination unavailable/, fixture.ruleId);
+        assert.doesNotMatch(card, /href="https:\/\//, fixture.ruleId);
+        assert.doesNotMatch(card, /official source: /, fixture.ruleId);
+      } else {
+        assert.match(card, /href="https:\/\//, `${fixture.ruleId}: unrelated use of the same source remains linked`);
+      }
+    }
+    // Neither changed editorial text nor a trivial URL suffix restores the audited wrong-task link.
+    const aid = fixtures[0];
+    const aidRule = { ...rule, institutionId: aid.institutionId, checkpointCode: aid.checkpointCode, title: "An entirely rewritten aid checkpoint" };
+    const aidSource = { ...source, institutionId: aid.institutionId, url: `${aid.url}?ref=plan` };
+    const changed = renderToStaticMarkup(<OfficialDestination source={aidSource} rule={aidRule} schoolName={aid.school} />);
+    assert.match(changed, /Official destination unavailable/);
+    assert.doesNotMatch(changed, /href=/);
   });
 
   it("withholds imported or altered off-domain source rows even if marked official", async () => {

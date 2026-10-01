@@ -14,23 +14,32 @@ export function verifiedOfficialUrl(source: Source | null | undefined): string |
   } catch { return null; }
 }
 
-export function OfficialDestination({ source, rule, schoolName, illustrative = false }: { source: Source | null | undefined; rule: Pick<Rule, "title" | "domain" | "researchTerm" | "applicability" | "evidenceQuote">; schoolName: string; illustrative?: boolean }) {
-  const verified = verifiedOfficialUrl(source);
-  // This legacy source is specifically a counselor Slate.org resource, not a
-  // student's OU application portal. A 200 on ou.edu does not make it a safe
-  // applicant destination. Withhold rather than invent a replacement URL.
-  const wrongAudience = /application portal/i.test(rule.title) &&
-    /^https:\/\/(?:www\.)?ou\.edu\/admissions\/counselor-resources\/slate-account(?:[/?#]|$)/i.test(verified ?? "");
-  // These exact legacy source/task pairs were reviewed against their public
-  // pages: freshman application instructions do not answer an aid-form task,
-  // and OU's general admissions page does not confirm receipt of a transcript.
-  // Withhold the mismatched task links rather than pretending a 200 certifies
-  // task applicability. Other actions using these sources remain unaffected.
-  const wrongTask = (rule.title.toLowerCase() === "submit financial-aid forms" &&
-    verified === "https://admissions.utexas.edu/apply/freshman/") ||
-    (rule.title.toLowerCase() === "confirm transcript received" &&
-    verified === "https://www.ou.edu/admissions/apply/freshman");
-  const href = wrongAudience || wrongTask ? null : verified;
+type DestinationRule = Pick<Rule, "title" | "domain" | "researchTerm" | "applicability" | "evidenceQuote"> &
+  Partial<Pick<Rule, "institutionId" | "checkpointCode">>; // illustrative landing preview has no live rule identity
+
+/** Audited staging task/source mismatches. Key on institution + stable checkpoint + actual URL,
+ * not the research rule's editorial title (or the separate guidance.what shown on cards).
+ * An unchanged source page remains withheld even if labels, guidance, or source rows change.
+ * Adding a checked, applicable replacement URL requires a separate source review. */
+function mismatchedTaskSource(rule: DestinationRule, source: Source | null | undefined, verified: string | null): boolean {
+  if (!verified || !source || !rule.institutionId || !rule.checkpointCode ||
+      source.institutionId !== rule.institutionId) return false;
+  const url = new URL(verified);
+  const page = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  const audited = [
+    { institution: "inst_7b2274ac563f45878b11101d5a89f38f", checkpoint: "AID-03", page: "https://admissions.utexas.edu/apply/freshman" },
+    { institution: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", checkpoint: "ADM-05", page: "https://www.ou.edu/admissions/apply/freshman" },
+    // Counselor-only Slate.org resources must not be presented as an applicant's status portal.
+    { institution: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", checkpoint: "ADM-11", page: "https://www.ou.edu/admissions/counselor-resources/slate-account" },
+  ];
+  return audited.some(item => item.institution === rule.institutionId && item.checkpoint === rule.checkpointCode && item.page === page);
+}
+
+export function OfficialDestination({ source, rule, schoolName, illustrative = false }: { source: Source | null | undefined; rule: DestinationRule; schoolName: string; illustrative?: boolean }) {
+  // A cross-school source row is not a task-matched destination, even when its host is official.
+  const verified = source && rule.institutionId && source.institutionId !== rule.institutionId
+    ? null : verifiedOfficialUrl(source);
+  const href = mismatchedTaskSource(rule, source, verified) ? null : verified;
   const sensitive = /portal|log[ -]?in|payment|pay |deposit|billing|accept.*award/i.test(`${rule.title} ${rule.domain}`);
   return <div className="rounded-lg border border-line bg-white/80 p-3 text-sm text-ink/75" data-official-destination>
     <p className="font-semibold text-ink">Official destination · {sensitive ? "portal/login/payment-sensitive task" : "information and instructions"}</p>
