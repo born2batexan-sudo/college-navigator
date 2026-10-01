@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireSelectedStudent } from "@/lib/auth/session";
 import { listStudentsForHousehold } from "@/lib/db/repo";
 import { StudentSwitcher } from "@/components/StudentSwitcher";
-import { CHOICE_OPTIONS, HOUSING_OPTIONS, INTAKE_QUESTIONS, intakeSummary, readIntake } from "@/lib/intake";
+import { IntakeForm } from "@/components/IntakeForm";
+import { intakeSummary, readIntake } from "@/lib/intake";
 import { saveIntake } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -28,17 +29,7 @@ export default async function IntakePage({ searchParams }: { searchParams: Promi
     <aside className="rounded-xl border border-warn/30 bg-warn/10 p-4 text-sm text-ink/80">
       <strong>School requirements come first.</strong> A No answer may set aside optional planning items; it cannot waive a school requirement. Unsure and Ask me later keep potentially relevant steps visible. School-specific answers in <Link href={`/welcome?student=${encodeURIComponent(student.id)}`} className="underline">school settings</Link> take precedence over these general preferences. Check the school&apos;s official policy for exceptions or conflicts.
     </aside>
-    <form action={saveIntake} className="flex flex-col gap-5">
-      <input type="hidden" name="studentId" value={student.id} />
-      <div className="grid gap-4 md:grid-cols-2">{INTAKE_QUESTIONS.map((question, index) => <div key={question.key} className="rounded-2xl border border-line bg-white/80 p-5 shadow-card">
-        <label htmlFor={`answer-${question.key}`} className="block text-sm font-semibold text-ink">{index + 1}. {question.title}</label>
-        <p className="mt-1 text-sm text-ink/60">{question.prompt}</p>
-        <select id={`answer-${question.key}`} name={question.key} defaultValue={answers[question.key] ?? "ask_later"} disabled={isDemo} className="mt-3 w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink disabled:opacity-60">
-          {(question.kind === "housing" ? HOUSING_OPTIONS : CHOICE_OPTIONS).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </div>)}</div>
-      <div><button disabled={isDemo} type="submit" className="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Save {student.name}&apos;s preferences</button></div>
-    </form>
+    <IntakeForm studentId={student.id} studentName={student.name} answers={answers} isDemo={isDemo} action={saveIntake} />
     <section aria-label="Preference overview" className="rounded-2xl border border-line bg-white/80 p-5 text-sm text-ink/70">
       <h2 className="font-display text-xl font-semibold text-ink">Current planning picture</h2>
       <p className="mt-2">{summary.explore.length} areas to explore · {summary.open.length} left open · {summary.setAside.length} set aside for now.</p>
