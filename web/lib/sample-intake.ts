@@ -30,7 +30,7 @@ export function updateStudentAnswer<K extends keyof IntakeAnswers>(answers: Inta
 }
 
 function exampleRow(student: DemoStudentId, title: string, detail: string, kind: string, school: string): DemoActionRow {
-  return { student, school, kind, title, detail, stake: "Use the official source to check what applies before making a decision.", status: "For planning · no date assumed", tone: "aware", queueTag: "For planning", source: `Fictional source example — ${school} · illustrative ${kind.toLowerCase()} page · Fall 2027 · no live page reviewed` };
+  return { student, school, kind, title, detail, stake: "Use the official source to check what applies before making a decision.", status: "For planning · no date assumed", tone: "aware", queueTag: "For planning", source: `Illustrative source label — ${school} · illustrative ${kind.toLowerCase()} page · Fall 2027 · no live page reviewed` };
 }
 
 type OptionalStep = { row: DemoActionRow; show: boolean; whyShown: string; whyAside: string };
@@ -40,7 +40,7 @@ function optionalSteps(student: DemoStudentId, a: IntakeAnswers): OptionalStep[]
   return [
     add("Compare aid requirements", "Check the school's own aid steps and timing before relying on an offer.", "Financial aid", a.aid, "Shown because financial aid is part of this student's plan.", "Set aside because financial aid is not selected; school requirements still need independent checking."),
     add("Review school scholarship routes", "Check whether the school considers applicants automatically or asks for a separate submission.", "School scholarships", a.schoolScholarships, "Shown because school scholarships are selected.", "Set aside because school scholarships are not selected."),
-    add("Look for community scholarships", "Check sponsor instructions; a listing is not an eligibility or award decision.", "Outside scholarships", a.outsideScholarships && student !== "priya", "Shown because outside scholarships are selected.", "Set aside because outside scholarships are not selected.", "Fictional community sponsor"),
+    add("Look for community scholarships", "Check sponsor instructions; a listing is not an eligibility or award decision.", "Outside scholarships", a.outsideScholarships && student !== "priya", "Shown because outside scholarships are selected.", "Set aside because outside scholarships are not selected.", "Example community sponsor"),
     add("Plan a 529 or prepaid-plan question", "Ask the plan administrator and school billing office about their own payment instructions; this example makes no qualified-expense determination.", "Education savings", a.educationSavings, "Shown because 529 or prepaid funds may be used.", "Set aside because 529 or prepaid use is not selected."),
     add("Explore campus housing choices", "Review the school's housing process separately from admission.", "Housing", a.living === "campus" && student !== "priya", "Shown because on-campus residence is selected.", "Set aside because on-campus residence is not selected; any school requirement still takes priority."),
     add("Consider off-campus housing questions", "Check local and school guidance before committing to a lease.", "Housing", a.living === "offCampus", "Shown because off-campus housing is selected.", "Set aside because off-campus housing is not selected."),
@@ -81,7 +81,7 @@ export function personalizedPlan(selection: DemoSelection, intake: IntakeByStude
     if (student.id === "priya") {
       const conflict = a.living !== "campus";
       const required: PlanItem = {
-        ...exampleRow(student.id, "Review first-year residence requirement", "In this fictional example, North Valley's first-year residence rule applies. Check the school's own instructions and exception process before planning a commute or other housing.", "School requirement", "North Valley University"),
+        ...exampleRow(student.id, "Review first-year residence requirement", "In this illustration, North Valley's first-year residence rule is shown. Check the school's own instructions and exception process before planning a commute or other housing.", "School requirement", "North Valley University"),
         status: "School requirement · check official policy",
         whyShown: conflict ? `The ${a.living === "undecided" ? "living plan is undecided" : "selected living plan differs from the school's illustrated first-year residence rule"}. A school requirement stays visible even when a preference would filter out housing items.` : "Shown because the illustrated school requires first-year residence, even when other housing information is optional.",
         exception: conflict,

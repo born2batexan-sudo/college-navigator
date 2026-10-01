@@ -39,7 +39,7 @@ function SampleItem({ row }: { row: PlanItem }) {
       <h3>{row.title}</h3>
       <p>{row.detail}</p>
       <p className="sample-why"><strong>{row.exception ? "School rule takes priority: " : "Why this appears: "}</strong>{row.whyShown}</p>
-      {row.tone === "action" && <div className="sample-why"><label><input type="checkbox" disabled /> Completed (read-only example)</label><p>Official destination unavailable in this fictional sample — no real school URL is connected. Campus Passage does not sign in, submit, or pay for you.</p></div>}
+      {row.tone === "action" && <div className="sample-why"><label><input type="checkbox" disabled /> Completed (read-only example)</label><p>Official destination unavailable in this illustrative example — no real school URL is connected. Campus Passage does not sign in, submit, or pay for you.</p></div>}
       <details className="sample-anatomy"><summary>See item context</summary>
         <dl>
           <div><dt>What it is</dt><dd>{row.kind}: {row.title}</dd></div>
@@ -48,7 +48,7 @@ function SampleItem({ row }: { row: PlanItem }) {
           <div><dt>By when</dt><dd>{row.status}</dd></div>
           <div><dt>What&apos;s at stake</dt><dd>{row.stake}</dd></div>
           <div><dt>Official source</dt><dd>{row.source}. Illustrative label only; no actual school page is connected.</dd></div>
-          <div><dt>Freshness</dt><dd>Fictional sample. No live source checked or review date claimed.</dd></div>
+          <div><dt>Freshness</dt><dd>Illustrative example. No live source checked or review date claimed.</dd></div>
         </dl>
       </details>
     </article>
@@ -74,13 +74,13 @@ export default function SamplePlan() {
       <MarketingHeader current="sample" />
       <main id="main" className="sample-page site-shell">
         <Link className="sample-back" href="/">← Overview</Link>
-        <div className="sample-heading"><div><p className="eyebrow">Fictional, read-only example</p><h1 className="display">See how a meaningful next step comes into focus.</h1><p>Try a few choices and watch the plan change. Fictional students, fictional schools; your answers stay in this browser.</p></div><span className="read-only">Illustrative · read-only</span></div>
+        <div className="sample-heading"><div><p className="eyebrow">Illustrative, read-only example</p><h1 className="display">See how a meaningful next step comes into focus.</h1><p>Try a few choices and watch the plan change. This sample uses illustrative students and schools; your answers stay in this browser.</p></div><span className="read-only">Illustrative · read-only</span></div>
         <div className="pathway-selector" aria-label="Choose a pathway">
           <button type="button" aria-pressed={pathway === "single"} onClick={() => setPathway("single")}>Single Student</button>
           <button type="button" aria-pressed={pathway === "multiple"} onClick={() => setPathway("multiple")}>Multiple Students</button>
         </div>
         <section className="sample-intro" aria-live="polite">
-          {pathway === "single" ? <><h2>Priya&apos;s own next steps</h2><p>One student still has different schools, dates, responsibilities, and unknowns to keep straight. Priya is a fictional Class of 2027 applicant planning for Fall 2027.</p></> : <><h2>Different paths, the same admissions cycle</h2><p>Priya compares admissions and aid timing; Mateo explores campus visits and accessibility contacts. Both fictional students graduate in 2027 and plan for Fall 2027. A qualifying household can include <strong>two or more students</strong> under a household manager&apos;s <strong>genuine caregiving responsibility</strong> when they share the <strong>same high-school graduation year and admissions cycle</strong>. This two-student illustration is not a limit.</p></>}
+          {pathway === "single" ? <><h2>Priya&apos;s own next steps</h2><p>One student still has different schools, dates, responsibilities, and unknowns to keep straight. Priya is a sample Class of 2027 applicant planning for Fall 2027.</p></> : <><h2>Different paths, the same admissions cycle</h2><p>Priya compares admissions and aid timing; Mateo explores campus visits and accessibility contacts. In this illustration, both sample students graduate in 2027 and plan for Fall 2027. A qualifying household can include <strong>two or more students</strong> under a household manager&apos;s <strong>genuine caregiving responsibility</strong> when they share the <strong>same high-school graduation year and admissions cycle</strong>. This two-student illustration is not a limit.</p></>}
         </section>
         {pathway === "multiple" && <nav className="selection-tabs sample-filter" aria-label="Choose students to view">
           <button type="button" aria-pressed={selection === "household"} className={selection === "household" ? "is-selected" : ""} onClick={() => selectView("household")}>Both students</button>
@@ -90,7 +90,7 @@ export default function SamplePlan() {
           <div className="intake-head"><div><p className="eyebrow">Make it relevant</p><h2 id="intake-title">A few answers, a clearer plan</h2><p>The broader concept spans 12 college-journey themes; this short example asks only the choices that shape what you see. School requirements always stay visible.</p></div><span className="intake-tag">Try changing an answer ↓</span></div>
           <div className="intake-theme-map" aria-label="Twelve areas across the college journey"><span><strong>Getting in</strong> Admissions · aid · scholarships</span><span><strong>Choosing and planning</strong> Enrollment · billing and 529 · housing</span><span><strong>Getting started</strong> Health and access · orientation · campus logistics</span><span><strong>Belonging and beyond</strong> Student life · family experience · career and progression</span></div>
           {pathway === "multiple" && selection === "household" && <fieldset className="intake-student-switch"><legend>Whose answers are you changing?</legend><div className="intake-options">{demoStudents.map((entry) => <label key={entry.id} className="intake-choice"><input type="radio" name="editing-student" value={entry.id} checked={editingStudent === entry.id} onChange={() => setEditingStudent(entry.id)} /><StudentDot color={entry.color} />{entry.name.split(" ")[0]}</label>)}</div></fieldset>}
-          <p className="intake-owner"><StudentDot color={student.color} /> Editing <strong>{student.name.split(" ")[0]}&apos;s</strong> fictional answers. {pathway === "multiple" ? "The other student's answers stay separate." : "Switch to Multiple Students to compare two plans."}</p>
+          <p className="intake-owner"><StudentDot color={student.color} /> Editing <strong>{student.name.split(" ")[0]}&apos;s</strong> sample answers. {pathway === "multiple" ? "The other student's answers stay separate." : "Switch to Multiple Students to compare two plans."}</p>
           <div className="intake-grid">
             <fieldset className="intake-group"><legend>Where might {student.name.split(" ")[0]} live?</legend><div className="intake-options">{livingChoices.map(({ value, label }) => <label key={value} className="intake-choice"><input type="radio" name={`living-${editor}`} checked={answers.living === value} onChange={() => change("living", value)} />{label}</label>)}</div><p>In this example, a school&apos;s first-year residence rule is shown even if you choose commute or off-campus housing.</p></fieldset>
             <fieldset className="intake-group"><legend>Which funding paths should we consider?</legend><div className="intake-options">{fundingChoices.map(({ key, label }) => <label key={key} className="intake-choice"><input type="checkbox" checked={answers[key]} onChange={(event) => change(key, event.target.checked)} />{label}</label>)}</div><p>A listing is not an eligibility decision; the school, sponsor, or plan administrator remains the authority.</p></fieldset>
@@ -105,7 +105,7 @@ export default function SamplePlan() {
           </aside>
         </div>
         <section className="sample-cta" aria-labelledby="sample-cta-title"><h2 id="sample-cta-title">Want this for your family?</h2><div className="actions"><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link></div></section>
-        <p className="sample-disclaimer">Every student, school, date, policy, and source label on this page is fictional. The source and freshness fields show how context would be presented, not a claim that any page was checked. Confirm actual steps with the school or sponsor.</p>
+        <p className="sample-disclaimer">All names, schools, dates, policies, and source labels on this page are illustrative examples, not live school information. No school pages or sources are checked here, and no date or status should be relied on. Confirm actual steps with the school or sponsor.</p>
         <div className="sample-next"><h2>Want to understand the approach?</h2><div className="actions"><Link className="button button-secondary" href="/">Read the overview</Link><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link></div></div>
       </main>
       <MarketingFooter />

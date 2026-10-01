@@ -89,7 +89,7 @@ describe("fictional adaptive intake", () => {
     // Owner brief §4 deletes the standalone disclaimer; the intro now says answers stay in this browser.
     assert.match(copy, /your answers stay in this browser/);
     assert.doesNotMatch(copy, /fetch\(|action=|method="post"/i);
-    assert.match(copy, /Fictional sample\. No live source checked/);
+    assert.match(copy, /Illustrative example\. No live source checked or review date claimed/);
     assert.match(overview, /commuter doesn&apos;t wade through optional dorm steps/);
     assert.match(overview, /school&apos;s requirements always stay visible/);
     assert.doesNotMatch(copy, /144|checkpoint|live personalized service[^.]*is available/i);

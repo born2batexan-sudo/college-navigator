@@ -161,7 +161,7 @@ export default function CampusPassageLanding() {
             <h2 id="sample-title" className="display">Try a plan before you get started.</h2>
             <p className="lead">Pick one student or two, answer a few quick questions, and watch the plan change: what&apos;s relevant, what&apos;s set aside, and whose move each step is.</p>
             <p><Link className="button button-primary" href="/sample-plan">Open the sample plan →</Link></p>
-            <p className="fine">Meet Priya and Mateo, two fictional Class of 2027 students.</p>
+            <p className="fine">Meet Priya and Mateo in an illustrative Class of 2027 example.</p>
             <SectionStart />
           </div>
         </section>

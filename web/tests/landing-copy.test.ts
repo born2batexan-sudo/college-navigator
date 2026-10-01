@@ -1,15 +1,29 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import CampusPassageLanding from "../components/CampusPassageLanding";
+import SamplePlan from "../components/SamplePlan";
+import { metadata as sampleMetadata } from "../app/sample-plan/page";
 
 const overview = readFileSync(new URL("../components/CampusPassageLanding.tsx", import.meta.url), "utf8");
 const sample = readFileSync(new URL("../components/SamplePlan.tsx", import.meta.url), "utf8");
+const footer = readFileSync(new URL("../components/MarketingFooter.tsx", import.meta.url), "utf8");
+const landingDemo = readFileSync(new URL("../lib/landing-demo.ts", import.meta.url), "utf8");
+const sampleIntake = readFileSync(new URL("../lib/sample-intake.ts", import.meta.url), "utf8");
+const sampleRoute = readFileSync(new URL("../app/sample-plan/page.tsx", import.meta.url), "utf8");
 const header = readFileSync(new URL("../components/MarketingHeader.tsx", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const robots = readFileSync(new URL("../app/robots.ts", import.meta.url), "utf8");
 const sitemap = readFileSync(new URL("../app/sitemap.ts", import.meta.url), "utf8");
 
 function visibleText(source: string) { return source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ""); }
+const staticRouter = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {}, bfcacheId: "_test_" };
+function renderPublic(component: ReactNode) {
+  return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: staticRouter }, component));
+}
 
 describe("public copy boundaries", () => {
   it("leads with the owner-brief WHY headline and keeps the product-truth explanation", () => {
@@ -48,6 +62,26 @@ describe("public copy boundaries", () => {
     assert.doesNotMatch(overview + sample, /concierge|over the horizon|autofill|<video|product-story\.mp4/i);
     assert.doesNotMatch(overview + sample + header + layout, /CampusPassage(?!Landing|\.com)/);
   });
+  it("renders the public landing and sample without the retired label in text or accessible markup", () => {
+    const renderedLanding = renderPublic(createElement(CampusPassageLanding));
+    const renderedSample = renderPublic(createElement(SamplePlan));
+    const renderedPublicExperience = `${renderedLanding} ${renderedSample} ${JSON.stringify(sampleMetadata)}`;
+    assert.doesNotMatch(renderedPublicExperience, /\bfictional\b/i, "rendered text, ARIA names, image descriptions, title attributes, and route metadata stay clear");
+    const publicCopyModules = [overview, sample, footer, landingDemo, sampleIntake, sampleRoute, layout].map(visibleText).join("\\n");
+    assert.doesNotMatch(publicCopyModules, /\bfictional\b/i, "every text branch and data-backed sample label remains clear, including unselected pathways");
+    assert.match(sample, /In this illustration, both sample students graduate in 2027/);
+    assert.match(renderedLanding, /Illustrative examples are read-only demonstrations, not live school information or verified sources/);
+    assert.match(renderedLanding, /aria-label=\"Illustrative read-only dashboard task preview\"/);
+    assert.match(renderedSample, /Illustrative, read-only example/);
+    assert.match(renderedSample, /your answers stay in this browser/);
+    assert.match(renderedSample, /All names, schools, dates, policies, and source labels on this page are illustrative examples, not live school information/);
+    assert.match(renderedSample, /No school pages or sources are checked here/);
+    assert.match(renderedSample, /Official destination unavailable in this illustrative example — no real school URL is connected/);
+    assert.match(renderedSample, /Campus Passage does not sign in, submit, or pay for you/);
+    assert.match(renderedSample, /Completed \(read-only example\)/);
+    assert.match(JSON.stringify(sampleMetadata), /no private data or live source checks/);
+    assert.match(readFileSync(new URL("../app/sample-plan/page.tsx", import.meta.url), "utf8"), /robots:\s*\{\s*index:\s*false/);
+  });
   it("keeps exact customer pathway choices and same-cycle rule", () => {
     assert.match(sample, />Single Student<\/button>/);
     assert.match(sample, />Multiple Students<\/button>/);
@@ -55,7 +89,7 @@ describe("public copy boundaries", () => {
     assert.match(sample, /same high-school graduation year and admissions cycle/);
     assert.match(sample, /genuine caregiving responsibility/);
     assert.match(sample, /No live source checked/);
-    assert.match(sample, /Fictional sample/);
+    assert.match(sample, /Illustrative example\. No live source checked or review date claimed/);
     assert.match(overview + sample, /aria-live="polite"|aria-pressed=/);
     assert.match(overview, /className="skip-link"/);
   });

@@ -6,7 +6,7 @@ export default function MarketingFooter() {
     <footer className="site-footer">
       <div className="site-shell footer-inner">
         <RouteLockup variant="footer" />
-        <p className="footer-legal">© 2026 Campus Passage · Not affiliated with or endorsed by any college or university. Examples marked &apos;illustrative&apos; are fictional.</p>
+        <p className="footer-legal">© 2026 Campus Passage · Not affiliated with or endorsed by any college or university. Illustrative examples are read-only demonstrations, not live school information or verified sources.</p>
         <nav className="footer-links" aria-label="Footer">
           <Link href="/account/mail-privacy">Email connectivity — Coming Soon</Link>
           <span aria-hidden="true">·</span>
