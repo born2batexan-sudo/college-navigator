@@ -25,7 +25,8 @@ import type { Institution, ObservationPattern } from "./db/types";
 
 export const DEMO_HOUSEHOLD_ID = "demo-household";
 
-const ACTION_STATE_ORDER = ["not_started", "started", "submitted", "received", "complete"];
+// An observed portal page can at most report receipt; it cannot complete a family task.
+const ACTION_STATE_ORDER = ["not_started", "started", "submitted", "received"];
 
 export async function findInstitutionForUrl(url: string): Promise<Institution | null> {
   const hostname = hostnameOf(url);

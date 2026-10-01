@@ -3,6 +3,7 @@ import Link from "next/link";
 import FaqAccordion, { type FaqItem } from "@/components/FaqAccordion";
 import MarketingFooter from "@/components/MarketingFooter";
 import MarketingHeader from "@/components/MarketingHeader";
+import { LandingTaskPreview } from "@/components/LandingTaskPreview";
 
 const essentials = [
   ["What it is", "The specific task or update."],
@@ -82,15 +83,7 @@ export default function CampusPassageLanding() {
               <div className="actions"><Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link><Link className="button button-secondary" href="/sample-plan">Try the sample plan →</Link></div>
               <ul className="chips" aria-label="What to expect"><li className="chip">No portal passwords</li><li className="chip">Official sources on verified findings</li><li className="chip">Up to 144 checks per school</li><li className="chip">Per student, per school, per term</li></ul>
             </div>
-            <aside className="hero-plan-card" aria-label="Illustrative example of different kinds of updates">
-              <ol className="hero-plan-list">
-                <li><span className="hero-plan-dot dot-action" aria-hidden="true" /><span className="hero-plan-text"><strong>Fictional transcript step</strong><small>Family action · Fall 2027</small><small><label><input type="checkbox" disabled /> Completed (sample only)</label></small><small>Official destination unavailable in this fictional example</small></span></li>
-                <li><span className="hero-plan-dot dot-date" aria-hidden="true" /><span className="hero-plan-text"><strong>Housing date</strong><small>Date window</small></span></li>
-                <li><span className="hero-plan-dot dot-waiting" aria-hidden="true" /><span className="hero-plan-text"><strong>Waiting on school</strong><small>School-side wait</small></span></li>
-                <li><span className="hero-plan-dot dot-aware" aria-hidden="true" /><span className="hero-plan-text"><strong>Scholarship listing</strong><small>Awareness</small></span></li>
-              </ol>
-              <p className="hero-plan-caption">Illustrative example</p>
-            </aside>
+            <LandingTaskPreview />
           </div>
         </section>
 
@@ -149,7 +142,7 @@ export default function CampusPassageLanding() {
               ))}
             </div>
             <div className="tally"><b>Nothing is padded or guessed.</b> Each check is shown as verified, under review, not yet published, not applicable, conflicting, or withheld.</div>
-            <p className="fine">A completed check means the item was reviewed against the school&apos;s official source. It is not a guarantee of eligibility, admission, aid, or any outcome.</p>
+            <p className="fine">Research checks describe what our team reviewed against official sources. A family task is Completed only when your household selects its Completed checkbox; neither a research check nor a school-side update completes it. Neither a research finding nor a family marker is an eligibility, admission, or aid decision.</p>
             <SectionStart />
           </div>
         </section>

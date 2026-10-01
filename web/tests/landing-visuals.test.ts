@@ -28,7 +28,7 @@ describe("immersive overview and accessible presentation", () => {
     assert.match(css, /\.hero-subhead \{[^}]*clamp\(20px,2\.4vw,26px\)/);
     assert.match(css, /\.hero-inner \{[^}]*grid-template-columns: 1\.25fr \.85fr[^}]*gap: 48px[^}]*padding-top: 96px[^}]*padding-bottom: 88px/);
     assert.match(css, /\.hero-media-img \{[^}]*opacity: \.45/);
-    assert.match(css, /\.hero-plan-card \{[^}]*rgba\(251,249,244,\.97\)[^}]*border-radius: 16px[^}]*padding: 22px/);
+    assert.match(css, /\.hero-plan-card \{[^}]*rgba\(251,249,244,\.98\)[^}]*border-radius: 18px[^}]*padding: clamp\(14px,2vw,24px\)/);
     assert.match(css, /\.card \{[^}]*border-radius: 14px[^}]*padding: 22px/);
     assert.match(css, /\.grid4 \{[^}]*repeat\(4,1fr\)[^}]*gap: 16px/);
     assert.match(css, /\.split \{[^}]*grid-template-columns: 1fr 1fr[^}]*gap: 48px/);
@@ -38,7 +38,7 @@ describe("immersive overview and accessible presentation", () => {
     assert.match(css, /\.final \{[^}]*background: var\(--navy\)/);
     assert.match(css, /\.topbar \{[^}]*height: 68px/);
     assert.match(css, /\.faq-question button \{[^}]*font: 600 19px var\(--serif\)/);
-    assert.match(css, /\.hero-plan-card \{ display: none; \}/, "the illustrative card is hidden at mobile widths, as in the mockup");
+    assert.match(css, /\.hero-plan-card \{ display: block;[^}]*width: 100%; \}/, "the task example remains accessible at mobile widths");
     assert.doesNotMatch(css, /\.hero-scrim|hero-kenburns|hero-card-float|backdrop-filter/, "the mockup has no scrim, drift, or blur");
     assert.match(source, /className="banner"|MarketingHeader/);
     assert.doesNotMatch(header, /className="banner"/);

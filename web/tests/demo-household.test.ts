@@ -130,7 +130,7 @@ describe("the seeded private demo household models scalable same-cycle applicant
     const jordanDemoRel = (await R.listRelationshipsForStudent(jordan.id)).find((r) => r.institutionId === demoSchool.id)!;
     const jordanDemoActions = await R.listActionInstancesForRelationship(jordanDemoRel.id, "Fall 2027");
     assert.ok(jordanDemoActions.length >= 4, "Jordan's admitted pathway should see the full illustrative-example checklist");
-    assert.ok(jordanDemoActions.some((a) => a.state === "complete"), "at least one item should already be marked complete");
+    assert.ok(jordanDemoActions.some((a) => a.completed), "at least one item should have an explicit illustrative family marker");
     assert.ok(jordanDemoActions.some((a) => a.state === "not_started"), "at least one item should still be not started");
 
     const morganDemoRel = (await R.listRelationshipsForStudent(morgan.id)).find((r) => r.institutionId === demoSchool.id)!;

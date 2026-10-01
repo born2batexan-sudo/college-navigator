@@ -653,8 +653,8 @@ export async function main() {
   const confirmIntentRule = await getRuleByCode(demoSchool.id, "DEMO-04");
   const confirmIntent = confirmIntentRule ? await findActionInstance(jordanDemoRel.id, confirmIntentRule.id) : null;
   if (confirmIntent && confirmIntent.state === "not_started") {
-    await updateActionInstance(confirmIntent.id, { state: "complete" });
-    await createActionEvent({ actionId: confirmIntent.id, eventType: "state_change", fromState: "not_started", toState: "complete", actorType: "student" });
+    // Seed an explicit sample-family checkbox marker, not an inferred workflow completion.
+    await createActionEvent({ actionId: confirmIntent.id, eventType: "family_completion", fromState: "not_started", toState: "complete", actorType: "student" });
   }
   const depositRule = await getRuleByCode(demoSchool.id, "DEMO-01");
   const depositAction = depositRule ? await findActionInstance(jordanDemoRel.id, depositRule.id) : null;

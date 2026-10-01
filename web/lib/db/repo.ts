@@ -10,6 +10,7 @@
 
 import { queryRows, queryOne, exec, newId, nowIso } from "./client";
 import { cleanCopy } from "../copy-guard";
+import { familyCompletionForActions } from "./action-completion";
 import type {
   Household,
   Person,
@@ -651,19 +652,20 @@ async function approvedSourceForRule(rule: Rule, institution?: Institution): Pro
     source.institutionId === rule.institutionId && isOfficialInstitutionUrl(source.url, school) ? source : null;
 }
 
-export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[]> {
+export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { completed: boolean; rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[]> {
   const rows = researchTerm
     ? await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
         WHERE a.relationship_id=$1 AND r.research_term=$2`, [relationshipId, researchTerm])
     : await queryRows<any>("SELECT * FROM action_instances WHERE relationship_id = $1", [relationshipId]);
-  const out: (ActionInstance & { rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[] = [];
+  const out: (ActionInstance & { completed: boolean; rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[] = [];
+  const completed = await familyCompletionForActions(rows.map((row) => row.id));
   for (const r of rows) {
     const action = toActionInstance(r);
     const rule = (await getRuleById(action.ruleId))!;
     const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
     const guidance = pendingSourceChange ? null : await getGuidanceForRule(rule.id);
     const source = await approvedSourceForRule(rule);
-    out.push({ ...action, rule, guidance, source, pendingSourceChange });
+    out.push({ ...action, completed: completed.get(action.id) === true, rule, guidance, source, pendingSourceChange });
   }
   return out;
 }
@@ -681,7 +683,8 @@ export async function getActionInstanceFull(id: string) {
   const source = await approvedSourceForRule(rule);
   const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
   const relationship = (await getRelationship(action.relationshipId))!;
-  return { ...action, rule, guidance: pendingSourceChange ? null : guidance, source, relationship, pendingSourceChange };
+  const markers = await familyCompletionForActions([id]);
+  return { ...action, completed: markers.get(id) === true, rule, guidance: pendingSourceChange ? null : guidance, source, relationship, pendingSourceChange };
 }
 
 export async function createActionEvent(input: {
@@ -691,9 +694,10 @@ export async function createActionEvent(input: {
   toState?: string | null;
   actorType?: string;
   evidenceRef?: string | null;
+  observedAt?: string;
 }): Promise<ActionEvent> {
   const id = newId("evt");
-  const now = nowIso();
+  const now = input.observedAt ?? nowIso();
   await exec(
     "INSERT INTO action_events (id, action_id, event_type, from_state, to_state, actor_type, evidence_ref, observed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     [id, input.actionId, input.eventType, input.fromState ?? null, input.toState ?? null, input.actorType ?? "system", input.evidenceRef ?? null, now]

@@ -17,7 +17,7 @@ const NEXT_STATES: Record<string, string[]> = {
   not_started: ["started", "submitted", "blocked", "waived"],
   started: ["submitted", "blocked"],
   submitted: ["received", "blocked"],
-  received: ["complete"],
+  received: [],
   complete: [],
   blocked: ["not_started", "started"],
   waived: [],
@@ -69,7 +69,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
           {dateStatus.kind === "awaiting" ? action.rule.title : (g?.what ?? action.rule.title)}
         </h1>
         <div className="flex items-center gap-2">
-          <StatePill state={action.state} styles={STATE_STYLES} labels={STATE_LABELS} />
+          <StatePill state={action.completed ? "complete" : action.state === "complete" ? "not_started" : action.state} styles={STATE_STYLES} labels={STATE_LABELS} />
           {sourceUpdatePending ? (
             <span className="text-xs font-medium text-warn">Official source update under review</span>
           ) : dateStatus.kind === "awaiting" ? (
@@ -83,7 +83,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
       </header>
 
       {dateStatus.kind !== "not_applicable" && <section className="grid gap-3 sm:grid-cols-2 sm:items-start" aria-label="Task completion and official destination">
-        <CompletionToggle key={`${action.id}:${action.state}`} actionId={action.id} completed={action.state === "complete"} readOnly={isDemo || action.state === "waived"} />
+        <CompletionToggle key={`${action.id}:${action.completed}`} actionId={action.id} completed={action.completed} readOnly={isDemo || action.state === "waived"} />
         <OfficialDestination source={action.source} rule={action.rule} schoolName={schoolName} />
       </section>}
 

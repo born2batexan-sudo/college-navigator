@@ -6,7 +6,7 @@ import { saveFamilyCompletion } from "@/lib/db/action-completion";
 import { requireWritableOnboardedHousehold } from "@/lib/auth/session";
 import { actionBelongsToHousehold } from "@/lib/db/accounts";
 
-const VALID_STATES = new Set(["not_started", "started", "submitted", "received", "complete", "blocked", "waived", "missed"]);
+const VALID_STATES = new Set(["not_started", "started", "submitted", "received", "blocked", "waived", "missed"]);
 
 /** Student/parent manually advances an action's state from the dashboard. */
 export async function advanceActionState(actionId: string, toState: string) {
