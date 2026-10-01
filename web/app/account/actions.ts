@@ -2,10 +2,10 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { accountDeletionAdmin, deleteOwnAuthUser, preflightOwnAuthDeletion } from "@/lib/auth/account-deletion";
 import { requireHousehold, requireUser, requireWritableHousehold } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
-import { DEV_COOKIE, SUPABASE_URL, devLoginEnabled, supabaseConfigured } from "@/lib/auth/env";
+import { DEV_COOKIE, devLoginEnabled, supabaseConfigured } from "@/lib/auth/env";
 import { addStudentProfile, createInvite, deleteHousehold, getPurchaserAttestation, removeMember } from "@/lib/db/accounts";
 import { isStartTerm } from "@/lib/terms";
 import { mailEnabled } from '@/lib/mail/provider';
@@ -52,21 +52,6 @@ export async function makeInvite(formData: FormData): Promise<void> {
 }
 
 /**
- * Deletes the signed-in person's sign-in record, using the project's secret
- * service key. Returns false when that key is not configured.
- */
-async function deleteSignInRecords(authUserIds: string[]): Promise<boolean> {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseConfigured || !serviceKey) return false;
-  const admin = createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  for (const id of authUserIds) {
-    const { error } = await admin.auth.admin.deleteUser(id);
-    if (error) console.error("[account] could not delete sign-in record", id, error.message);
-  }
-  return true;
-}
-
-/**
  * Deletes the account. The plan's owner deletes the whole family plan and
  * its data (other members keep their own sign-in but lose access to it);
  * any other member only removes themself.
@@ -76,13 +61,30 @@ export async function deleteAccount(formData: FormData): Promise<void> {
   if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") {
     redirect("/account?error=" + encodeURIComponent("Type DELETE to confirm."));
   }
+  // Auth-admin preflight must happen BEFORE any app/mail data is destroyed.
+  // Missing or wrong-project credentials leave the account intact and usable.
+  let admin;
+  try {
+    admin = accountDeletionAdmin();
+    await preflightOwnAuthDeletion(admin, ctx.authUserId, ctx.email);
+  } catch {
+    redirect("/account?error=" + encodeURIComponent("Account deletion is temporarily unavailable. Your data has not been deleted; contact support."));
+  }
   if (ctx.isOwner) {
     if (mailEnabled() || (await mailStatus({id:ctx.authUserId,email:ctx.email},ctx.household.id)).some(c=>c.status!=='revoked'))
       await deleteMailData({id:ctx.authUserId,email:ctx.email},ctx.household.id);
     await deleteHousehold(ctx.household.id);
   }
   else await removeMember(ctx);
+  try {
+    await deleteOwnAuthUser(admin, ctx.authUserId);
+  } catch (error) {
+    // External Auth deletion cannot be made atomic with the app database.
+    // Surface partial cleanup honestly and flag it for operator follow-up.
+    console.error("[account] Auth deletion incomplete after app data removal", error);
+    await endSession();
+    redirect("/login?deletion=pending");
+  }
   await endSession();
-  await deleteSignInRecords([ctx.authUserId]);
   redirect("/login?deleted=1");
 }

@@ -21,6 +21,10 @@ describe("school request queue", () => {
     await Q.upsertDirectorySchool({ unitid: "100", name: "Example University", city: "Austin", state: "TX", website: "https://example.edu" });
     await Q.upsertDirectorySchool({ unitid: "100", name: "Example University", city: "Austin", state: "TX", website: "https://example.edu" });
     assert.equal((await Q.searchDirectory("austin")).length, 1);
+    await Q.upsertDirectorySchool({ unitid: "100751", name: "The University of Alabama", domain: "ua.edu" });
+    await Q.upsertDirectorySchool({ unitid: "100752", name: "Different Alabama Campus", domain: "other.edu" });
+    assert.deepEqual((await Q.searchDirectory("100751")).map(s => s.unitid), ["100751"]);
+    assert.equal((await Q.searchDirectory("10075")).length, 0);
     const ctx = await A.provisionAccount({ authUserId: "queue-user", email: "queue@example.com" });
     await A.completeOnboarding(ctx, { studentName: "Queue Student", role: "parent" });
     const first = await Q.createSchoolRequest({ householdId: ctx.household.id, unitid: "100", term: "Fall 2027" });

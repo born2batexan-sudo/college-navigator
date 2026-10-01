@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false, noimageindex: true } },
 };
 
-type Search = { error?: string; notice?: string; step?: string; email?: string; next?: string; deleted?: string; out?: string };
+type Search = { error?: string; notice?: string; step?: string; email?: string; next?: string; deleted?: string; deletion?: string; out?: string };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Search> }) {
   const query = await searchParams;
@@ -41,8 +41,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </p>
         </header>
 
-        {query.deleted && (
+        {query.deleted === "1" && (
           <p className="mt-4 rounded-md border border-line bg-ink/5 p-3 text-sm text-ink/70">Your account and family data were deleted.</p>
+        )}
+        {query.deletion === "pending" && (
+          <p role="alert" className="mt-4 rounded-md border border-urgent/30 bg-urgent/10 p-3 text-sm text-urgent">Your family plan data was removed, but sign-in deletion could not be verified. Your account deletion is not complete. Please contact support for manual cleanup; do not create a new plan with this sign-in.</p>
         )}
         {query.notice === "email-confirmation" && (
           <p role="status" className="mt-4 rounded-md border border-warn/30 bg-warn/10 p-3 text-sm text-ink/80">

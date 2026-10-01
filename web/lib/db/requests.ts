@@ -46,7 +46,9 @@ const toJob = (r: any): ResearchJob => ({ unitid:String(r.unitid),term:String(r.
 
 export async function searchDirectory(query: string, limit=20): Promise<DirectorySchool[]> {
   const q=query.trim().toLowerCase().slice(0,100); if(q.length<2)return[];
-  const rows=await queryRows<any>("SELECT unitid,name,alias,city,state,website,domain,control,institution_id,updated_at FROM school_directory WHERE search_text LIKE $1 ORDER BY name LIMIT $2",[`%${q}%`,Math.max(1,Math.min(50,Math.floor(limit)))]);
+  // A displayed federal UNITID must also resolve as an exact directory key.
+  // Never use a fuzzy numeric match: different campuses can have nearby IDs.
+  const rows=await queryRows<any>("SELECT unitid,name,alias,city,state,website,domain,control,institution_id,updated_at FROM school_directory WHERE ($1=1 AND unitid=$2) OR ($3=0 AND search_text LIKE $4) ORDER BY name LIMIT $5",[/^\d{6}$/.test(q)?1:0,q,/^\d{6}$/.test(q)?1:0,`%${q}%`,Math.max(1,Math.min(50,Math.floor(limit)))]);
   return rows.map(toDirectory);
 }
 export async function getDirectorySchool(unitid:string):Promise<DirectorySchool|null>{const r=await queryOne<any>("SELECT * FROM school_directory WHERE unitid=$1",[unitid]);return r?toDirectory(r):null;}
