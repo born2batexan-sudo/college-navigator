@@ -97,6 +97,11 @@ describe("owner-approved founding-family access", () => {
     await C.exec("UPDATE school_directory SET institution_id=$1 WHERE unitid=$2", ["inst_beta_0", "850000"]);
     await K.requireBetaTrackedCollege({ householdId: ctx.household.id, cycle: "Fall 2027", institutionId: "inst_beta_0" });
     assert.equal((await K.getCollegeCoverageSummary(ctx.household.id, "Fall 2027")).coveredUnits, 1);
+    await C.exec("INSERT INTO institutions(id,name,slug,created_at) VALUES($1,$2,$3,$4)", ["inst_beta_11", "Beta School Eleven", "beta-school-eleven", new Date().toISOString()]);
+    await assert.rejects(() => K.requireBetaTrackedCollege({ householdId: ctx.household.id, cycle: "Fall 2027", institutionId: "inst_beta_11" }),
+      (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "invalid_college");
+    assert.equal((await K.getCollegeCoverageSummary(ctx.household.id, "Fall 2027")).coveredUnits, 1, "unmapped internal IDs consume no capacity");
+    await C.exec("UPDATE school_directory SET institution_id=$1 WHERE unitid=$2", ["inst_beta_11", "850010"]);
     await assert.rejects(() => K.assertBetaAccessCycle(ctx.household.id, "Fall 2028"),
       (error: unknown) => error instanceof K.CollegeCoverageBlockedError && error.reason === "invalid_cycle");
     for (let i = 0; i < 10; i++) {

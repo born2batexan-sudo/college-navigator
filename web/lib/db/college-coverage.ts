@@ -106,16 +106,17 @@ export async function assertBetaAccessCycle(householdId: string, cycle: string):
 }
 
 /** Reserve a trackable college in the same ledger as new research requests.
- * If the school is already linked to an official directory UNITID, use that
- * canonical ID so tracking and research share a single unit. No research is
- * queued by tracking a school. The caller wraps this with the relationship write. */
+ * A reviewed one-to-one directory mapping is mandatory: never fall back to
+ * an internal institution ID, which would count the same college twice.
+ * No research is queued by tracking. Caller wraps this with relationship write. */
 export async function requireBetaTrackedCollege(input: { householdId: string; cycle: string; institutionId: string }): Promise<void> {
   const selfService = await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND revoked_at IS NULL AND starts_at<=$2 AND expires_at>$3', [input.householdId, nowIso(), nowIso()]);
   if (selfService) {
     if (!await queryOne('SELECT 1 AS ok FROM self_service_access WHERE household_id=$1 AND cycle=$2 AND revoked_at IS NULL', [input.householdId, input.cycle])) throw new CollegeCoverageBlockedError('invalid_cycle');
   } else if (!await assertBetaAccessCycle(input.householdId, input.cycle)) return;
-  const directory = await queryOne<{ unitid: string }>('SELECT unitid FROM school_directory WHERE institution_id=$1 ORDER BY unitid LIMIT 1', [input.institutionId]);
-  const result = await reserveCollegeCoverage({ householdId: input.householdId, cycle: input.cycle, collegeId: directory?.unitid ?? input.institutionId }, true);
+  const directory = await queryRows<{ unitid: string }>('SELECT unitid FROM school_directory WHERE institution_id=$1 ORDER BY unitid LIMIT 2', [input.institutionId]);
+  if (directory.length !== 1 || !/^\d{6}$/.test(directory[0].unitid)) throw new CollegeCoverageBlockedError('invalid_college');
+  const result = await reserveCollegeCoverage({ householdId: input.householdId, cycle: input.cycle, collegeId: directory[0].unitid }, true);
   if (result.status === 'blocked') throw new CollegeCoverageBlockedError(result.reason);
 }
 

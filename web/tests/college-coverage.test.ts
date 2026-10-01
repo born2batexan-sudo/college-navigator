@@ -401,6 +401,27 @@ describe('durable coverage against the local database (fictional households)', (
     assert.equal((await summary(lim.id)).coveredUnits, 3, 'failed request did not consume a unit');
   });
 
+  it('requires exactly one reviewed UNITID when tracking and deduplicates a later research request', async () => {
+    const h = await household();
+    const now = new Date().toISOString();
+    await C.exec("INSERT INTO self_service_access(household_id,cycle,auth_user_id,starts_at,expires_at,created_at) VALUES($1,$2,$3,'2020-01-01T00:00:00Z','2099-01-01T00:00:00Z',$4)", [h.id, CYCLE, h.authUserId, now]);
+    await C.exec("INSERT INTO institutions(id,name,slug,created_at) VALUES('inst_fixture_unitid','Review Test College','review-test-college',$1)", [now]);
+    const tracked = () => K.requireBetaTrackedCollege({ householdId: h.id, cycle: CYCLE, institutionId: 'inst_fixture_unitid' });
+    await assert.rejects(tracked, (e: any) => e instanceof K.CollegeCoverageBlockedError && e.reason === 'invalid_college', 'no fallback to internal ID');
+    assert.equal((await summary(h.id)).coveredUnits, 0);
+    await Q.upsertDirectorySchool({ unitid: '812345', name: 'Review Test College', city: 'Testville', state: 'TX' });
+    await C.exec("UPDATE school_directory SET institution_id='inst_fixture_unitid' WHERE unitid='812345'");
+    await tracked();
+    assert.deepEqual([(await summary(h.id)).coveredUnits, (await summary(h.id)).coveredCollegeIds], [1, ['812345']]);
+    await Q.createSchoolRequest({ householdId: h.id, unitid: '812345', term: CYCLE });
+    await tracked();
+    assert.equal((await summary(h.id)).coveredUnits, 1, 'tracking and research, including repeated tracking, consume one UNITID');
+    await Q.upsertDirectorySchool({ unitid: '812346', name: 'Ambiguous Review College' });
+    await C.exec("UPDATE school_directory SET institution_id='inst_fixture_unitid' WHERE unitid='812346'");
+    await assert.rejects(tracked, (e: any) => e instanceof K.CollegeCoverageBlockedError && e.reason === 'invalid_college', 'ambiguous mappings fail closed');
+    assert.equal((await summary(h.id)).coveredUnits, 1);
+  });
+
   it('household deletion removes coverage state but retains de-identified payment records', async () => {
     const h = await household();
     await fill(h.id, 10);

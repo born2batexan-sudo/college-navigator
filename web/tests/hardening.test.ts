@@ -57,12 +57,12 @@ describe("secure research and queue invariants",()=>{
  });
  it("denies guessed queue slugs before ready, across households, and across terms",async()=>{
   const inst=await R.upsertInstitution({name:"Private Queue",slug:"private-queue",domains:["private.edu"]});
-  await Q.upsertDirectorySchool({unitid:"890",name:"Private Queue",domain:"private.edu"});await Q.linkDirectoryInstitution("890","private-queue");
+  await Q.upsertDirectorySchool({unitid:"890000",name:"Private Queue",domain:"private.edu"});await Q.linkDirectoryInstitution("890000","private-queue");
   const owner=await A.provisionAccount({authUserId:"view-owner",email:"owner@example.com"}),other=await A.provisionAccount({authUserId:"view-other",email:"other@example.com"});
-  await Q.createSchoolRequest({householdId:owner.household.id,unitid:"890",term:"Fall 2027"});
+  await Q.createSchoolRequest({householdId:owner.household.id,unitid:"890000",term:"Fall 2027"});
   assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Fall 2027"),false);
   await D.exec("INSERT INTO research_versions(institution_id,research_term,coverage_status,coverage_pct,critical_gaps,certified_at,updated_at) VALUES($1,'Fall 2027','certified',100,0,$2,$3) ON CONFLICT(institution_id,research_term) DO UPDATE SET coverage_status='certified',coverage_pct=100,critical_gaps=0",[inst.id,D.nowIso(),D.nowIso()]);
-  await D.exec("UPDATE school_research_jobs SET status='ready' WHERE unitid='890' AND term='Fall 2027'");
+  await D.exec("UPDATE school_research_jobs SET status='ready' WHERE unitid='890000' AND term='Fall 2027'");
   assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Fall 2027"),false,"legacy percentage and ready row cannot bypass reviewed publish gate");
   assert.equal(await Q.canHouseholdViewInstitution(other.household.id,inst.id,"Fall 2027"),false);
   assert.equal(await Q.canHouseholdViewInstitution(owner.household.id,inst.id,"Winter 2028"),false);
