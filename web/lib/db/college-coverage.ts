@@ -79,6 +79,20 @@ export async function reserveCollegeCoverage(input: { householdId: string; cycle
     const decision = decideReservation({ account: usableAccount, alreadyCovered, entitlementActive });
     if (decision.outcome === 'blocked') return { status: 'blocked', reason: decision.reason };
     if (decision.outcome === 'already_covered') return { status: 'covered', consumedUnit: false, source: 'existing', coveredUnits: account.coveredUnits, remainingUnits: Math.max(0, usableAccount.includedUnits + usableAccount.purchasedUnits - account.coveredUnits) };
+    if (/^\d{6}$/.test(input.collegeId)) {
+      // Historic tracked schools predate the coverage ledger. Count the union
+      // of canonical active schools and reservations before granting a NEW
+      // college, under the same account lock. Never backfill silently, count
+      // internal institution IDs, or double-charge the same UNITID.
+      const enteringTerm = usingPostgres ? "COALESCE(s.attributes::jsonb->>'enteringTerm','Fall 2027')" : "COALESCE(json_extract(s.attributes,'$.enteringTerm'),'Fall 2027')";
+      const tracked = await queryRows<{ unitid: string | null }>(`SELECT d.unitid FROM students s JOIN institution_relationships ir ON ir.student_id=s.id AND ir.active=1
+        LEFT JOIN school_directory d ON d.institution_id=ir.institution_id
+        WHERE s.household_id=$1 AND ${enteringTerm}=$2`, [input.householdId, input.cycle]);
+      if (tracked.some(r => !r.unitid || !/^\d{6}$/.test(r.unitid))) return { status: 'blocked', reason: 'invalid_college' };
+      const reserved = await queryRows<{ college_id: string }>('SELECT college_id FROM college_coverage_colleges WHERE household_id=$1 AND cycle=$2', [input.householdId, input.cycle]);
+      const distinct = new Set([...tracked.map(r => r.unitid!), ...reserved.map(r => r.college_id), input.collegeId]);
+      if (distinct.size > usableAccount.includedUnits + usableAccount.purchasedUnits) return { status: 'blocked', reason: 'capacity_exhausted' };
+    }
     const covered = await claimCoverageUnit(input.householdId, input.cycle, includedOnly);
     if (covered === null) return { status: 'blocked', reason: account.addonHold ? 'addon_refund_review' : 'capacity_exhausted' };
     const source = covered <= account.includedUnits ? 'included' : 'addon';

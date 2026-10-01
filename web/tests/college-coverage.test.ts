@@ -174,6 +174,36 @@ describe('durable coverage against the local database (fictional households)', (
     assert.equal(await C.queryOne('SELECT 1 AS ok FROM college_coverage_colleges WHERE household_id=$1 AND college_id=$2', [h.id, 'col10']), null, 'blocked college leaves no coverage row');
   });
 
+  it('counts seven legacy active UNITIDs with three requests as ten distinct colleges without mutating legacy rows', async () => {
+    const R = await import('../lib/db/repo');
+    const h = await household();
+    const student = (await R.listStudentsForHousehold(h.id))[0];
+    const tracked: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const unitid = String(810000 + i);
+      const slug = `legacy-${h.authUserId}-${i}`;
+      const inst = await R.upsertInstitution({ name: `Legacy College ${h.authUserId}-${i}`, slug, domains: [`${slug}.edu`] });
+      await Q.upsertDirectorySchool({ unitid, name: inst.name, domain: `${slug}.edu` });
+      await Q.linkDirectoryInstitution(unitid, slug);
+      await R.upsertRelationship({ studentId: student.id, institutionId: inst.id });
+      tracked.push(unitid);
+    }
+    for (let i = 0; i < 4; i++) {
+      const unitid = String(820000 + i);
+      await Q.upsertDirectorySchool({ unitid, name: `Requested ${i}`, domain: `requested-${i}.edu` });
+      if (i < 3) assert.equal((await reserve(h.id, unitid)).status, 'covered');
+    }
+    assert.equal((await summary(h.id)).coveredUnits, 3, 'read-only legacy relationships were not backfilled');
+    assert.deepEqual(await reserve(h.id, '820003'), { status: 'blocked', reason: 'capacity_exhausted' });
+    assert.equal((await reserve(h.id, tracked[0])).status, 'covered', 'an already-active UNITID can acquire its missing ledger row without increasing the union');
+    assert.equal((await summary(h.id)).coveredUnits, 4);
+    const lookup = await Q.getDirectorySchoolForInstitution((await R.getInstitutionBySlug(`legacy-${h.authUserId}-0`))!.id);
+    assert.equal(lookup?.unitid, tracked[0]);
+    assert.equal((await R.listRelationshipsForStudent(student.id)).length, 7);
+    const another = await household();
+    assert.equal((await reserve(another.id, '820003')).status, 'covered', 'capacity is household-scoped');
+  });
+
   it('re-adding, or another student using an already-covered college, consumes nothing and works at capacity', async () => {
     const h = await household();
     await fill(h.id, 10);
