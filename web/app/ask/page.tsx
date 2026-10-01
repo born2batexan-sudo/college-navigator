@@ -11,7 +11,7 @@ export default function PublicAskPage() {
       <main id="main" className="site-shell section" aria-labelledby="ask-title">
         <p className="eyebrow">Campus Passage · Public product FAQ</p>
         <h1 id="ask-title" className="display">Ask Campus Passage</h1>
-        <p className="lead">Ask general questions about how Campus Passage works, getting started, privacy, official sources, product boundaries, support for multiple students, or Email Connectivity — Coming Soon.</p>
+        <p className="lead">Ask about what Campus Passage does, the full household experience and Start Now flow, privacy and access, official sources, multiple students, feedback, product boundaries, or optional Email Connectivity — Coming Soon.</p>
         <div className="callout">
           <b>Public Ask is not a college research tool.</b> It cannot look up a particular school, deadlines, scholarships, eligibility, personalized advice, portal actions, payments, or household records. For school-specific research, choose Start Now and continue in the signed-in, onboarded household experience.
         </div>

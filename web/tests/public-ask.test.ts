@@ -32,7 +32,10 @@ describe("public Ask Campus Passage boundary", () => {
 
   it("answers only supported general FAQ topics with auditable FAQ sources", () => {
     const accepted = [
-      ["How does Campus Passage work?", "how-it-works"],
+      ["How does Campus Passage work?", "full-experience"],
+      ["What does Campus Passage do?", "overview"],
+      ["What is the full experience from start to finish?", "full-experience"],
+      ["How do I share feedback?", "feedback"],
       ["How are your sources and citations verified?", "sources"],
       ["How do I get started?", "getting-started"],
       ["What is the privacy and deletion policy?", "privacy"],
@@ -61,6 +64,14 @@ describe("public Ask Campus Passage boundary", () => {
       "What do you know about my student?",
       "Write my personal statement.",
       "What is the FAFSA priority deadline?",
+      "What does harvard require?",
+      "When does Rice require deposits?",
+      "Can you recommend the best school for my child?",
+      "What is my student's task status?",
+      "What scholarships does my daughter qualify for?",
+      "Can you submit my transcript?",
+      "What does Stanford require for Fall 2027?",
+      "What does Campus Passage cost?",
     ];
     for (const question of refused) {
       const answer = answerPublicQuestion(question);
@@ -69,12 +80,30 @@ describe("public Ask Campus Passage boundary", () => {
     }
     assert.equal(answerPublicQuestion("").kind, "redirect");
     assert.equal(answerPublicQuestion("x".repeat(501)).kind, "redirect");
+    const combined = answerPublicQuestion("What does Campus Passage do and how do I start?");
+    assert.equal(combined.kind, "faq");
+    assert.match(combined.answer, /organizes the college journey/i);
+    assert.match(combined.answer, /verify your email/i);
+    for (const [question, expected] of [
+      ["Tell me more about the full experience", /household plan.*Add eligible students/i],
+      ["What about privacy and access?", /no access to a household's records/i],
+      ["Can I track my two students?", /same high-school graduation year/i],
+      ["Where can I send feedback?", /Share feedback on the dashboard/i],
+      ["Is inbox connectivity required?", /Coming Soon.*optional/i],
+      ["Can it replace my counselor?", /does not replace a counselor/i],
+    ] as const) {
+      const result = answerPublicQuestion(question);
+      assert.equal(result.kind, "faq", question);
+      assert.match(result.answer, expected, question);
+    }
+    assert.doesNotMatch(JSON.stringify(Object.values([combined, answerPublicQuestion("What is the full experience?")])), /student_\w+|household_\w+|https?:\/\/[^\s]+\/api\/|access_token|refresh_token/i);
   });
 
   it("does not send public questions to the authenticated API and adds public and signed-in links", () => {
     assert.doesNotMatch(publicPage, /api\/ask|fetch\(/);
     assert.doesNotMatch(publicForm, /api\/ask|fetch\(/);
-    assert.match(publicForm, /answerPublicQuestion\(question\)/);
+    assert.match(publicForm, /answerQuestion\(trimmed\)/);
+    assert.match(publicForm, /answerQuestion = answerPublicQuestion/);
     assert.match(navigation, /href="\/ask"[^>]*>Ask Campus Passage/);
     assert.match(homepage, /id="ask-campus-passage"/);
     assert.match(homepage, /href="\/ask"/);

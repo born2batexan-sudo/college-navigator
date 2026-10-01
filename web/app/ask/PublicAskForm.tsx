@@ -1,47 +1,63 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { answerPublicQuestion, type PublicAskAnswer } from "@/lib/public-ask";
 
-export default function PublicAskForm() {
-  const [question, setQuestion] = useState("");
+export default function PublicAskForm({ answerQuestion = answerPublicQuestion }: {
+  answerQuestion?: (question: string) => PublicAskAnswer;
+}) {
   const [answer, setAnswer] = useState<PublicAskAnswer | null>(null);
+  const [error, setError] = useState("");
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Public Ask is intentionally offline and deterministic; it never calls the private API.
-    setAnswer(answerPublicQuestion(question));
+    setAnswer(null);
+    const trimmed = (event.currentTarget.elements.namedItem("question") as HTMLTextAreaElement).value.trim();
+    if (!trimmed) {
+      setError("Please enter a general question about Campus Passage.");
+      return;
+    }
+    try {
+      // The public FAQ runs locally: never send visitor text to the protected research service.
+      const result = answerQuestion(trimmed);
+      if (!result?.answer) throw new Error("No public FAQ answer");
+      setError("");
+      setAnswer(result);
+    } catch {
+      setError("The public FAQ could not answer right now. Please try again, or use Start Now to get help after signing in.");
+    }
   }
 
   return (
     <div className="space-y-5">
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} noValidate className="space-y-3">
         <label htmlFor="public-question" className="block text-sm font-medium">Your general question</label>
         <textarea
           id="public-question"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          name="question"
+          onInput={() => { setAnswer(null); setError(""); }}
           maxLength={500}
-          required
           rows={3}
-          className="w-full rounded-lg border border-line bg-white p-3"
-          placeholder="For example: How does Campus Passage cite its sources?"
+          aria-describedby="public-question-help"
+          aria-invalid={!!error}
+          className="w-full min-w-0 rounded-lg border border-line bg-white p-3 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          placeholder="For example: What happens from Start Now through the household plan?"
         />
-        <p className="text-xs text-ink/55">Do not include a school-specific research request, passwords, or sensitive personal information.</p>
-        <button type="submit" className="rounded-md bg-accent px-4 py-2 text-white">Ask</button>
+        <p id="public-question-help" className="text-xs text-ink/65">Do not include school-specific requests, passwords, or sensitive personal information. Questions stay on this page; public Ask does not save them.</p>
+        <button type="submit" className="min-h-11 rounded-md bg-accent px-4 py-2 text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Ask</button>
       </form>
+      {error && <p role="alert" className="rounded-lg border border-urgent/40 bg-urgent/10 p-4 text-sm text-urgent">{error}</p>}
       {answer && (
         <section role="status" aria-live="polite" className="rounded-lg border border-line bg-white p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/55">
-            {answer.kind === "faq" ? "FAQ-grounded answer" : "Outside public Ask scope"}
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/65">
+            {answer.kind === "faq" ? "Public FAQ answer" : "Outside public Ask scope"}
           </p>
           <p className="whitespace-pre-wrap text-sm">{answer.answer}</p>
-          {answer.source && <p className="mt-3 text-xs text-ink/55">Source: {answer.source}</p>}
+          {answer.source && <p className="mt-3 text-xs text-ink/65">Source: {answer.source}</p>}
           {answer.kind === "redirect" && (
             <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
-              <Link className="text-accent underline" href="/login?next=%2Fonboarding">Start Now</Link>
-              <Link className="text-accent underline" href="/login?next=%2Fask%2Fresearch">Sign in for school-specific Ask</Link>
+              <a className="text-accent underline" href="/login?next=%2Fonboarding">Start Now</a>
+              <a className="text-accent underline" href="/login?next=%2Fask%2Fresearch">Sign in for school-specific Ask</a>
             </div>
           )}
         </section>
