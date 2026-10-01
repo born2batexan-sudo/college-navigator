@@ -123,9 +123,8 @@ export default function CampusPassageLanding() {
 
         <section id="standard" className="section" aria-labelledby="standard-title">
           <div className="site-shell">
-            <p className="eyebrow">The 12² Standard</p>
-            <div className="big144" aria-hidden="true">12²</div>
-            <h2 id="standard-title" className="display standard-title">Up to 144 checks per school, per term.</h2>
+            <h2 id="standard-title" className="display standard-title">THE 12² STANDARD</h2>
+            <p className="standard-subtitle">Up to 144 checks per school, per term.</p>
             <p className="lead">We review each school across 12 parts of the college journey, from admissions and aid to housing, orientation, and career, with up to 12 checks in each. That&apos;s how the step buried on a housing page or in a billing FAQ still reaches your plan.</p>
             <div className="callout"><b>Why &quot;up to&quot;?</b> Every campus is different. Some checks don&apos;t apply to a school, and some details haven&apos;t been published yet. When that happens, your plan says so plainly instead of guessing or padding the list.</div>
             <div className="phases">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Epilogue, Inter } from "next/font/google";
 import "./globals.css";
+import AskLauncher from "@/components/AskLauncher";
 
 // Epilogue 600 is loaded (self-hosted from Google Fonts at build) for the logo wordmark ONLY.
 const epilogue = Epilogue({ subsets: ["latin"], weight: "600", display: "swap", variable: "--font-epilogue" });
@@ -46,7 +47,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${epilogue.variable} ${inter.variable}`}>
-      <body>{children}</body>
+      <body>{children}<AskLauncher /></body>
     </html>
   );
 }
