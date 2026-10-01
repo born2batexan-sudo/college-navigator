@@ -63,6 +63,13 @@ export async function reserveCollegeCoverage(input: { householdId: string; cycle
   if (!isCanonicalCollegeId(input.collegeId)) return { status: 'blocked', reason: 'invalid_college' };
   return withTransaction(async (): Promise<ReserveResult> => {
     if (!await eligibleHousehold(input.householdId)) return { status: 'blocked', reason: 'ineligible_household' };
+    // The staging migration enforces this membership with a foreign key. Keep the
+    // local SQLite path fail-closed for real six-digit federal IDs as well; its
+    // fictional short IDs remain available only to unit-test domain rules.
+    if (/^\d{6}$/.test(input.collegeId)
+      && !await queryOne('SELECT 1 AS ok FROM school_directory WHERE unitid=$1', [input.collegeId])) {
+      return { status: 'blocked', reason: 'invalid_college' };
+    }
     const account = await lockedAccount(input.householdId, input.cycle);
     // The beta invitation waives payment only; it never buys add-on capacity.
     const usableAccount = includedOnly ? { ...account, purchasedUnits: 0 } : account;

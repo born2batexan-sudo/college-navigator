@@ -259,6 +259,15 @@ describe('durable coverage against the local database (fictional households)', (
     assert.equal((await reserve(h.id, 'kept')).status, 'covered', 'revocation does not erase recorded coverage');
   });
 
+  it('local coverage requires a directory member for six-digit federal IDs', async () => {
+    const h = await household();
+    await Q.upsertDirectorySchool({ unitid: '999998', name: 'Directory Fixture University', city: 'Testville', state: 'TX', domain: 'fixture.example.edu' });
+    assert.deepEqual(await reserve(h.id, '999997'), { status: 'blocked', reason: 'invalid_college' });
+    const covered = await reserve(h.id, '999998');
+    assert.equal(covered.status, 'covered');
+    assert.equal((await summary(h.id)).coveredUnits, 1);
+  });
+
   it('pending purchase and redirect state never grant capacity', async () => {
     const h = await household();
     await fill(h.id, 10);
