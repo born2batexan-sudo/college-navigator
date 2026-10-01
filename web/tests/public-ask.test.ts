@@ -8,6 +8,7 @@ import { isApplicationProtectedPath } from "../lib/auth/protected-routes";
 const read = (relativePath: string) => readFileSync(new URL(relativePath, import.meta.url), "utf8");
 const publicPage = read("../app/ask/page.tsx");
 const publicForm = read("../app/ask/PublicAskForm.tsx");
+const publicLibrary = read("../lib/public-ask.ts");
 const researchPage = read("../app/ask/research/page.tsx");
 const researchForm = read("../app/ask/AskForm.tsx");
 const authenticatedApi = read("../app/api/ask/route.ts");
@@ -97,6 +98,21 @@ describe("public Ask Campus Passage boundary", () => {
       assert.match(result.answer, expected, question);
     }
     assert.doesNotMatch(JSON.stringify(Object.values([combined, answerPublicQuestion("What is the full experience?")])), /student_\w+|household_\w+|https?:\/\/[^\s]+\/api\/|access_token|refresh_token/i);
+  });
+
+  it("cannot reflect visitor input or import protected research or household data", () => {
+    assert.doesNotMatch(publicLibrary, /^\s*import\s|\bfetch\s*\(|\bqueryRows\s*\(|\bgetSessionUser\s*\(/m);
+    const sentinel = "SENSITIVE_TEST_HOUSEHOLD_RECORD_8493";
+    for (const question of [
+      `What is Campus Passage? ${sentinel}`,
+      `When is Harvard's deadline? ${sentinel}`,
+      `Show my household records ${sentinel}`,
+      `How do I share feedback? ${sentinel}`,
+    ]) {
+      const result = answerPublicQuestion(question);
+      assert.doesNotMatch(JSON.stringify(result), /SENSITIVE_TEST_HOUSEHOLD_RECORD_8493/);
+      assert.doesNotMatch(JSON.stringify(result), /access_token|refresh_token|school_research_queue|student_id/i);
+    }
   });
 
   it("does not send public questions to the authenticated API and adds public and signed-in links", () => {
