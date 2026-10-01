@@ -63,8 +63,8 @@ const answers: Record<PublicAskCategory, { label: string; answer: string }> = {
     answer: "Administrators review submitted feedback privately; public Ask cannot reach an administrator or inspect your account. For a product issue, sign in and use Share feedback on the dashboard, with an optional follow-up choice. No live support is promised here.",
   },
   "product-boundaries": {
-    label: "What the product cannot do",
-    answer: "Campus Passage organizes and cites information; it does not sign into school portals, submit forms, change school records, decide eligibility or admission, or replace a counselor. Follow the school's official instructions for actions and decisions.",
+    label: "Your choices and next steps",
+    answer: "Campus Passage organizes evidence-backed steps and official links so your family can see what to do next. You stay in control of submissions and decisions, with the school's instructions and your counselor there for guidance.",
   },
 };
 
@@ -77,29 +77,29 @@ function outsideScope(q: string): PublicAskAnswer | null {
   const capability = product && /\b(?:does|can|could|will|how does|what does|what can|why doesn't|why can't)\b/.test(q);
   if ((/\b(?:harvard|stanford|rice|baylor|ucla|usc|mit|nyu|ut austin)\b/.test(q) && /\b(?:when|how|what|can|should|deadline|scholarship|aid|require|apply|eligible|portal|admission)\b/.test(q)) ||
       (/\b(?:university of [a-z]+|[a-z]+ (?:university|college|institute))\b/.test(q) && /\b(?:when|deadline|scholarship|aid|require|apply|eligible|portal|admission|research|look up|offer|accept)\b/.test(q))) {
-    return redirect("I can't look up a named school's requirements or a student's situation in public Ask. Choose Start Now and sign in for school-specific research; check the school's official instructions.");
+    return redirect("For a tracked college and student, choose Start Now to enter your Passage. There, Ask about your journey can cite current, certified official findings for the entering term when available; check the school's own instructions for decisions.");
   }
   if (/\b(?:my|our)\b.{0,55}\b(?:household|account|profile|student|child|daughter|son|task|status|application|record|plan)\b/.test(q) &&
       /\b(?:show|check|look up|retrieve|read|tell|what|where|when|update|change|access|see|know|is|are|did|has|have)\b/.test(q) &&
       !/\b(?:how (?:do|can) i (?:start|add|track|switch|mark|share)|can i (?:track|add|have)|what happens to my data|delete my data)\b/.test(q)) {
-    return redirect("I can't see or change your household, student's records, or task status in public Ask. Choose Start Now and sign in to view your own plan.");
+    return redirect("Your household plan is available after sign-in. Choose Start Now to see your student's schools and tasks in the Passage; this public question stays separate from household records.");
   }
   if ((/\b(?:log\s*in(?:to)?|sign\s*in(?:to)?|open|submit|send|upload|file|complete|change|update|write|draft|pay)\b.{0,60}\b(?:school portal|college portal|application|transcript|deposit|school record|essay|personal statement|form)\b|\b(?:submit|send|upload|write|draft)\b.{0,45}\b(?:my|our)\b.{0,25}\b(?:application|essay|transcript|form)\b/.test(q) && !capability) ||
       /\b(?:you|please)\s+(?:submit|send|upload|write|draft|open|log in|check|change|update)\s+(?:my|our)\b|\b(?:submit|send|upload|write|draft)\s+(?:my|our)\b/.test(q)) {
-    return redirect("I can't take action in a school portal, submit forms, or write application materials. Choose Start Now for a signed-in plan, then follow the school's own instructions for any action.");
+    return redirect("Choose Start Now to organize your next steps in a signed-in plan. For portal actions, submissions, or application writing, you stay in control and follow the school's own instructions.");
   }
   if (/\b(?:recommend|recommendation|which (?:college|school|university)|best (?:college|school)|where should|should (?:i|we|my|our)|compare (?:colleges|schools)|chances? of (?:admission|getting in))\b/.test(q) && !capability) {
-    return redirect("I can't recommend a school or decide what's right for a student here. Choose Start Now to organize a signed-in plan and discuss decisions with your counselor and the schools.");
+    return redirect("Choose Start Now to organize each student's options in the Passage. For a choice about where to apply or enroll, talk with your counselor and the schools; the decision stays with your family.");
   }
   const researchRequest = /\b(?:when (?:is|does|are)|which|what is|what's|tell me|find|look up)\b.{0,80}\b(?:deadlines?|due dates?|scholarships?|eligib(?:ility|le)|qualif(?:y|ies)|requirements?)\b/.test(q);
   if (/\b(?:deadlines?|due dates?|scholarships?|eligib(?:ility|le)|qualif(?:y|ies)|admission requirements?|requirements? for|financial aid award|fafsa priority|when (?:does|is|do)\b.{0,50}\b(?:open|close|start|due|require))\b/.test(q) && (!capability || researchRequest)) {
-    return redirect("I can't verify a particular school's dates, scholarships, requirements, or a student's eligibility in public Ask. Choose Start Now and sign in for school-specific research; check the school's current official instructions.");
+    return redirect("For a tracked college's dates, scholarships, or requirements, choose Start Now and ask about your journey inside the Passage. Answers cite current, certified official findings for the student and term when available; confirm eligibility with the school.");
   }
   if (/\b(?:what does|does|when does)\s+(?!(?:campus passage|it|this|your (?:app|product|service))\b)[a-z][a-z\s'-]{1,40}\s+(?:require|offer|accept|open|close|need)\b/.test(q) && !capability) {
-    return redirect("I can't verify a particular school's requirements or dates in public Ask. Choose Start Now and sign in for school-specific research; check the school's official instructions.");
+    return redirect("Choose Start Now to track the college in your Passage and ask about its tasks there. When certified official evidence supports an answer for your student's term, Ask provides a citation; check the school's current instructions.");
   }
   if (/\b(?:price|pricing|cost|pay|purchase|subscription|billing)\b/.test(q) && !/\b(?:task|school|college|aid)\b/.test(q)) {
-    return redirect("For current access details, choose Start Now. Public Ask can explain the household experience and how to begin, but cannot answer account-specific access questions.");
+    return redirect("Choose Start Now for current access details and to begin your household plan. I can explain how the Passage works here; account details are available after sign-in.");
   }
   return null;
 }
@@ -129,7 +129,7 @@ export function answerPublicQuestion(input: string): PublicAskAnswer {
   include("product-boundaries", /\b(?:portal password|school portal|portal|submit|apply for me|application for me|counselor|replace|limitations|boundaries|recommendations?|can't|cannot|doesn't|don't do|what (?:won't|can't) (?:it|campus passage) do)\b/);
 
   if (!matches.length) {
-    if (/\b(?:college|school|research)\b/.test(q)) return { kind: "clarify", answer: "Do you mean how many colleges a household can track, how official-source research works, or a specific school's information? Specific-school questions belong in signed-in Start Now." };
+    if (/\b(?:college|school|research)\b/.test(q)) return { kind: "clarify", answer: "Would you like to know how many colleges you can track or how official-source research works? For a tracked school's tasks, choose Start Now to ask inside your Passage." };
     return { kind: "clarify", answer: "Could you ask about a Campus Passage topic—getting started, students and colleges, the task dashboard, sources, privacy, or feedback?" };
   }
   // At most three directly requested topics; no single all-purpose overview for unmatched input.

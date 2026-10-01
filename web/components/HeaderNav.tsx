@@ -28,7 +28,7 @@ export default function HeaderNav({ current }: { current: "overview" | "sample" 
         <Link href="/#how" onClick={close}>How it works</Link>
         <Link href="/#standard" onClick={close}>12² Standard</Link>
         <Link aria-current={current === "sample" ? "page" : undefined} href="/sample-plan" onClick={close}>Sample plan</Link>
-        <Link aria-current={current === "ask" ? "page" : undefined} href="/ask" onClick={close}>Ask Campus Passage</Link>
+        <Link aria-current={current === "ask" ? "page" : undefined} href="/ask" onClick={close}>Ask about Campus Passage</Link>
         <Link href="/#trust" onClick={close}>Trust</Link>
         <Link href="/login?next=%2Fdashboard" className="login-link" onClick={close}>Log in</Link>
       </nav>

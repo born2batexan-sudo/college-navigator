@@ -10,7 +10,7 @@ const publicPage = read("../app/ask/page.tsx");
 const publicForm = read("../app/ask/PublicAskForm.tsx");
 const publicLibrary = read("../lib/public-ask.ts");
 const researchPage = read("../app/ask/research/page.tsx");
-const researchForm = read("../app/ask/AskForm.tsx");
+const researchForm = read("../app/ask/research/AskForm.tsx");
 const authenticatedApi = read("../app/api/ask/route.ts");
 const homepage = read("../components/CampusPassageLanding.tsx");
 const navigation = read("../components/HeaderNav.tsx");
@@ -29,7 +29,7 @@ const matrix: readonly [string, PublicAskCategory, RegExp][] = [
   ["Can you connect my inbox?", "email-coming-soon", /Coming Soon.*optional/i],
   ["Where can I send feedback?", "feedback", /Share feedback on the dashboard/i],
   ["Can I reach an administrator for help?", "administrator-support", /No live support is promised/i],
-  ["Can it replace my counselor?", "product-boundaries", /does not sign into school portals/i],
+  ["Can it replace my counselor?", "product-boundaries", /You stay in control of submissions and decisions/i],
 ];
 const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -44,6 +44,22 @@ describe("public Ask Campus Passage", () => {
     assert.match(researchPage, /requireOnboardedHousehold\(/);
     assert.match(researchForm, /fetch\('\/api\/ask'/);
     assert.match(authenticatedApi, /authorizedApiHousehold\(/);
+  });
+
+  it("leads with what public Ask offers and distinguishes the signed-in, cited student journey", () => {
+    assert.match(publicPage, /<h1[^>]*>Ask about Campus Passage<\/h1>/);
+    assert.match(publicPage, /Ask about getting started, building a household plan, official sources, privacy/);
+    assert.match(publicPage, /Inside your signed-in Passage, Ask about your journey draws on certified official sources and citations for your tracked student, college, and term when available/);
+    assert.match(publicPage, /href="\/login\?next=%2Fask%2Fresearch"[^>]*>Sign in to ask about your journey/);
+    assert.match(publicForm, /What would you like to know about Campus Passage\?/);
+    assert.match(publicForm, /question stays in this browser and is not saved/);
+    assert.match(researchPage, /requireOnboardedHousehold\(\)/);
+    assert.match(researchPage, /<h1[^>]*>Ask about your journey<\/h1>/);
+    assert.match(researchPage, /current, certified official source supports the answer for the entering term/);
+    assert.match(researchForm, /Ask about a task at a tracked college/);
+    assert.match(researchForm, /answer\.citations\.map/);
+    assert.doesNotMatch(`${publicPage}\n${publicForm}\n${homepage}`, /Public Ask is not a college research tool|It cannot look up a particular school|For school-specific research|school-specific Ask|Public Ask does not research a particular college/);
+    assert.doesNotMatch(publicPage, /cannot|can't|does not/i);
   });
 
   it("gives directly relevant, auditable, materially different answers across 13 intents", () => {
@@ -116,7 +132,8 @@ describe("public Ask Campus Passage", () => {
       const answer = answerPublicQuestion(question);
       assert.equal(answer.kind, "redirect", question);
       assert.match(answer.answer, /Start Now/i, question);
-      assert.doesNotMatch(answer.answer, /Harvard's deadline is|Stanford requires|eligible for aid/i, question);
+      assert.doesNotMatch(answer.answer, /Harvard's deadline is|Stanford requires|eligible for aid|^I can't|^Public Ask is not/i, question);
+      assert.equal(answer.source, undefined, `Redirects must not claim an official source: ${question}`);
     }
     assert.notEqual(answerPublicQuestion("When is Harvard's deadline?").answer, answerPublicQuestion("Show my household records").answer);
   });
@@ -146,9 +163,10 @@ describe("public Ask Campus Passage", () => {
     assert.doesNotMatch(publicPage, /api\/ask|fetch\(/);
     assert.doesNotMatch(publicForm, /api\/ask|fetch\(/);
     assert.match(publicForm, /answerQuestion\(trimmed\)/);
-    assert.match(navigation, /href="\/ask"[^>]*>Ask Campus Passage/);
+    assert.match(navigation, /href="\/ask"[^>]*>Ask about Campus Passage/);
     assert.match(homepage, /id="ask-campus-passage"/);
-    assert.match(homepage, /does not research a particular college/i);
-    assert.match(dashboard, /href="\/ask\/research"[^>]*>Ask Campus Passage/);
+    assert.match(homepage, /Ask how Campus Passage works/);
+    assert.match(homepage, /Once you’re inside the Passage, ask about your tracked student and college journey with certified official-source citations when available/);
+    assert.match(dashboard, /href="\/ask\/research"[^>]*>Ask about your journey/);
   });
 });

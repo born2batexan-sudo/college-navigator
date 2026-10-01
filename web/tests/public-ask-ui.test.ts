@@ -29,7 +29,7 @@ describe("public Ask form accessibility and failure recovery", () => {
       assert.equal(textarea.getAttribute("aria-describedby"), "public-question-help");
       assert.ok(container.querySelector('button[type="submit"]'));
       await submit();
-      assert.match(container.querySelector('[role="alert"]')?.textContent ?? "", /Please enter a general question/);
+      assert.match(container.querySelector('[role="alert"]')?.textContent ?? "", /What would you like to know about Campus Passage\?/);
       assert.equal(textarea.getAttribute("aria-invalid"), "true");
       await input("What does Campus Passage do and how do I start?");
       await submit();
@@ -38,13 +38,13 @@ describe("public Ask form accessibility and failure recovery", () => {
       assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Public Campus Passage FAQ/);
       await input("When is Harvard's application deadline?");
       await submit();
-      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Outside public Ask scope/);
+      assert.match(container.querySelector('[role="status"]')?.textContent ?? "", /Continue in your Passage/);
       assert.ok(container.querySelector('a[href="/login?next=%2Fonboarding"]'));
       assert.doesNotMatch(container.textContent ?? "", /Harvard's application deadline is/);
       await act(async () => root.render(createElement(PublicAskForm, { answerQuestion: () => { throw new Error("private data"); } })));
       await input("What is Campus Passage?");
       await submit();
-      assert.match(container.querySelector('[role="alert"]')?.textContent ?? "", /could not answer right now/i);
+      assert.match(container.querySelector('[role="alert"]')?.textContent ?? "", /Please try your question again in a moment/i);
       assert.doesNotMatch(container.textContent ?? "", /private data/);
       assert.equal(container.querySelector('[role="status"]'), null);
     } finally {

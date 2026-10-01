@@ -9,17 +9,17 @@ export default function PublicAskPage() {
       <a className="skip-link" href="#main">Skip to main content</a>
       <MarketingHeader current="ask" />
       <main id="main" className="site-shell section" aria-labelledby="ask-title">
-        <p className="eyebrow">Campus Passage · Public product FAQ</p>
-        <h1 id="ask-title" className="display">Ask Campus Passage</h1>
-        <p className="lead">Ask about what Campus Passage does, the full household experience and Start Now flow, privacy and access, official sources, multiple students, feedback, product boundaries, or optional Email Connectivity — Coming Soon.</p>
+        <p className="eyebrow">Campus Passage · Explore the service</p>
+        <h1 id="ask-title" className="display">Ask about Campus Passage</h1>
+        <p className="lead">Wondering how the Passage works? Ask about getting started, building a household plan, official sources, privacy, or the journey from applications to move-in.</p>
         <div className="callout">
-          <b>Public Ask is not a college research tool.</b> It cannot look up a particular school, deadlines, scholarships, eligibility, personalized advice, portal actions, or household records. For school-specific research, choose Start Now and continue in the signed-in, onboarded household experience.
+          <b>Start with the big picture here.</b> Inside your signed-in Passage, Ask about your journey draws on certified official sources and citations for your tracked student, college, and term when available.
         </div>
         <div className="actions">
           <Link className="button button-primary" href="/login?next=%2Fonboarding">Start Now</Link>
-          <Link className="button button-secondary" href="/login?next=%2Fask%2Fresearch">Sign in for school-specific Ask</Link>
+          <Link className="button button-secondary" href="/login?next=%2Fask%2Fresearch">Sign in to ask about your journey</Link>
         </div>
-        <section className="mt-8 max-w-3xl" aria-label="Ask a general Campus Passage question">
+        <section className="mt-8 max-w-3xl" aria-label="Ask about Campus Passage and the service">
           <PublicAskForm />
         </section>
       </main>
