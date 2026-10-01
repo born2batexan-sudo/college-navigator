@@ -35,7 +35,7 @@ describe("route-aware Ask shortcut", () => {
     assert.match(css, /min-height: 48px/);
   });
   it("reserves a desktop rail, mobile safe-area dock and scroll clearance", () => {
-    assert.match(css, /body:has\(\.ask-launcher\) \{ padding-right: 94px;/);
+    assert.match(css, /body:has\(\.ask-launcher\) \{ padding-right: 120px;/);
     assert.match(css, /body:has\(\.ask-launcher\) \{ padding-bottom: calc\(84px \+ env\(safe-area-inset-bottom/);
     assert.match(css, /html:has\(\.ask-launcher\) \{ scroll-padding-bottom:/);
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

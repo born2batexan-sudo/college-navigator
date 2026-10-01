@@ -67,7 +67,7 @@ h3.display, .card h3, .card h4 { font-family: var(--serif); font-weight: 600; fo
 .ask-launcher-link:hover { background: var(--ink); color: #fff; }
 .ask-launcher-link:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 @media (min-width: 901px) {
-  body:has(.ask-launcher) { padding-right: 94px; }
+  body:has(.ask-launcher) { padding-right: 120px; }
 }
 @media (max-width: 900px) {
   body:has(.ask-launcher) { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
