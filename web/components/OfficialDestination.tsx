@@ -31,6 +31,8 @@ function mismatchedTaskSource(rule: DestinationRule, source: Source | null | und
     { institution: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", checkpoint: "ADM-05", page: "https://www.ou.edu/admissions/apply/freshman" },
     // Counselor-only Slate.org resources must not be presented as an applicant's status portal.
     { institution: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", checkpoint: "ADM-11", page: "https://www.ou.edu/admissions/counselor-resources/slate-account" },
+    // The general Arkansas FAQ does not explain the applicant's missing-items checklist.
+    { institution: "inst_b7c0982eee4a48d68715c857ea93ca84", checkpoint: "ADM-11", page: "https://admissions.uark.edu/apply/faqs.php" },
   ];
   return audited.some(item => item.institution === rule.institutionId && item.checkpoint === rule.checkpointCode && item.page === page);
 }

@@ -145,6 +145,8 @@ describe("independent household task completion and official destinations", () =
       { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm05", checkpointCode: "ADM-05", domain: "Admissions", title: "Transcript submission rules verified", guidanceWhat: "Confirm your transcript is received", sourceId: "src_ou_admissions_apply_freshman", url: "https://www.ou.edu/admissions/apply/freshman", label: "Freshman Admissions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: true },
       { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm01", checkpointCode: "ADM-01", domain: "Admissions", title: "Application platform(s) and applicant type path identified", guidanceWhat: null, sourceId: "src_ou_admissions_apply_freshman", url: "https://www.ou.edu/admissions/apply/freshman", label: "Freshman Admissions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: false },
       { school: "University of Oklahoma", institutionId: "inst_eac57e77d4b44cf4b3ec146c5c99a7d0", ruleId: "rule_ou_adm11", checkpointCode: "ADM-11", domain: "Admissions", title: "Application status portal and post-submit monitoring path identified", guidanceWhat: "Check the application portal for missing items", sourceId: "src_ou_resources_slate_account", url: "https://www.ou.edu/admissions/counselor-resources/slate-account", label: "Slate Account (Counselor Resources)", lastVerified: "2026-09-10T00:00:00.000Z", withheld: true },
+      { school: "University of Arkansas", institutionId: "inst_b7c0982eee4a48d68715c857ea93ca84", ruleId: "rule_uark_adm11", checkpointCode: "ADM-11", domain: "Admissions", title: "Application status portal and post-submit monitoring path identified", guidanceWhat: "Check the application portal for missing items", sourceId: "src_uark_apply_faqsphp", url: "https://admissions.uark.edu/apply/faqs.php", label: "Frequently Asked Questions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: true },
+      { school: "University of Arkansas", institutionId: "inst_b7c0982eee4a48d68715c857ea93ca84", ruleId: "rule_uark_adm01", checkpointCode: "ADM-01", domain: "Admissions", title: "Application platform(s) and applicant type path identified", guidanceWhat: null, sourceId: "src_uark_apply", url: "https://admissions.uark.edu/apply/", label: "Apply | Undergraduate Admissions", lastVerified: "2026-09-10T00:00:00.000Z", withheld: false },
     ] as const;
     const baseline = (await R.getActionInstanceFull(ids[0]))!;
     for (const fixture of fixtures) {
@@ -160,7 +162,7 @@ describe("independent household task completion and official destinations", () =
         assert.doesNotMatch(card, /href="https:\/\//, fixture.ruleId);
         assert.doesNotMatch(card, /official source: /, fixture.ruleId);
       } else {
-        assert.match(card, /href="https:\/\//, `${fixture.ruleId}: unrelated use of the same source remains linked`);
+        assert.ok(card.includes(`href="${fixture.url}"`), `${fixture.ruleId}: task-relevant official source remains linked`);
       }
     }
     // Neither changed editorial text nor a trivial URL suffix restores the audited wrong-task link.
@@ -170,6 +172,13 @@ describe("independent household task completion and official destinations", () =
     const changed = renderToStaticMarkup(<OfficialDestination source={aidSource} rule={aidRule} schoolName={aid.school} />);
     assert.match(changed, /Official destination unavailable/);
     assert.doesNotMatch(changed, /href=/);
+    const arkansas = fixtures.find(fixture => fixture.ruleId === "rule_uark_adm11")!;
+    const arkansasChanged = renderToStaticMarkup(<OfficialDestination
+      source={{ ...source, id: arkansas.sourceId, institutionId: arkansas.institutionId, url: `${arkansas.url}?from=checklist`, label: "Reworded FAQ", lastVerified: arkansas.lastVerified }}
+      rule={{ ...rule, institutionId: arkansas.institutionId, checkpointCode: arkansas.checkpointCode, title: "Renamed status task", researchTerm: "Fall 2027" }}
+      schoolName={arkansas.school} />);
+    assert.match(arkansasChanged, /Official destination unavailable/);
+    assert.doesNotMatch(arkansasChanged, /href=/);
   });
 
   it("withholds imported or altered off-domain source rows even if marked official", async () => {
