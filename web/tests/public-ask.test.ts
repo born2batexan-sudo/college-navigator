@@ -36,6 +36,7 @@ describe("public Ask Campus Passage boundary", () => {
       ["How does Campus Passage work?", "full-experience"],
       ["What does Campus Passage do?", "overview"],
       ["What is the full experience from start to finish?", "full-experience"],
+      ["What is the full Campus Passage experience?", "full-experience"],
       ["How do I share feedback?", "feedback"],
       ["How are your sources and citations verified?", "sources"],
       ["How do I get started?", "getting-started"],

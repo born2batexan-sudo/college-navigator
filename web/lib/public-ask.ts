@@ -88,7 +88,7 @@ export function answerPublicQuestion(input: string): PublicAskAnswer {
   const categories: PublicAskCategory[] = [];
   const include = (category: PublicAskCategory, pattern: RegExp) => { if (pattern.test(q)) categories.push(category); };
   include("overview", /\b(?:what (?:is|does) (?:campus passage|it)|what (?:can|will) (?:campus passage|it) do|about campus passage|tell me (?:about|more)|overview|help families|help parents|organize|track|college journey)\b/);
-  include("full-experience", /\b(?:full experience|whole experience|entire experience|end.to.end|from start to finish|how (?:does campus passage|does it|it) work|how campus passage works|how it works|steps|sample plan|through move.in|family journey)\b/);
+  include("full-experience", /\b(?:full (?:campus passage )?experience|whole experience|entire experience|end.to.end|from start to finish|how (?:does campus passage|does it|it) work|how campus passage works|how it works|steps|sample plan|through move.in|family journey)\b/);
   include("getting-started", /\b(?:start now|get started|start|sign up|sign in|log in|create an account|new family|register|onboard|set up|access campus passage)\b/);
   include("privacy", /\b(?:privacy|private|data|consent|delete|deletion|stored|store|retention|secure|security|who can see|household access)\b/);
   include("sources", /\b(?:source|citation|cite|official|verified|verification|evidence|uncertain|conflict|published|current|accurate)\b/);
