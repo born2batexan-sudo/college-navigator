@@ -43,7 +43,8 @@ export function OfficialDestination({ source, rule, schoolName, illustrative = f
   const verified = source && rule.institutionId && source.institutionId !== rule.institutionId
     ? null : verifiedOfficialUrl(source);
   const held = !!rule.institutionId && !!rule.checkpointCode && isOuAidDateHeld({ institutionId: rule.institutionId, checkpointCode: rule.checkpointCode, researchTerm: rule.researchTerm });
-  const href = held || mismatchedTaskSource(rule, source, verified) ? null : verified;
+  // A checked source alone cannot certify a rule whose admissions term is unknown.
+  const href = !rule.researchTerm?.trim() || held || mismatchedTaskSource(rule, source, verified) ? null : verified;
   const sensitive = /portal|log[ -]?in|payment|pay |deposit|billing|accept.*award/i.test(`${rule.title} ${rule.domain}`);
   return <div className="rounded-lg border border-line bg-white/80 p-3 text-sm text-ink/75" data-official-destination>
     <p className="font-semibold text-ink">Official destination · {sensitive ? "portal/login/payment-sensitive task" : "information and instructions"}</p>

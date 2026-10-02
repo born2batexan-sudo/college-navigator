@@ -23,6 +23,7 @@ import {
 import { hostnameOf, domainMatches, globMatch } from "./urlmatch";
 import type { Institution, ObservationPattern } from "./db/types";
 import { isOuAidDateHeld, OU_AID_HOLD_TITLE } from "./ou-aid-quarantine";
+import { enteringTermFrom } from "./terms";
 
 export const DEMO_HOUSEHOLD_ID = "demo-household";
 
@@ -58,7 +59,10 @@ export async function getContextForUrl(url: string) {
 
   const patterns = matchingPatterns(await listObservationPatternsForInstitution(institution.id), url);
   const relationship = await getDemoRelationshipFor(institution.id);
-  const actions = relationship ? await listActionInstancesForRelationship(relationship.id) : [];
+  const student = (await listStudentsForHousehold(DEMO_HOUSEHOLD_ID))[0];
+  const term = student ? enteringTermFrom(student) : null;
+  const actions = relationship && term && term !== "Not sure yet"
+    ? await listActionInstancesForRelationship(relationship.id, term) : [];
   const openActions = actions.filter((a) => !["complete", "waived", "not_applicable"].includes(a.state));
 
   return {
@@ -94,14 +98,16 @@ export async function recordObservation(url: string, pageText: string) {
   const haystack = pageText.toLowerCase();
   const updates: { checkpointCode: string; fromState: string; toState: string }[] = [];
 
-  if (!relationship) return { matched: true as const, updates };
+  const student = (await listStudentsForHousehold(DEMO_HOUSEHOLD_ID))[0];
+  const term = student ? enteringTermFrom(student) : null;
+  if (!relationship || !term || term === "Not sure yet") return { matched: true as const, updates };
 
   for (const pattern of patterns) {
     if (!pattern.relatedCheckpointCode) continue;
     if (!haystack.includes(pattern.signal.toLowerCase())) continue;
 
-    const rule = await getRuleByCode(institution.id, pattern.relatedCheckpointCode);
-    if (!rule) continue;
+    const rule = await getRuleByCode(institution.id, pattern.relatedCheckpointCode, term);
+    if (!rule || rule.researchTerm !== term || isOuAidDateHeld(rule)) continue;
     const action = await findActionInstance(relationship.id, rule.id);
     if (!action) continue;
 

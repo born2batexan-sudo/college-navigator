@@ -56,10 +56,12 @@ export function parseDateStatus(rule: {
   requirement: string | null | undefined;
   applicability?: "applies" | "not_applicable" | "not_yet_published";
   cycleState?: "current" | "prior" | "undated";
-  researchTerm?: string;
+  researchTerm?: string | null;
   institutionId?: string;
   checkpointCode?: string;
 }): DateStatus {
+  if (!rule.researchTerm?.trim()) return { kind: "awaiting", term: "unconfirmed admissions term", lastYear: null,
+    detail: "This research has no established admissions term and is not published for this cycle." };
   // A researched/current label does not override an independently audited
   // term-specific conflict. Never parse the old requirement's disputed date.
   if (rule.institutionId && rule.checkpointCode && rule.researchTerm && isOuAidDateHeld({

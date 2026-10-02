@@ -41,6 +41,7 @@ describe("accounts and household isolation", () => {
       title: "Pay the deposit",
       critical: true,
       requirement: "Pay the deposit.",
+      researchTerm: "Fall 2027",
     });
 
     famA = await newFamily("user-a", "Alex");

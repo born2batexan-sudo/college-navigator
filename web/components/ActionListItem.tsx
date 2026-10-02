@@ -17,6 +17,8 @@ type Props = {
 };
 
 export function ActionListItem({ action, schoolName, studentIndex, readOnly = false }: Props) {
+  // Defense in depth if a future caller bypasses the term-filtered repository.
+  if (!action.rule.researchTerm?.trim()) return <article className="rounded-2xl border border-line bg-white/85 p-4 text-sm text-warn">Research term unconfirmed — this task is not published for your cycle.</article>;
   const pending = !!action.pendingSourceChange;
   const held = isOuAidDateHeld(action.rule);
   const awaiting = !pending && parseDateStatus(action.rule).kind === "awaiting";

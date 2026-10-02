@@ -14,6 +14,7 @@
 
 import type { Rule, InstitutionRelationship, Student } from "./db/types";
 import { parseDateStatus } from "./date-status";
+import { enteringTermFrom } from "./terms";
 import { intakeRuleDefaults, readIntake } from "./intake";
 
 // Order matters: used to test "has the relationship reached at least X".
@@ -166,6 +167,11 @@ export function evaluateRule(
   relationship: InstitutionRelationship,
   student: Student
 ): ApplicabilityResult {
+  // Never materialize a legacy/unknown-term checkpoint (or another cycle's
+  // checkpoint) from its old status label or saved date.
+  if (!rule.researchTerm?.trim() || enteringTermFrom(student) !== rule.researchTerm) {
+    return { applicable: false, reason: "Research term is unknown or does not match the student's entering term" };
+  }
   const attrs = resolveAttributes(relationship, student);
 
   // The research agent marks checkpoints the school genuinely doesn't have as

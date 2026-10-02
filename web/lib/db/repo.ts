@@ -10,6 +10,7 @@
 
 import { queryRows, queryOne, exec, newId, nowIso } from "./client";
 import { cleanCopy } from "../copy-guard";
+import { enteringTermFrom } from "../terms";
 import { isOuAidDateHeld } from "../ou-aid-quarantine";
 import { familyCompletionForActions } from "./action-completion";
 import type {
@@ -48,7 +49,7 @@ function toRule(r: any): Rule {
     consequence: cleanCopy(r.consequence),
     status: r.status,
     confidence: r.confidence,
-    researchTerm: r.research_term ?? "Fall 2027",
+    researchTerm: typeof r.research_term === "string" && r.research_term.trim() ? r.research_term : null,
     cycleState: r.cycle_state ?? "undated",
     applicability: r.applicability ?? "applies",
     evidenceQuote: r.evidence_quote ?? null,
@@ -382,7 +383,7 @@ export type RuleInput = {
   consequence?: string | null;
   status?: string;
   confidence?: string;
-  researchTerm?: string;
+  researchTerm: string;
   cycleState?: "current" | "prior" | "undated";
   applicability?: "applies" | "not_applicable" | "not_yet_published";
   evidenceQuote?: string | null;
@@ -391,7 +392,8 @@ export type RuleInput = {
 };
 
 export async function upsertRule(input: RuleInput): Promise<Rule> {
-  const researchTerm = String(input.researchTerm ?? "Fall 2027").trim();
+  // An omitted term must not silently publish a rule into the Fall 2027 cycle.
+  const researchTerm = String(input.researchTerm ?? "").trim();
   if (!researchTerm) throw new Error("researchTerm is required");
   if (input.checkpointCode.startsWith("CAR-") && input.population === "bringing_car") throw new Error("Career checkpoints cannot use vehicle applicability");
   const status = input.status ?? "unverified";
@@ -653,16 +655,17 @@ async function approvedSourceForRule(rule: Rule, institution?: Institution): Pro
     source.institutionId === rule.institutionId && isOfficialInstitutionUrl(source.url, school) ? source : null;
 }
 
-export async function listActionInstancesForRelationship(relationshipId: string, researchTerm?: string): Promise<(ActionInstance & { completed: boolean; rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[]> {
-  const rows = researchTerm
-    ? await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
-        WHERE a.relationship_id=$1 AND r.research_term=$2`, [relationshipId, researchTerm])
-    : await queryRows<any>("SELECT * FROM action_instances WHERE relationship_id = $1", [relationshipId]);
+export async function listActionInstancesForRelationship(relationshipId: string, researchTerm: string): Promise<(ActionInstance & { completed: boolean; rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[]> {
+  // No unfiltered fallback: NULL/blank legacy terms must not enter any plan or companion projection.
+  if (!researchTerm?.trim()) return [];
+  const rows = await queryRows<any>(`SELECT a.* FROM action_instances a JOIN rules r ON r.id=a.rule_id
+    WHERE a.relationship_id=$1 AND r.research_term=$2`, [relationshipId, researchTerm]);
   const out: (ActionInstance & { completed: boolean; rule: Rule; guidance: GuidanceAsset | null; source: Source | null; pendingSourceChange: boolean })[] = [];
   const completed = await familyCompletionForActions(rows.map((row) => row.id));
   for (const r of rows) {
     const action = toActionInstance(r);
-    const rule = (await getRuleById(action.ruleId))!;
+    const rule = await getRuleById(action.ruleId);
+    if (!rule || rule.researchTerm !== researchTerm) continue;
     const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
     const guidance = pendingSourceChange ? null : await getGuidanceForRule(rule.id);
     const source = await approvedSourceForRule(rule);
@@ -685,11 +688,15 @@ export async function getActionInstance(id: string): Promise<ActionInstance | nu
 export async function getActionInstanceFull(id: string) {
   const action = await getActionInstance(id);
   if (!action) return null;
-  const rule = (await getRuleById(action.ruleId))!;
+  const rule = await getRuleById(action.ruleId);
+  // Direct action IDs must have an explicit rule term matching the student's cycle.
+  // Do not project a legacy date, source, or instructions while the term is unknown.
+  if (!rule?.researchTerm?.trim()) return null;
+  const relationship = await getRelationship(action.relationshipId);
+  if (!relationship || enteringTermFrom(relationship.student) !== rule.researchTerm) return null;
   const guidance = await getGuidanceForRule(rule.id);
   const source = await approvedSourceForRule(rule);
   const pendingSourceChange = await hasPendingSourceChange(rule.sourceId);
-  const relationship = (await getRelationship(action.relationshipId))!;
   const markers = await familyCompletionForActions([id]);
   const held = isOuAidDateHeld(rule);
   return { ...action, dueAt: held ? null : action.dueAt, priority: held ? "normal" : action.priority,

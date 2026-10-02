@@ -35,7 +35,7 @@ export default async function ActionDetailPage({ params }: { params: Promise<{ i
   if (!action) notFound();
   // Ownership alone is not enough: never expose an action generated for a
   // different admissions cycle after a family changes its entering term.
-  if (enteringTermFrom(action.relationship.student) !== action.rule.researchTerm) notFound();
+  if (!action.rule.researchTerm?.trim() || enteringTermFrom(action.relationship.student) !== action.rule.researchTerm) notFound();
 
   const events = await listEventsForAction(action.id);
   const sourceUpdatePending = action.pendingSourceChange;

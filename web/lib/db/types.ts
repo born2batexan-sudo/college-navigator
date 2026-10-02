@@ -85,7 +85,8 @@ export type Rule = {
   consequence: string | null;
   status: string;
   confidence: string;
-  researchTerm: string;
+  // NULL on pre-migration rules is unknown, never the current admissions term.
+  researchTerm: string | null;
   cycleState: "current" | "prior" | "undated";
   applicability: "applies" | "not_applicable" | "not_yet_published";
   evidenceQuote: string | null;

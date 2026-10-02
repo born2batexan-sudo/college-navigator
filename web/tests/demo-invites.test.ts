@@ -29,7 +29,7 @@ describe("private preview invitations", () => {
     template = (await A.getContextForUser("template-owner"))!;
     process.env.DEMO_TEMPLATE_HOUSEHOLD_ID = template.household.id;
     const institution = await R.upsertInstitution({ name: "Preview University", slug: "preview-u", domains: ["preview.edu"] });
-    const rule = await R.upsertRule({ institutionId: institution.id, checkpointCode: "PV-01", domain: "Admissions", title: "Submit sample", critical: true, requirement: "Submit the sample." });
+    const rule = await R.upsertRule({ institutionId: institution.id, checkpointCode: "PV-01", domain: "Admissions", title: "Submit sample", critical: true, requirement: "Submit the sample.", researchTerm: "Fall 2027" });
     const rel = await R.upsertRelationship({ studentId: template.student!.id, institutionId: institution.id });
     await R.updateRelationshipAttributes(rel.id, { housingPlan: "campus", greekInterest: true, freeForm: "must not copy" });
     const action = await R.createActionInstance({ relationshipId: rel.id, ruleId: rule.id, dueAt: "2027-05-01T00:00:00.000Z", applicabilityReason: "sample", priority: "high", state: "started" });

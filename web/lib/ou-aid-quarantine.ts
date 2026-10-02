@@ -10,7 +10,7 @@ export const OU_AID_HOLD = {
   researchTerm: "Fall 2027",
 } as const;
 
-export function isOuAidDateHeld(rule: { institutionId: string; checkpointCode: string; researchTerm: string }): boolean {
+export function isOuAidDateHeld(rule: { institutionId: string; checkpointCode: string; researchTerm: string | null }): boolean {
   return rule.institutionId === OU_AID_HOLD.institutionId &&
     rule.checkpointCode === OU_AID_HOLD.checkpointCode && rule.researchTerm === OU_AID_HOLD.researchTerm;
 }

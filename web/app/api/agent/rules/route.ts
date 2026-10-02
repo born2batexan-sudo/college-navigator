@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid evidence" }, { status: 400 });
   }
 
-  const coverage = await recomputeCoverage(institution.id, rule.researchTerm);
+  const coverage = await recomputeCoverage(institution.id, rule.researchTerm!);
 
   const relationships = await listRelationshipsForInstitution(institution.id);
   for (const rel of relationships) {

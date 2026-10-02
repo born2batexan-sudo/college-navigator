@@ -33,7 +33,7 @@ function safeUrl(value: unknown): value is string {
 }
 type ResearchRow = {
   id: string; institution_id: string; title: string; checkpoint_code: string; domain: string; population: string; trigger_state: string | null;
-  research_term: string; status: string; confidence: string; applicability: string; cycle_state: string;
+  research_term: string | null; status: string; confidence: string; applicability: string; cycle_state: string;
   evidence_quote: string | null; verified_at: string | null; updated_at: string; source_id: string | null;
   url: string | null; authority_level: string | null; last_verified: string | null;
   coverage_status: string | null; certified_at: string | null; research_updated_at: string | null;
@@ -44,7 +44,8 @@ function eligible(row: ResearchRow, student: Student, now: number): boolean {
   const rule = { population: row.population, trigger: row.trigger_state } as Rule;
   let attrs: Record<string, unknown>;
   try { attrs = { ...JSON.parse(student.attributes), ...JSON.parse(row.relationship_attributes) }; } catch { return false; }
-  return !isOuAidDateHeld({ institutionId: row.institution_id, checkpointCode: row.checkpoint_code, researchTerm: row.research_term }) &&
+  return typeof row.research_term === 'string' && !!row.research_term.trim() &&
+    !isOuAidDateHeld({ institutionId: row.institution_id, checkpointCode: row.checkpoint_code, researchTerm: row.research_term }) &&
     row.status === 'verified' && row.confidence === 'high' && row.applicability === 'applies' &&
     row.cycle_state === 'current' && row.coverage_status === 'certified' && row.authority_level === 'official' &&
     !!row.source_id && Number(row.pending_changes) === 0 && fresh(row.certified_at, now) && fresh(row.research_updated_at, now) &&
@@ -62,7 +63,7 @@ function directlySupported(question: string, quote: string): boolean {
   return true;
 }
 function cited(row: ResearchRow): Citation {
-  return { title: `${row.institution_name} — ${row.title}`, quote: row.evidence_quote!, url: row.url!, term: row.research_term,
+  return { title: `${row.institution_name} — ${row.title}`, quote: row.evidence_quote!, url: row.url!, term: row.research_term!,
     verifiedAt: row.verified_at!, sourceVerifiedAt: row.last_verified! };
 }
 function quoteAnswer(c: Citation): Answer {
@@ -97,7 +98,16 @@ export async function askCampus(input: { householdId: string; actorId: string; s
       JOIN action_instances a ON a.relationship_id=ir.id JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=ir.institution_id
       LEFT JOIN sources s ON s.id=ru.source_id AND s.institution_id=ir.institution_id
       LEFT JOIN research_versions rv ON rv.institution_id=ir.institution_id AND rv.research_term=ru.research_term
-      WHERE ir.student_id=$1 AND ir.active=1 AND ru.research_term=$2 LIMIT ${MAX_RESEARCH_ROWS + 1}`, [student.id, term]) : [];
+      WHERE ir.student_id=$1 AND ir.active=1 AND ru.research_term=$2 AND NULLIF(TRIM(ru.research_term),'') IS NOT NULL LIMIT ${MAX_RESEARCH_ROWS + 1}`, [student.id, term]) : [];
+    // Unknown-term legacy rows are never citations. If the question overlaps
+    // one of their titles, do not use a loosely matched current-cycle rule as
+    // an answer to the historical task instead. Read only scoped titles, not
+    // dates/instructions, and fail closed when the candidate set is truncated.
+    const legacyTopics = term ? await queryRows<{ title: string; checkpoint_code: string }>(`SELECT ru.title,ru.checkpoint_code
+      FROM institution_relationships ir JOIN action_instances a ON a.relationship_id=ir.id
+      JOIN rules ru ON ru.id=a.rule_id AND ru.institution_id=ir.institution_id
+      WHERE ir.student_id=$1 AND ir.active=1 AND NULLIF(TRIM(ru.research_term),'') IS NULL
+      LIMIT ${MAX_RESEARCH_ROWS + 1}`, [student.id]) : [];
     // Topic selection is intentionally conservative: one matching rule, one tracked institution.
     // An ambiguous, stale, unpublished, conflicting or truncated set never yields a partial answer.
     const words = tokens(question);
@@ -107,8 +117,13 @@ export async function askCampus(input: { householdId: string; actorId: string; s
     const explicitUntrackedSchool = /\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\s+(?:College|University)\b/.test(question) && namedSchools.length === 0;
     const matches = rows.filter(r => words.some(w => tokens(`${r.title} ${r.domain} ${r.checkpoint_code}`).includes(w)));
     const relevant = namedSchools.length === 1 ? matches.filter(r => namedSchools[0].id === r.relationship_id) : matches;
-    const selected = rows.length <= MAX_RESEARCH_ROWS && words.length && !explicitUntrackedSchool && namedSchools.length < 2 &&
-      relevant.length === 1 && directlySupported(question, relevant[0].evidence_quote ?? '') &&
+    const overlap = (text: string) => tokens(text).filter(w => words.includes(w)).length;
+    const legacyOverlap = Math.max(0, ...legacyTopics.map(r => overlap(`${r.title} ${r.checkpoint_code}`)));
+    const currentOverlap = relevant.length === 1 ? overlap(`${relevant[0].title} ${relevant[0].domain} ${relevant[0].checkpoint_code}`) : 0;
+    const selected = rows.length <= MAX_RESEARCH_ROWS && legacyTopics.length <= MAX_RESEARCH_ROWS && words.length &&
+      !explicitUntrackedSchool && namedSchools.length < 2 && relevant.length === 1 &&
+      (legacyOverlap === 0 || legacyOverlap < currentOverlap) &&
+      directlySupported(question, relevant[0].evidence_quote ?? '') &&
       eligible(relevant[0], student, Date.now()) ? relevant[0] : null;
     const usageId = newId('ask');
     await exec('INSERT INTO assistant_usage(id,household_id,actor_id,created_at,evidence_count,response_code,model_cost_cents) VALUES($1,$2,$3,$4,$5,$6,$7)',

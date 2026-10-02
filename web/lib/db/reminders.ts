@@ -380,6 +380,7 @@ async function eligibleAction(actionInstanceId: string): Promise<any | null> {
     WHERE ai.id=$1
       AND rel.active=1
       AND ai.state NOT IN ('completed','done','canceled')
+      AND NULLIF(TRIM(r.research_term),'') IS NOT NULL
       AND r.status='verified'
       AND r.confidence IN ('high','medium')
       AND r.applicability='applies'
@@ -390,7 +391,7 @@ async function eligibleAction(actionInstanceId: string): Promise<any | null> {
   if (!row || isOuAidDateHeld({ institutionId: row.institution_id, checkpointCode: row.checkpoint_code, researchTerm: row.research_term })) return null;
   let attrs: any = {};
   try { attrs = JSON.parse(row.attributes || "{}"); } catch { return null; }
-  if (attrs.enteringTerm !== row.research_term) return null;
+  if (typeof attrs.enteringTerm !== "string" || !attrs.enteringTerm.trim() || attrs.enteringTerm !== row.research_term) return null;
   const excluded = await queryOne<any>(`SELECT 1 AS excluded FROM demo_households
       WHERE household_id=$1 OR template_household_id=$1
       UNION ALL SELECT 1 FROM demo_invites WHERE template_household_id=$1 LIMIT 1`, [row.household_id]);

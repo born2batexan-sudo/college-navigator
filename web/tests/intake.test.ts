@@ -53,7 +53,7 @@ describe("student intake contract", () => {
     assert.ok(counts.setAside.includes("Accessibility")); assert.ok(counts.open.includes("Vehicle"));
   });
   it("preserves official school-wide and critical requirements against conflicting preferences", () => {
-    const s = student({ intake: { housing: "commuter", vehicle: "no", campusLife: "no" } });
+    const s = student({ enteringTerm: "Fall 2027", intake: { housing: "commuter", vehicle: "no", campusLife: "no" } });
     assert.equal(evaluateRule(rule("all"), rel(), s).applicable, true);
     assert.equal(evaluateRule(rule("campus_housing", true), rel(), s).applicable, true);
     assert.equal(evaluateRule(rule("campus_housing"), rel(), s).applicable, false);

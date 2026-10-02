@@ -6,14 +6,17 @@ import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { OfficialDestination, verifiedOfficialUrl } from "../components/OfficialDestination";
-import { ActionListItem } from "../components/ActionListItem";
+// UI imports are deferred until after DB_PATH is set; ActionListItem pulls in
+// repository modules whose local SQLite path is captured on first import.
 import type { Rule, Source } from "../lib/db/types";
 import { partitionTasks } from "../lib/task-progress";
 
 process.env.DB_PATH = path.join(mkdtempSync(path.join(tmpdir(), "cp-task-completion-")), "task.sqlite3");
 delete process.env.DATABASE_URL;
 let A: typeof import("../lib/db/accounts"), R: typeof import("../lib/db/repo"), S: typeof import("../lib/db/action-completion");
+let OfficialDestination: typeof import("../components/OfficialDestination").OfficialDestination;
+let verifiedOfficialUrl: typeof import("../components/OfficialDestination").verifiedOfficialUrl;
+let ActionListItem: typeof import("../components/ActionListItem").ActionListItem;
 let first: Awaited<ReturnType<typeof A.provisionAccount>>;
 let second: Awaited<ReturnType<typeof A.provisionAccount>>;
 let ids: string[];
@@ -22,6 +25,8 @@ let source: Source, rule: Rule;
 describe("independent household task completion and official destinations", () => {
   before(async () => {
     A = await import("../lib/db/accounts"); R = await import("../lib/db/repo"); S = await import("../lib/db/action-completion");
+    ({ OfficialDestination, verifiedOfficialUrl } = await import("../components/OfficialDestination"));
+    ({ ActionListItem } = await import("../components/ActionListItem"));
     first = await A.provisionAccount({ authUserId: "task-owner-a", email: "a@example.test" });
     second = await A.provisionAccount({ authUserId: "task-owner-b", email: "b@example.test" });
     await A.completeOnboarding(first, { studentName: "Fictional A", role: "parent", enteringTerm: "Fall 2027" });
@@ -89,7 +94,7 @@ describe("independent household task completion and official destinations", () =
   });
 
   it("keeps sibling, term, and household markers separate", async () => {
-    const sibling = await R.upsertStudent({ householdId: first.household.id, name: "Sibling", gradYear: 2027 });
+    const sibling = await R.upsertStudent({ householdId: first.household.id, name: "Sibling", gradYear: 2027, attributes: { enteringTerm: "Fall 2027" } });
     const school = (await R.getActionInstanceFull(ids[0]))!.relationship.institution;
     const rel = await R.upsertRelationship({ studentId: sibling.id, institutionId: school.id });
     const siblingAction = await R.createActionInstance({ relationshipId: rel.id, ruleId: rule.id, dueAt: null, applicabilityReason: "sibling", priority: "normal" });
@@ -187,7 +192,7 @@ describe("independent household task completion and official destinations", () =
     try {
       assert.equal((await R.getActionInstanceFull(ids[0]))?.source, null);
       const full = await R.getActionInstanceFull(ids[0]);
-      assert.equal((await R.listActionInstancesForRelationship(full!.relationship.id, rule.researchTerm))[0].source, null);
+      assert.equal((await R.listActionInstancesForRelationship(full!.relationship.id, rule.researchTerm!))[0].source, null);
     } finally {
       await exec("UPDATE sources SET url=$1 WHERE id=$2", [source.url, source.id]);
     }
